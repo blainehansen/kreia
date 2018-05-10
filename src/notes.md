@@ -187,6 +187,16 @@ basically since subrules might not have been processed yet, or all of their subr
 similarly, every rule has a "mandatory starting" path
 we can use that to help us with automatic lookahead
 
+```js
+Array.prototype.maxLength = function() {
+ return Math.max.apply(null, this.map((item) => item.length))
+}
+
+Array.prototype.minLength = function() {
+ return Math.min.apply(null, this.map((item) => item.length))
+}
+```
+
 
 ```js
 const dependencyTable = {

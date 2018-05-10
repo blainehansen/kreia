@@ -6,13 +6,6 @@ Array.prototype.setLast = function(value) {
 	this[this.length - 1] = value
 }
 
-// Array.prototype.maxLength = function() {
-// 	return Math.max.apply(null, this.map((item) => item.length))
-// }
-
-// Array.prototype.minLength = function() {
-// 	return Math.min.apply(null, this.map((item) => item.length))
-// }
 
 const util = require('util')
 function log(obj) {
@@ -20,7 +13,9 @@ function log(obj) {
 }
 
 const { matchToken } = require('./decision-paths')
-const { determineDecidingNode, Maybe, Consume, Subrule, SubruleNode } = require('./parse-nodes')
+const {
+	determineDecidingNode, determineRecurringNode, Maybe, Consume, MaybeConsume, Subrule, SubruleNode, MaybeSubruleNode
+} = require('./parse-nodes')
 
 const INSPECT = Symbol()
 
@@ -42,7 +37,7 @@ class DecisionPathStack {
 		const subruleName = this.subruleStack.last()
 		const indexList = this.subruleBranchIndexListStack.last()
 
-		console.log('getCurrentKey: ', subruleName + '.' + indexList.join('.'))
+		// console.log('getCurrentKey: ', subruleName + '.' + indexList.join('.'))
 		return subruleName + '.' + indexList.join('.')
 	}
 
@@ -92,26 +87,10 @@ class DecisionPathStack {
 	}
 }
 
-// const parseNode = new Maybe([
-// 	new Consume(['Number'], true),
-// 	new Consume(['Space', 'Space', 'LeftParen', 'RightParen'], false),
-// 	new Maybe([
-// 		new Consume(['Number']),
-// 		new Consume(['Space'], true),
-// 		new Consume(['Number', 'LeftParen']),
-// 		new Consume(['Space', 'Number'], true),
-// 	]),
-// ])
-
-// log(parseNode.getEntryPath(6))
-
-
-
-
 
 
 class Parser {
-	constructor(lexer, ignoreList = [], lookahead = 6) {
+	constructor(lexer, lookahead = 6, ignoreList = []) {
 		this.lexer = lexer
 		this.lookQueue = []
 		this.lookahead = lookahead
@@ -130,7 +109,6 @@ class Parser {
 
 		this.decisionPathStack = new DecisionPathStack()
 
-		this.ruleLastSeenMap = {}
 		this.currentTokenIndex = 0
 	}
 
@@ -159,7 +137,6 @@ class Parser {
 		// this.decisionPathStack = new DecisionPathStack()
 
 		this.currentTokenIndex = 0
-		this.ruleLastSeenMap = {}
 	}
 
 	// this method will primarily be used in the various gates
@@ -206,9 +183,6 @@ class Parser {
 	}
 
 	rule(ruleName, ruleFunction) {
-		// for now, I'm deciding to do this here instead of in analyze simply because here we don't have to do it in a loop
-		// this.rawRules.push([ruleName, ruleFunction])
-
 		this[ruleName] = () => {
 			const subruleResults = this.subrule(ruleName)
 
@@ -243,6 +217,28 @@ class Parser {
 		delete this.unresolvedSubruleNodes[ruleName]
 	}
 
+	checkForLeftRecursion(topLevelRule, node) {
+		console.log(topLevelRule)
+		log(node)
+
+		for (const subNode of node.definition) {
+			if (subNode instanceof Consume) return false
+
+			else if (
+				(subNode instanceof SubruleNode || subNode instanceof MaybeSubruleNode)
+				&& subNode.subrule.ruleName == topLevelRule
+			) return true
+
+			else if (
+				determineRecurringNode(subNode)
+				&& this.checkForLeftRecursion(topLevelRule, subNode)
+			) return true
+		}
+
+		// if we make it this far, it isn't left recursive
+		return false
+	}
+
 	analyze() {
 		// first check that all subrules could be resolved
 		if (Object.keys(this.unresolvedSubruleNodes).length != 0) {
@@ -250,8 +246,13 @@ class Parser {
 			throw "there are unresolved subrules"
 		}
 
-		// TODO
 		// check for left recursion
+		for (const [ruleName, rule] of Object.entries(this.rules)) {
+			if (this.checkForLeftRecursion(ruleName, rule)) {
+				throw `${ruleName} is left recursive`
+			}
+		}
+
 
 		// gather decision paths
 		for (const [ruleName, rule] of Object.entries(this.rules)) {
@@ -264,15 +265,12 @@ class Parser {
 			this.decisionPathStack.exitSubrule()
 		}
 
-		log(this.ruleEntryPaths)
-		log(this.decisionPathStack.decisionPathMap)
+		// log(this.ruleEntryPaths)
+		// log(this.decisionPathStack.decisionPathMap)
 	}
 
 	gatherDecisionPathsForNode(node) {
 		for (const subNode of node.definition) {
-			// const isMaybeSubrule = subNode instanceof MaybeSubruleNode
-			// const isOneOf = isMaybeSubrule || subNode.optional
-
 			const [isMaybeSubrule, isOneOf] = determineDecidingNode(subNode)
 
 			if (isOneOf) {
@@ -293,9 +291,11 @@ class Parser {
 		}
 	}
 
-	subrule(ruleName) {
+	subrule(ruleName, ...args) {
 		const rule = this.rules[ruleName]
 		if (this.inspecting) {
+			// this.subruleCalls.push(ruleName)
+
 			if (!rule) {
 				// this looks to see if the subrule being invoked has already been defined
 				// if it hasn't, it adds this name to the set of unresolved
@@ -315,12 +315,8 @@ class Parser {
 			return INSPECT
 		}
 
-		const currentTokenIndex = this.currentTokenIndex
-		if (this.ruleLastSeenMap[ruleName] === currentTokenIndex) throw "left recursion has happened"
-		else this.ruleLastSeenMap[ruleName] = currentTokenIndex
-
 		this.decisionPathStack.enterSubrule(ruleName)
-		const ruleReturnValue = rule.ruleFunction()
+		const ruleReturnValue = rule.ruleFunction(...args)
 		this.decisionPathStack.exitSubrule()
 
 		return ruleReturnValue
@@ -370,7 +366,8 @@ class Parser {
 	consume(tokenTypeOrArray) {
 		const tokenTypeArray = toArray(tokenTypeOrArray)
 		if (this.inspecting) {
-			this.definitionScope.push(new Consume(tokenTypeArray, false))
+
+			this.definitionScope.push(new Consume(tokenTypeArray))
 			return INSPECT
 		}
 
@@ -383,7 +380,7 @@ class Parser {
 	maybeConsume(tokenTypeOrArray) {
 		const tokenTypeArray = toArray(tokenTypeOrArray)
 		if (this.inspecting) {
-			this.definitionScope.push(new Consume(tokenTypeArray, true))
+			this.definitionScope.push(new MaybeConsume(tokenTypeArray))
 			return INSPECT
 		}
 
@@ -455,20 +452,37 @@ class ConcreteParser extends Parser {
 		} = this.getUnbound()
 
 
-		rule('only', () => {
-			consume(['Number', 'Dot'])
-			maybe(() => {
-				consume('Space')
-				subrule('other')
-				consume('Space')
-			})
-			consume(['Dot', 'Number'])
+		// rule('only', () => {
+		// 	consume(['Number', 'Dot'])
+		// 	maybe(() => {
+		// 		consume('Space')
+		// 		subrule('other')
+		// 		consume('Space')
+		// 	})
+		// 	consume(['Dot', 'Number'])
+		// })
+
+		// rule('other', () => {
+		// 	consume('LeftParen')
+		// 	maybeConsume('Number')
+		// 	consume('RightParen')
+		// })
+
+
+		// this is a left recursive grammar
+		rule('A', () => {
+			consume('LeftParen')
+			maybeConsume('Plus')
+			subrule('B')
+			// consume('LeftParen')
+			// subrule('A')
+			// consume('RightParen')
 		})
 
-		rule('other', () => {
-			consume('LeftParen')
-			maybeConsume('Number')
-			consume('RightParen')
+		rule('B', () => {
+			maybeConsume('Space')
+			subrule('A')
+			// maybeConsume('Space')
 		})
 
 		this.analyze()
@@ -477,14 +491,14 @@ class ConcreteParser extends Parser {
 
 
 const concreteParser = new ConcreteParser()
-concreteParser.reset("1. () .1")
-concreteParser.only()
+// concreteParser.reset("1. () .1")
+// concreteParser.only()
 
-concreteParser.reset("1. (4) .1")
-concreteParser.only()
+// concreteParser.reset("1. (4) .1")
+// concreteParser.only()
 
-concreteParser.reset("1..1")
-concreteParser.only()
+// concreteParser.reset("1..1")
+// concreteParser.only()
 
 
 
@@ -511,17 +525,3 @@ concreteParser.only()
 // 	})
 // })
 
-
-// this.rule('A', () => {
-// 	this.maybeConsume('Plus')
-// 	this.subrule('B')
-// 	this.consume('LeftParen')
-// 	this.subrule('A')
-// 	this.consume('RightParen')
-// })
-
-// this.rule('B', () => {
-// 	this.maybeConsume('Space')
-// 	this.subrule('A')
-// 	this.maybeConsume('Space')
-// })

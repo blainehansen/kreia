@@ -5,9 +5,9 @@ function subclassOf(BClass, AClass) {
 	return BClass.prototype instanceof AClass || BClass === AClass
 }
 
-class ParseNode {
+class AbstractParseNode {
 	constructor(definition, optional) {
-		if (definition !== null && !subclassOf(definition, Array) && subclassOf(definition, ParseNode)) throw "tried to create a parseNode with something other than an Array, ParseNode, or null"
+		if (definition !== null && !subclassOf(definition, Array) && subclassOf(definition, AbstractParseNode)) throw "tried to create a parseNode with something other than an Array, ParseNode, or null"
 
 		this.definition = definition
 		this.optional = optional
@@ -16,7 +16,7 @@ class ParseNode {
 	getEntryPath(lookahead) {
 		let entryPath = new DecisionPath()
 
-		if (this instanceof Consume) {
+		if (this instanceof Consume || this instanceof MaybeConsume) {
 			entryPath.push(this.definition)
 			entryPath.minLength = this.optional ? 0 : this.definition.length
 			entryPath.maxLength = this.definition.length
@@ -67,6 +67,18 @@ class ParseNode {
 	}
 }
 
+class ParseNode extends AbstractParseNode {
+	constructor(definition) {
+		super(definition, false)
+	}
+}
+
+class MaybeParseNode extends AbstractParseNode {
+	constructor(definition) {
+		super(definition, true)
+	}
+}
+
 class Subrule {
 	constructor(definition, ruleName, ruleFunction) {
 		this.definition = definition
@@ -75,7 +87,7 @@ class Subrule {
 	}
 }
 
-class AbstractSubruleNode extends ParseNode {
+class AbstractSubruleNode extends AbstractParseNode {
 	constructor(subrule, optional) {
 		if (subrule && !(subrule instanceof Subrule)) throw "can't put anything other than a subrule into a subrule wrapper"
 		super(subrule ? subrule.definition : null, optional)
@@ -107,12 +119,9 @@ class MaybeSubruleNode extends AbstractSubruleNode {
 
 // this holds an array of tokens
 class Consume extends ParseNode {}
+class MaybeConsume extends MaybeParseNode {}
 
-class Maybe extends ParseNode {
-	constructor(definition) {
-		super(definition, true)
-	}
-}
+class Maybe extends MaybeParseNode {}
 
 
 
@@ -122,6 +131,10 @@ function determineDecidingNode(inst) {
 	else return [false, [Maybe].some((cls) => inst instanceof cls)]
 }
 
+function determineRecurringNode(inst) {
+	return [Maybe, SubruleNode, MaybeSubruleNode].some((cls) => inst instanceof cls)
+}
+
 module.exports = {
-	determineDecidingNode, Maybe, Consume, Subrule, SubruleNode
+	determineDecidingNode, determineRecurringNode, Maybe, Consume, MaybeConsume, Subrule, SubruleNode, MaybeSubruleNode
 }
