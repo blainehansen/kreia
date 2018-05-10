@@ -134,6 +134,24 @@ class Parser {
 		this.currentTokenIndex = 0
 	}
 
+	getUnbound() {
+		let {
+			look, lookRange, rule, subrule, maybe, consume, maybeConsume
+		} = this
+
+		look = look.bind(this)
+		lookRange = lookRange.bind(this)
+		rule = rule.bind(this)
+		subrule = subrule.bind(this)
+		maybe = maybe.bind(this)
+		consume = consume.bind(this)
+		maybeConsume = maybeConsume.bind(this)
+
+		return {
+			look, lookRange, rule, subrule, maybe, consume, maybeConsume
+		}
+	}
+
 	reset(inputText) {
 		this.lexer.reset(inputText)
 		this.lookQueue = []
@@ -405,11 +423,6 @@ class Parser {
 	// maybeManySeparated(gate, def, sep) {
 	// 	throw new Error("Unimplemented")
 	// }
-
-
-	// startWith(startingRuleName) {
-	// 	// this function could be used to begin parsing from a particular rule
-	// }
 }
 
 
@@ -434,33 +447,28 @@ const lexer = moo.compile({
 
 
 class ConcreteParser extends Parser {
-	constructor(lexer) {
+	constructor() {
 		super(lexer)
 
-		// TODO allow bound but unattached methods
+		const {
+			rule, subrule, maybe, consume, maybeConsume
+		} = this.getUnbound()
 
 
-		this.rule('only', () => {
-			const firstTokens = this.consume(['Number', 'Dot'])
-			console.log(firstTokens)
-
-			const tookMaybe = this.maybe(() => {
-				this.consume('Space')
-				this.subrule('other')
-				this.consume('Space')
-				return true
+		rule('only', () => {
+			consume(['Number', 'Dot'])
+			maybe(() => {
+				consume('Space')
+				subrule('other')
+				consume('Space')
 			})
-			console.log('TOOK MAYBE: ', tookMaybe !== undefined)
-
-			this.consume(['Dot', 'Number'])
+			consume(['Dot', 'Number'])
 		})
 
-		this.rule('other', () => {
-			this.consume('LeftParen')
-			this.maybeConsume('Number')
-			this.consume('RightParen')
-			// this.maybe(() => {
-			// })
+		rule('other', () => {
+			consume('LeftParen')
+			maybeConsume('Number')
+			consume('RightParen')
 		})
 
 		this.analyze()
@@ -468,7 +476,7 @@ class ConcreteParser extends Parser {
 }
 
 
-const concreteParser = new ConcreteParser(lexer)
+const concreteParser = new ConcreteParser()
 concreteParser.reset("1. () .1")
 concreteParser.only()
 
