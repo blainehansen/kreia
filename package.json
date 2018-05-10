@@ -1,0 +1,29 @@
+{
+  "name": "kreia",
+  "version": "0.1.0",
+  "description": "A flexible and easy to use parser library. Look into chaos, and see order.",
+  "main": "index.js",
+  "scripts": {
+    "preversion": "",
+    "version": "",
+    "postversion": "",
+    
+    "test": "echo \"Error: no test specified\" && exit 1",
+  },
+  "keywords": [
+    "parser",
+    "generator",
+    "lookahead",
+    "automatic"
+  ],
+  "author": {
+    "name": "Blaine Hansen",
+    "email": "faichenshing@gmail.com",
+    "url": "http://blainehansen.co"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blainehansen/kreia"
+  },
+  "license": "MIT"
+}
