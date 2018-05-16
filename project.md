@@ -1,16 +1,19 @@
 [Basic Features]
-Left Recursion Detection
-- X done
+Lexer
+- X token categories
+-- X compatible with matching
+- X token library
+- make categories compatible with keywords
 
 Gates
+- gate executes in addition to lookahead
+- configurable lookahead for individual branching functions
 
 Node Parameters
 - all inner functions can accept args
 
-Token Ignore Lists
-
 All Node Types
-- Or
+- 0 Or
 - MaybeSubrule
 - Many
 - MaybeMany
@@ -18,11 +21,20 @@ All Node Types
 - MaybeManySeparated
 - ManyPadded
 - MaybeManyPadded
-- ?ManyPossiblyPadded
-- ?MaybeManyPossiblyPadded
+- ManyPossiblyPadded?
+- MaybeManyPossiblyPadded?
 
 [Fancy Features]
 Static Javascript Parser Codegen
 Specialized Grammar Language
 Parse Tree Visitor
 Arbitrary Language Parser Codegen
+
+
+
+
+Left Recursion Detection
+- X done
+
+Token Ignore Lists
+ditched in favor of encouraging just writing "macros" that abstract over commonly ignored tokens

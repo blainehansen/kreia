@@ -1,9 +1,11 @@
 (function(root, factory) {
 	if (typeof define === 'function' && define.amd) {
 		define([], factory) /* global define */
-	} else if (typeof module === 'object' && module.exports) {
+	}
+	else if (typeof module === 'object' && module.exports) {
 		module.exports = factory()
-	} else {
+	}
+	else {
 		root.moo = factory()
 	}
 }(this, function() {
@@ -38,7 +40,8 @@
 		if (typeof obj === 'string') {
 			return '(?:' + reEscape(obj) + ')'
 
-		} else if (isRegExp(obj)) {
+		}
+		else if (isRegExp(obj)) {
 			// TODO: consider /u support
 			if (obj.ignoreCase) throw new Error('RegExp /i flag not allowed')
 			if (obj.global) throw new Error('RegExp /g flag is implied')
@@ -46,7 +49,8 @@
 			if (obj.multiline) throw new Error('RegExp /m flag is implied')
 			return obj.source
 
-		} else {
+		}
+		else {
 			throw new Error('not a pattern: ' + obj)
 		}
 	}
@@ -64,7 +68,8 @@
 					if (match.length) result.push(ruleOptions(key, match))
 					result.push(ruleOptions(key, rule))
 					match = []
-				} else {
+				}
+				else {
 					match.push(rule)
 				}
 			})
@@ -100,6 +105,9 @@
 			error: false,
 			value: null,
 			getType: null,
+			// BLAINE
+			categories: null,
+			keywords: null,
 		}
 
 		// Avoid Object.assign(), so we support IE9+
@@ -120,6 +128,57 @@
 			options.getType = keywordTransform(options.keywords)
 		}
 		return options
+	}
+
+	function toArray(possiblyArray) {
+		return Array.isArray(possiblyArray) ? possiblyArray : [possiblyArray]
+	}
+
+	// BLAINE
+	function matchToken(testToken, matchTokenOrCategory) {
+		if (matchTokenOrCategory.isCategory) {
+			if (!testToken.categories) return false
+
+			for (var i = testToken.categories.length - 1; i >= 0; i--) {
+				var categoryName = testToken.categories[i]
+				if (matchTokenOrCategory.categoryName == categoryName) return true
+			}
+
+			return false
+		}
+		else return testToken.type == matchTokenOrCategory.type
+	}
+
+
+	function validateCategories(categoriesArray) {
+		if (categoriesArray === null) return
+
+		for (var i = 0; i < categoriesArray.length; i++) {
+			var category = categoriesArray[i]
+			if (!category.isCategory) {
+				console.log(category)
+				throw "Categories should only be set to category objects"
+			}
+		}
+	}
+
+	function createCategory(categoryName, parentCategories) {
+		var finalCategories = []
+		if (parentCategories) {
+			parentCategories = toArray(parentCategories)
+			validateCategories(parentCategories)
+
+			for (var i = parentCategories.length - 1; i >= 0; i--) {
+				var parentCategory = parentCategories[i]
+				finalCategories.push(parentCategory)
+				if (parentCategory.categories) finalCategories.push.apply(finalCategories, parentCategory.categories)
+			}
+		}
+
+		return {
+			isCategory: true, categoryName: categoryName,
+			categories: finalCategories.length != 0 ? finalCategories : null
+		}
 	}
 
 	function compileRules(rules, hasStates) {
@@ -165,19 +224,37 @@
 				throw new Error('Rule should declare lineBreaks: ' + regexp)
 			}
 
-			// // BLAINE
-			// if (options.categories) {
-			// 	if (!Array.isArray(options.categories)) {
-			// 		options.categories = [options.categories]
-			// 	}
+			// BLAINE
+			// coerce undefined or empty arrays to null
+			var categories = options.categories
+			if (categories) {
+				categories = toArray(categories)
+				validateCategories(categories)
+
+				if (categories.length == 0) options.categories = null
+				else {
+					var finalCategories = []
+					for (var j = 0; j < categories.length; j++) {
+						var category = categories[j]
+
+						finalCategories.push(category.categoryName)
+						// since the parent categories have already been flattened, this works
+						if (category.categories) finalCategories.push.apply(finalCategories, category.categories.map((parentCategory) => parentCategory.categoryName))
+					}
+
+					options.categories = finalCategories
+				}
+			}
+			else options.categories = null
+
+			// if (options.keywords) {
+			// 	// deal with keywords for options
 			// }
-			// tokenObjects[options.tokenType] = token
 
 			// store regex
 			parts.push(reCapture(pat))
 
-			// BLAINE, this is where we could possibly build up a token library
-			// it seems like the "groups" variable is all of them
+			// BLAINE, we could prevent needing to recompute the tokenLibrary here
 		}
 
 		var suffix = hasSticky ? '' : '|(?:)'
@@ -185,19 +262,7 @@
 		var combined = new RegExp(reUnion(parts) + suffix, flags)
 
 		// BLAINE
-		// return {regexp: combined, groups: groups, error: errorRule, tokenObjects: tokenObjects}
 		return {regexp: combined, groups: groups, error: errorRule}
-	}
-
-	// BLAINE
-	function matchToken(testToken, matchTokenOrCategory) {
-		if (matchTokenOrCategory.isCategory) {
-			for (category in testToken.categories) {
-				if (category.categoryName == matchTokenOrCategory.categoryName) return true
-			}
-			return false
-		}
-		else return testToken.tokenType == matchTokenOrCategory.tokenType
 	}
 
 	function compile(rules) {
@@ -278,12 +343,6 @@
 		this.buffer = ''
 		this.stack = []
 		this.reset()
-	}
-
-	Lexer.prototype.tokenLibrary = function() {
-		// BLAINE
-		// this is where we have to return an object with token names to token types
-		// this heavily depends on what the structure we need
 	}
 
 	Lexer.prototype.reset = function(data, info) {
@@ -369,7 +428,8 @@
 			// consume rest of buffer
 			text = buffer.slice(index)
 
-		} else {
+		}
+		else {
 			text = match[0]
 			group = this.groups[i]
 		}
@@ -381,11 +441,14 @@
 			var nl = 1
 			if (text === '\n') {
 				lineBreaks = 1
-			} else {
+			}
+			else {
 				while (matchNL.exec(text)) { lineBreaks++; nl = matchNL.lastIndex }
 			}
 		}
 
+		// BLAINE
+		// we'll have to use this area to inject all token categories into the token
 		var token = {
 			type: (group.getType && group.getType(text)) || group.tokenType,
 			value: group.value ? group.value(text) : text,
@@ -395,6 +458,8 @@
 			lineBreaks: lineBreaks,
 			line: this.line,
 			col: this.col,
+			// BLAINE
+			categories: group.categories,
 		}
 		// nb. adding more props to token object will make V8 sad!
 
@@ -403,7 +468,8 @@
 		this.line += lineBreaks
 		if (lineBreaks !== 0) {
 			this.col = size - nl + 1
-		} else {
+		}
+		else {
 			this.col += size
 		}
 		// throw, if no rule with {error: true}
@@ -468,13 +534,34 @@
 		return false
 	}
 
+	Lexer.prototype.tokenLibrary = function() {
+		// BLAINE
+		var library = {}
+
+		for (var stateKey in this.states) {
+			var state = this.states[stateKey]
+			for (var i = 0; i < state.groups.length; i++) {
+				var group = state.groups[i]
+				console.log(group.keywords)
+				var type = group.tokenType
+				if (type in library) throw "there are overlapping token names in multiple states: " + type
+				library[type] = {
+					type: type, categories: group.categories,
+				}
+			}
+		}
+
+		return library
+	}
+
 
 	return {
 		compile: compile,
 		states: compileStates,
 		error: Object.freeze({error: true}),
 		// BLAINE
-		// matchToken: matchToken,
+		matchToken: matchToken,
+		createCategory: createCategory,
 	}
 
 }))

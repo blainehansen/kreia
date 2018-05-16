@@ -14,7 +14,7 @@ function log(obj) {
 
 const { matchToken } = require('./decision-paths')
 const {
-	determineDecidingNode, determineRecurringNode, Maybe, Consume, MaybeConsume, Subrule, SubruleNode, MaybeSubruleNode
+	isDecidingNode, isRecurringNode, Maybe, Consume, Subrule, SubruleNode, Or, Many, ManySeparated
 } = require('./parse-nodes')
 
 const INSPECT = Symbol()
@@ -53,7 +53,9 @@ class DecisionPathStack {
 	}
 
 	enterDecision() {
+		// console.log('before enterDecision: ', this.subruleBranchIndexListStack)
 		this.subruleBranchIndexListStack.last().push(0)
+		// console.log('after enterDecision: ', this.subruleBranchIndexListStack)
 	}
 
 	exitDecision() {
@@ -65,11 +67,18 @@ class DecisionPathStack {
 		this.subruleBranchIndexListStack.last().setLast(currentIndex + 1)
 	}
 
+	resetDecision() {
+		this.subruleBranchIndexListStack.last().setLast(0)
+	}
+
+	setDecision(decisionNumber) {
+		this.subruleBranchIndexListStack.last().setLast(decisionNumber)
+	}
+
 	// this is used for creating them during inspection
 	pushDecisionPath(decisionPath) {
 		const currentKeyName = this.getCurrentKey()
 		this.decisionPathMap[currentKeyName] = decisionPath
-		this.incrementDecision()
 	}
 
 	// this is used for getting them again during parsing
@@ -82,7 +91,6 @@ class DecisionPathStack {
 			throw "no decision path was found"
 		}
 
-		this.incrementDecision()
 		return decisionPath
 	}
 }
@@ -90,12 +98,10 @@ class DecisionPathStack {
 
 
 class Parser {
-	constructor(lexer, lookahead = 6, ignoreList = []) {
+	constructor(lexer, lookahead = 6) {
 		this.lexer = lexer
 		this.lookQueue = []
 		this.lookahead = lookahead
-
-		// this.ignoreList = ignoreList
 
 		this.rules = {}
 		this.ruleEntryPaths = {}
@@ -112,21 +118,30 @@ class Parser {
 		this.currentTokenIndex = 0
 	}
 
-	getUnbound() {
+	getFunctions() {
 		let {
-			look, lookRange, rule, subrule, maybe, consume, maybeConsume
+			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
 		} = this
 
 		look = look.bind(this)
 		lookRange = lookRange.bind(this)
 		rule = rule.bind(this)
 		subrule = subrule.bind(this)
+		maybeSubrule = maybeSubrule.bind(this)
 		maybe = maybe.bind(this)
 		consume = consume.bind(this)
 		maybeConsume = maybeConsume.bind(this)
+		or = or.bind(this)
+		maybeOr = maybeOr.bind(this)
+		many = many.bind(this)
+		maybeMany = maybeMany.bind(this)
+		manySeparated = manySeparated.bind(this)
+		maybeManySeparated = maybeManySeparated.bind(this)
 
 		return {
-			look, lookRange, rule, subrule, maybe, consume, maybeConsume
+			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
 		}
 	}
 
@@ -140,10 +155,9 @@ class Parser {
 	}
 
 	// this method will primarily be used in the various gates
-	look(amount = 1, ignore = null) {
+	look(amount = 1) {
 		if (amount <= 0) throw "you can't look a non positive whole number amount"
 
-		// ignore = ignore || this.ignoreList
 		let current = amount - this.lookQueue.length
 		while (current > 0) {
 			this.lookQueue.push(this.lexer.next())
@@ -205,12 +219,9 @@ class Parser {
 
 		const subrule = this.rules[ruleName] = new Subrule(definition, ruleName, ruleFunction)
 
-		// log(this.unresolvedSubruleNodes)
 		const canResolveSubruleNodes = this.unresolvedSubruleNodes[ruleName] || []
-		// log(canResolveSubruleNodes)
 		// this will also look at all unresolved subrules and resolve them with this
 		for (const subruleNode of canResolveSubruleNodes) {
-			// log(subruleNode)
 			subruleNode.resolveWith(subrule)
 		}
 
@@ -218,19 +229,16 @@ class Parser {
 	}
 
 	checkForLeftRecursion(topLevelRule, node) {
-		console.log(topLevelRule)
-		log(node)
-
 		for (const subNode of node.definition) {
 			if (subNode instanceof Consume) return false
 
 			else if (
-				(subNode instanceof SubruleNode || subNode instanceof MaybeSubruleNode)
+				(subNode instanceof SubruleNode)
 				&& subNode.subrule.ruleName == topLevelRule
 			) return true
 
 			else if (
-				determineRecurringNode(subNode)
+				isRecurringNode(subNode)
 				&& this.checkForLeftRecursion(topLevelRule, subNode)
 			) return true
 		}
@@ -253,11 +261,10 @@ class Parser {
 			}
 		}
 
-
 		// gather decision paths
 		for (const [ruleName, rule] of Object.entries(this.rules)) {
 			// getting just the entry path for this subrule will be useful, to decide for all future maybeSubrules
-			const node = new SubruleNode(rule)
+			const node = new SubruleNode(rule, false)
 			this.ruleEntryPaths[ruleName] = node.getEntryPath(this.lookahead)
 
 			this.decisionPathStack.enterSubrule(ruleName)
@@ -265,42 +272,61 @@ class Parser {
 			this.decisionPathStack.exitSubrule()
 		}
 
-		// log(this.ruleEntryPaths)
-		// log(this.decisionPathStack.decisionPathMap)
+		log(this.decisionPathStack.decisionPathMap)
 	}
 
 	gatherDecisionPathsForNode(node) {
-		for (const subNode of node.definition) {
-			const [isMaybeSubrule, isOneOf] = determineDecidingNode(subNode)
+		if (node instanceof Or || node instanceof ManySeparated) {
+			// when we enter here, the current decision index is tracking which of the branches, rather than which spot
+			for (const alternate of node.definition) {
+				// after this, the decision index is tracking which point in the nested thing we are
+				this.decisionPathStack.enterDecision()
+				this.gatherSubNodes(alternate)
+				this.decisionPathStack.exitDecision()
 
-			if (isOneOf) {
-				const decisionPath = isMaybeSubrule
-					? this.ruleEntryPaths[subNode.subrule.ruleName]
-					: subNode.getEntryPath(this.lookahead)
+				this.decisionPathStack.incrementDecision()
+			}
+		}
+		else this.gatherSubNodes(node.definition)
+	}
 
-				// after this adds this decision at the right key, it increments the decision number
+	gatherSubNodes(definition) {
+		for (const subNode of definition) {
+			if (isDecidingNode(subNode)) {
+				const lookahead = this.lookahead
+				// const [, decisionPath] = subNode.getEntryPath(this.lookahead)
+				const [, decisionPath] = subNode instanceof ManySeparated
+					? [, [subNode.getDefEntryPath(lookahead), subNode.getSepEntryPath(lookahead)]]
+					: subNode.getEntryPath(lookahead)
+
 				this.decisionPathStack.pushDecisionPath(decisionPath)
 
-				// this won't infinitely recurse since we'll reuse the subrule entry paths for maybeSubrules
-				if (!isMaybeSubrule) {
-					this.decisionPathStack.enterDecision()
-					this.gatherDecisionPathsForNode(subNode)
-					this.decisionPathStack.exitDecision()
-				}
+				// this won't infinitely recurse because we won't make maybeSubrules decision points
+				this.decisionPathStack.enterDecision()
+				this.gatherDecisionPathsForNode(subNode)
+				this.decisionPathStack.exitDecision()
+
+				this.decisionPathStack.incrementDecision()
 			}
 		}
 	}
 
 	subrule(ruleName, ...args) {
+		return this.subruleInternal(ruleName, false, ...args)
+	}
+
+	maybeSubrule(ruleName, ...args) {
+		return this.subruleInternal(ruleName, true, ...args)
+	}
+
+	subruleInternal(ruleName, optional, ...args) {
 		const rule = this.rules[ruleName]
 		if (this.inspecting) {
-			// this.subruleCalls.push(ruleName)
-
 			if (!rule) {
 				// this looks to see if the subrule being invoked has already been defined
 				// if it hasn't, it adds this name to the set of unresolved
 				// we also create an unresolved decision tree and push it both to the current scopes and to the unresolved list
-				const unresolvedSubruleNode = new SubruleNode(null)
+				const unresolvedSubruleNode = new SubruleNode(null, optional)
 				this.definitionScope.push(unresolvedSubruleNode)
 
 				const existingUnresolved = this.unresolvedSubruleNodes[ruleName] || []
@@ -308,36 +334,41 @@ class Parser {
 				this.unresolvedSubruleNodes[ruleName] = existingUnresolved
 			}
 			else {
-				const subruleNode = new SubruleNode(rule)
+				const subruleNode = new SubruleNode(rule, optional)
 				this.definitionScope.push(subruleNode)
 			}
 
 			return INSPECT
 		}
 
-		this.decisionPathStack.enterSubrule(ruleName)
-		const ruleReturnValue = rule.ruleFunction(...args)
-		this.decisionPathStack.exitSubrule()
+		let shouldEnter = true
+		if (optional) {
+			// we use the precomputed decision path instead of using the stack
+			const decisionPath = this.ruleEntryPaths[ruleName]
+
+			const nextTokens = this.lookRange(decisionPath.maxLength)
+			const [, remainingTokens] = decisionPath.testAgainstTokens(nextTokens)
+			// if no tokens were consumed, then that means an EMPTY_BRANCH was taken
+			if (!(remainingTokens !== false && nextTokens.length != remainingTokens.length)) {
+				shouldEnter = false
+			}
+		}
+
+		let ruleReturnValue
+		// in the event this isn't optional, the ruleFunction will definitely be called
+		// if that happens and the token stream isn't correct, this will fail
+		if (shouldEnter) {
+			this.decisionPathStack.enterSubrule(ruleName)
+			ruleReturnValue = rule.ruleFunction(...args)
+			this.decisionPathStack.exitSubrule()
+		}
 
 		return ruleReturnValue
 	}
 
-	// maybeSubrule() {
-	// 	// else if (this.gatheringDecisionPaths) {
-	// 	// 	const decisionPath = this.ruleEntryPaths[ruleName]
-	// 	// 	this.decisionPathStack.pushDecisionPath(decisionPath)
-	// 	// }
 
-	// 	throw new Error("Unimplemented")
-	// }
-
-
-	// (gate, def)
 	maybe(def) {
 		if (this.inspecting) {
-			// we have to do whatever is required to move ourselves to the correct point in the stack
-			// when we're inspecting we always "enter"
-
 			const oldDefinitionScope = this.definitionScope
 			const currentDefinitionScope = this.definitionScope = []
 			def()
@@ -351,7 +382,7 @@ class Parser {
 		const decisionPath = this.decisionPathStack.getDecisionPath()
 
 		const nextTokens = this.lookRange(decisionPath.maxLength)
-		const remainingTokens = decisionPath.testAgainstTokens(nextTokens)
+		const [, remainingTokens] = decisionPath.testAgainstTokens(nextTokens)
 		// if no tokens were consumed, then that means an EMPTY_BRANCH was taken
 		if (remainingTokens !== false && nextTokens.length != remainingTokens.length) {
 			this.decisionPathStack.enterDecision()
@@ -360,14 +391,201 @@ class Parser {
 			return defResults
 		}
 
+		this.decisionPathStack.incrementDecision()
 		// if we get to this point, no decisions were taken, but this is an always optional rule
 	}
+
+	or(...choices) {
+		const [tookChoice, choiceResults] = this.orInternal(false, ...choices)
+
+		if (!tookChoice) throw "unsuccessful Or decision"
+		return choiceResults
+	}
+
+	maybeOr(...choices) {
+		const [, choiceResults] = this.orInternal(true, ...choices)
+		return choiceResults
+	}
+
+	orInternal(optional, ...choices) {
+		if (choices.length < 2) throw "can't call an or() with less than two choices"
+
+		if (this.inspecting) {
+			const oldDefinitionScope = this.definitionScope
+
+			const alternations = []
+			for (const choice of choices) {
+				const currentAlternationScope = this.definitionScope = []
+				choice()
+				alternations.push(currentAlternationScope)
+			}
+
+			oldDefinitionScope.push(new Or(alternations, optional))
+			this.definitionScope = oldDefinitionScope
+
+			return [true, INSPECT]
+		}
+
+		let choiceResults
+		let tookChoice = false
+		// this belongs to our parent, not us
+		const topDecisionPath = this.decisionPathStack.getDecisionPath()
+
+		// if this path doesn't have exactly one thing, that's a problem
+		if (topDecisionPath.path.length != 1) {
+			console.log(topDecisionPath)
+			throw "an or decision path didn't have exactly one element"
+		}
+		const branch = topDecisionPath.path[0]
+		const nextTokens = this.lookRange(topDecisionPath.maxLength)
+		const [whichChoice, , remainingTokens] = branch.testAgainstTokens(nextTokens)
+
+		if (remainingTokens !== false && nextTokens.length != remainingTokens.length) {
+			this.decisionPathStack.enterDecision()
+			this.decisionPathStack.setDecision(whichChoice)
+
+			tookChoice = true
+			this.decisionPathStack.enterDecision()
+			const choice = choices[whichChoice]
+			if (choice === undefined) {
+				log(whichChoice)
+				log(choice)
+				log(choices)
+				log(branch)
+				throw "a choices array didn't line up with the choice index returned from branch.testAgainstTokens"
+			}
+			choiceResults = choice()
+			this.decisionPathStack.exitDecision()
+			this.decisionPathStack.exitDecision()
+		}
+
+		this.decisionPathStack.incrementDecision()
+		return [tookChoice, choiceResults]
+	}
+
+
+	many(def) {
+		return this.manyInternal(def, true)
+	}
+
+	maybeMany(def) {
+		return this.manyInternal(def, false)
+	}
+
+	manyInternal(def, requireFirst) {
+		if (this.inspecting) {
+			const oldDefinitionScope = this.definitionScope
+			const currentDefinitionScope = this.definitionScope = []
+			def()
+			oldDefinitionScope.push(new Many(currentDefinitionScope, !requireFirst))
+			this.definitionScope = oldDefinitionScope
+
+			return INSPECT
+		}
+
+		const allResults = []
+		if (requireFirst) {
+			this.decisionPathStack.enterDecision()
+			// this one is mandatory
+			// if it's unsuccessful, it will throw an expectation error
+			allResults.push(def())
+			this.decisionPathStack.exitDecision()
+		}
+
+		const decisionPath = this.decisionPathStack.getDecisionPath()
+
+		let nextTokens = this.lookRange(decisionPath.maxLength)
+		let [, remainingTokens] = decisionPath.testAgainstTokens(nextTokens)
+		while (remainingTokens !== false && nextTokens.length != remainingTokens.length) {
+			this.decisionPathStack.enterDecision()
+			allResults.push(def())
+			this.decisionPathStack.exitDecision()
+
+			nextTokens = this.lookRange(decisionPath.maxLength)
+			const [, tempRemainingTokens] = decisionPath.testAgainstTokens(nextTokens)
+			remainingTokens = tempRemainingTokens
+		}
+
+		this.decisionPathStack.incrementDecision()
+		return allResults
+	}
+
+
+	manySeparated(def, sep) {
+		return this.manySeparatedInternal(def, sep, true)
+	}
+
+	maybeManySeparated(def, sep) {
+		return this.manySeparatedInternal(def, sep, false)
+	}
+
+	manySeparatedInternal(def, sep, requireFirst) {
+		if (this.inspecting) {
+			const oldDefinitionScope = this.definitionScope
+
+			const currentDefinitionScope = this.definitionScope = []
+			def()
+
+			const currentSeparatorScope = this.definitionScope = []
+			sep()
+
+			oldDefinitionScope.push(new ManySeparated(currentDefinitionScope, currentSeparatorScope, !requireFirst))
+			this.definitionScope = oldDefinitionScope
+
+			return INSPECT
+		}
+
+		const [enterDecisionPath, continueDecisionPath] = this.decisionPathStack.getDecisionPath()
+		// const possibleArrayOfDecisionPaths = this.decisionPathStack.getDecisionPath()
+		// const [enterDecisionPath, continueDecisionPath] = possibleArrayOfDecisionPaths instanceof Array
+		// 	? possibleArrayOfDecisionPaths
+		// 	: [undefined, possibleArrayOfDecisionPaths]
+
+		const allResults = []
+		if (!requireFirst) {
+			const nextTokens = this.lookRange(enterDecisionPath.maxLength)
+			const [, remainingTokens] = enterDecisionPath.testAgainstTokens(nextTokens)
+			if (!(remainingTokens !== false && nextTokens.length != remainingTokens.length)) return
+		}
+
+		// since we have two alternating decisions
+		this.decisionPathStack.enterDecision()
+		this.decisionPathStack.enterDecision()
+		// this one could be mandatory
+		// if it's unsuccessful, it will throw an expectation error
+		allResults.push(def())
+		this.decisionPathStack.exitDecision()
+		this.decisionPathStack.incrementDecision() // this puts us at the sep
+
+		let nextTokens = this.lookRange(continueDecisionPath.maxLength)
+		let [, remainingTokens] = continueDecisionPath.testAgainstTokens(nextTokens)
+		while (remainingTokens !== false && nextTokens.length != remainingTokens.length) {
+			// we consume the sep without doing anything with it's return value
+			this.decisionPathStack.enterDecision()
+			sep()
+			this.decisionPathStack.exitDecision()
+			this.decisionPathStack.resetDecision()
+
+			this.decisionPathStack.enterDecision()
+			allResults.push(def())
+			this.decisionPathStack.exitDecision()
+			this.decisionPathStack.incrementDecision()
+
+			nextTokens = this.lookRange(continueDecisionPath.maxLength)
+			const [, tempRemainingTokens] = continueDecisionPath.testAgainstTokens(nextTokens)
+			remainingTokens = tempRemainingTokens
+		}
+		this.decisionPathStack.exitDecision()
+
+		this.decisionPathStack.incrementDecision()
+		return allResults
+	}
+
 
 	consume(tokenTypeOrArray) {
 		const tokenTypeArray = toArray(tokenTypeOrArray)
 		if (this.inspecting) {
-
-			this.definitionScope.push(new Consume(tokenTypeArray))
+			this.definitionScope.push(new Consume(tokenTypeArray, false))
 			return INSPECT
 		}
 
@@ -377,10 +595,12 @@ class Parser {
 		else throw `next tokens didn't match:\n\texpected: ${tokenTypeArray}\n\tfound: ${nextTokens}`
 	}
 
+	// TODO could be a good idea to have a consumeMany and maybeConsumeMany, instead of a token option for many and many sep
+
 	maybeConsume(tokenTypeOrArray) {
 		const tokenTypeArray = toArray(tokenTypeOrArray)
 		if (this.inspecting) {
-			this.definitionScope.push(new MaybeConsume(tokenTypeArray))
+			this.definitionScope.push(new Consume(tokenTypeArray, true))
 			return INSPECT
 		}
 
@@ -390,36 +610,6 @@ class Parser {
 			return nextTokens
 		}
 	}
-
-	// // of the form { gate, def }
-	// // or possibly [gate, def]
-	// or(...choices) {
-	// 	// this one actually has to consume things, using the decision tree created during analysis
-
-	// 	throw new Error("Unimplemented")
-	// }
-
-	// maybeOr() {
-	// 	throw new Error("Unimplemented")
-	// }
-
-
-	// many(def) {
-	// 	throw new Error("Unimplemented")
-	// }
-
-	// maybeMany(gate, def) {
-	// 	throw new Error("Unimplemented")
-	// }
-
-
-	// manySeparated(def, sep) {
-	// 	throw new Error("Unimplemented")
-	// }
-
-	// maybeManySeparated(gate, def, sep) {
-	// 	throw new Error("Unimplemented")
-	// }
 }
 
 
@@ -448,41 +638,18 @@ class ConcreteParser extends Parser {
 		super(lexer)
 
 		const {
-			rule, subrule, maybe, consume, maybeConsume
-		} = this.getUnbound()
+			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+		} = this.getFunctions()
 
-
-		// rule('only', () => {
-		// 	consume(['Number', 'Dot'])
-		// 	maybe(() => {
-		// 		consume('Space')
-		// 		subrule('other')
-		// 		consume('Space')
-		// 	})
-		// 	consume(['Dot', 'Number'])
-		// })
-
-		// rule('other', () => {
-		// 	consume('LeftParen')
-		// 	maybeConsume('Number')
-		// 	consume('RightParen')
-		// })
-
-
-		// this is a left recursive grammar
-		rule('A', () => {
-			consume('LeftParen')
-			maybeConsume('Plus')
-			subrule('B')
-			// consume('LeftParen')
-			// subrule('A')
-			// consume('RightParen')
-		})
-
-		rule('B', () => {
-			maybeConsume('Space')
-			subrule('A')
-			// maybeConsume('Space')
+		rule('only', () => {
+			consume('Space')
+			manySeparated(() => {
+			// maybeManySeparated(() => {
+				consume(['LeftParen', 'Number', 'RightParen'])
+			}, () => {
+				consume('Dot')
+			})
 		})
 
 		this.analyze()
@@ -491,37 +658,11 @@ class ConcreteParser extends Parser {
 
 
 const concreteParser = new ConcreteParser()
-// concreteParser.reset("1. () .1")
+concreteParser.reset(" (4)")
+concreteParser.only()
+
+// concreteParser.reset(" (4).(4)")
 // concreteParser.only()
 
-// concreteParser.reset("1. (4) .1")
+// concreteParser.reset(" ")
 // concreteParser.only()
-
-// concreteParser.reset("1..1")
-// concreteParser.only()
-
-
-
-// // this is a grammar with recursion
-// // but it's not left recursion
-// // because every time a rule ends up at itself again, the stream has been advanced
-
-// // path from A to B is [LeftParen]
-// rule('A', () => {
-// 	consume(tok.LeftParen)
-// 	subrule('B')
-// 	consume(tok.RightParen)
-// })
-
-// // path from B to A is [Number, Space]
-// // probably we can get away with just incrementing a mandatoryTokenCount. we don't actually need the whole path
-// rule('B', () => {
-// 	consume(tok.Number)
-// 	// there would the mandatory lookahead path of this is the mandatory path to the first optional thing
-// 	// here that would ironically involve
-// 	option(() => {
-// 		consume(tok.Space)
-// 		subrule('A')
-// 	})
-// })
-
