@@ -13,14 +13,14 @@ Node Parameters
 - all inner functions can accept args
 
 All Node Types
-- 0 Or
-- MaybeSubrule
-- Many
-- MaybeMany
-- ManySeparated
-- MaybeManySeparated
-- ManyPadded
-- MaybeManyPadded
+- X Or
+- X MaybeSubrule
+- X Many
+- X MaybeMany
+- X ManySeparated
+- X MaybeManySeparated
+- X ManyPadded
+- X MaybeManyPadded
 - ManyPossiblyPadded?
 - MaybeManyPossiblyPadded?
 

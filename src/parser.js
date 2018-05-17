@@ -294,7 +294,6 @@ class Parser {
 		for (const subNode of definition) {
 			if (isDecidingNode(subNode)) {
 				const lookahead = this.lookahead
-				// const [, decisionPath] = subNode.getEntryPath(this.lookahead)
 				const [, decisionPath] = subNode instanceof ManySeparated
 					? [, [subNode.getDefEntryPath(lookahead), subNode.getSepEntryPath(lookahead)]]
 					: subNode.getEntryPath(lookahead)
@@ -536,10 +535,6 @@ class Parser {
 		}
 
 		const [enterDecisionPath, continueDecisionPath] = this.decisionPathStack.getDecisionPath()
-		// const possibleArrayOfDecisionPaths = this.decisionPathStack.getDecisionPath()
-		// const [enterDecisionPath, continueDecisionPath] = possibleArrayOfDecisionPaths instanceof Array
-		// 	? possibleArrayOfDecisionPaths
-		// 	: [undefined, possibleArrayOfDecisionPaths]
 
 		const allResults = []
 		if (!requireFirst) {
@@ -613,56 +608,4 @@ class Parser {
 }
 
 
-// const moo = require('moo')
-const moo = require('./moo')
-
-const lexer = moo.compile({
-	LeftParen: '(',
-	RightParen: ')',
-	Number: /[0-9]+/,
-	Space: / +/,
-	Dot: '.',
-})
-
-// lexer.reset(" (9) ")
-// let token
-// while (token = lexer.next()) {
-// 	log(token)
-// }
-
-// const tok = lexer.tokenLibrary()
-
-
-class ConcreteParser extends Parser {
-	constructor() {
-		super(lexer)
-
-		const {
-			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
-		} = this.getFunctions()
-
-		rule('only', () => {
-			consume('Space')
-			manySeparated(() => {
-			// maybeManySeparated(() => {
-				consume(['LeftParen', 'Number', 'RightParen'])
-			}, () => {
-				consume('Dot')
-			})
-		})
-
-		this.analyze()
-	}
-}
-
-
-const concreteParser = new ConcreteParser()
-concreteParser.reset(" (4)")
-concreteParser.only()
-
-// concreteParser.reset(" (4).(4)")
-// concreteParser.only()
-
-// concreteParser.reset(" ")
-// concreteParser.only()
+module.exports = Parser

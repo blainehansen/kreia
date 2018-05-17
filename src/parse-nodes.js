@@ -130,14 +130,6 @@ class Or extends ParseNode {
 }
 
 class Many extends ParseNode {
-	// since a dumb "repeatable type" isn't possible (it would make it impossible to give a maxlength)
-	// the only truly robust way to do is is the "descending iteration count" method
-	// first we find the number of iterations of the many that spills over the remaining token count
-	// then we iterate downward from that max number, adding a reduced branch
-	// the max length of the entire addition would be the size of the longest arm
-
-	// if the many or manysep has a termination at the end, we can't do this, since we can't even fully path out one full iteration
-
 	getManyBranch(subPath, lookahead) {
 		const continuationBranch = new DecisionBranch()
 

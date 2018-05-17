@@ -16,6 +16,11 @@
 
 	/***************************************************************************/
 
+	function toArray(possiblyArray) {
+		if (!possiblyArray) return []
+		return Array.isArray(possiblyArray) ? possiblyArray : [possiblyArray]
+	}
+
 	function isRegExp(o) { return o && o.constructor === RegExp }
 	function isObject(o) { return o && typeof o === 'object' && o.constructor !== RegExp && !Array.isArray(o) }
 
@@ -61,7 +66,7 @@
 		for (var i = 0; i < keys.length; i++) {
 			var key = keys[i]
 			var thing = object[key]
-			var rules = Array.isArray(thing) ? thing : [thing]
+			var rules = toArray(thing)
 			var match = []
 			rules.forEach(function(rule) {
 				if (isObject(rule)) {
@@ -90,6 +95,22 @@
 		return result
 	}
 
+	function flattenCategories(categories) {
+		if (categories.length == 0) return null
+		else {
+			var finalCategories = []
+			for (var j = 0; j < categories.length; j++) {
+				var category = categories[j]
+
+				finalCategories.push(category.categoryName)
+				// since the parent categories have already been flattened, this works
+				if (category.categories) finalCategories.push.apply(finalCategories, category.categories.map((parentCategory) => parentCategory.categoryName))
+			}
+
+			return finalCategories
+		}
+	}
+
 	function ruleOptions(name, obj) {
 		if (typeof obj !== 'object' || Array.isArray(obj) || isRegExp(obj)) {
 			obj = { match: obj }
@@ -104,7 +125,7 @@
 			push: null,
 			error: false,
 			value: null,
-			getType: null,
+			getTypeAndCategories: null,
 			// BLAINE
 			categories: null,
 			keywords: null,
@@ -124,14 +145,85 @@
 			return isRegExp(a) && isRegExp(b) ? 0
 					 : isRegExp(b) ? -1 : isRegExp(a) ? +1 : b.length - a.length
 		})
+
+		function normalizeCategories(optionsObject) {
+			if (optionsObject.categories) {
+				var categories = toArray(optionsObject.categories)
+				validateCategories(categories)
+				optionsObject.categories = flattenCategories(categories)
+			}
+			else optionsObject.categories = null
+		}
+
+		// BLAINE
+		// coerce undefined or empty arrays to null
+		normalizeCategories(options)
+
 		if (options.keywords) {
-			options.getType = keywordTransform(options.keywords)
+			if (!Array.isArray(options.keywords)) {
+				var typeList = []
+				for (var [tokenType, keywords] of Object.entries(options.keywords)) {
+					keywords = toArray(keywords)
+					typeList.push({ type: tokenType, values: keywords, categories: options.categories })
+				}
+				options.keywords = typeList
+			}
+			else {
+				for (var keywordObject of options.keywords) {
+					normalizeCategories(keywordObject)
+
+					if (options.categories) {
+						if (keywordObject.categories) keywordObject.categories = keywordObject.categories.concat(options.categories)
+						else keywordObject.categories = options.categories
+					}
+				}
+			}
+
+			options.getTypeAndCategories = keywordTransform(options.keywords, options.categories)
 		}
 		return options
 	}
 
-	function toArray(possiblyArray) {
-		return Array.isArray(possiblyArray) ? possiblyArray : [possiblyArray]
+	function keywordTransform(types, categories) {
+		categories = categories || []
+
+		var reverseMap = Object.create(null)
+		var byLength = Object.create(null)
+		for (var i = 0; i < types.length; i++) {
+			var item = types[i]
+			var keywordList = toArray(item.values)
+			var tokenType = item.type
+
+			var tokenCategories = toArray(item.categories)
+
+			for (var keyword of keywordList) {
+				(byLength[keyword.length] = byLength[keyword.length] || []).push(keyword)
+				if (typeof keyword !== 'string') {
+					throw new Error("keyword must be string (in keyword '" + tokenType + "')")
+				}
+				reverseMap[keyword] = { tokenType: tokenType, categories: tokenCategories.length == 0 ? null : tokenCategories }
+			}
+		}
+
+		// fast string lookup
+		// https://jsperf.com/string-lookups
+		function str(x) { return JSON.stringify(x) }
+		var source = ''
+		source += '(function(value) {\n'
+		source += 'switch (value.length) {\n'
+		for (var length in byLength) {
+			var keywords = byLength[length]
+			source += 'case ' + length + ':\n'
+			source += 'switch (value) {\n'
+			for (var keyword of keywords) {
+				var tokenTypeAndCategories = reverseMap[keyword]
+				source += 'case ' + str(keyword) + ': return ' + str(tokenTypeAndCategories) + '\n'
+			}
+			source += '}\n'
+		}
+		source += '}\n'
+		source += '})'
+		return eval(source) // getTypeAndCategories
 	}
 
 	// BLAINE
@@ -224,33 +316,6 @@
 				throw new Error('Rule should declare lineBreaks: ' + regexp)
 			}
 
-			// BLAINE
-			// coerce undefined or empty arrays to null
-			var categories = options.categories
-			if (categories) {
-				categories = toArray(categories)
-				validateCategories(categories)
-
-				if (categories.length == 0) options.categories = null
-				else {
-					var finalCategories = []
-					for (var j = 0; j < categories.length; j++) {
-						var category = categories[j]
-
-						finalCategories.push(category.categoryName)
-						// since the parent categories have already been flattened, this works
-						if (category.categories) finalCategories.push.apply(finalCategories, category.categories.map((parentCategory) => parentCategory.categoryName))
-					}
-
-					options.categories = finalCategories
-				}
-			}
-			else options.categories = null
-
-			// if (options.keywords) {
-			// 	// deal with keywords for options
-			// }
-
 			// store regex
 			parts.push(reCapture(pat))
 
@@ -295,44 +360,6 @@
 		}
 
 		return new Lexer(map, start)
-	}
-
-	function keywordTransform(map) {
-		var reverseMap = Object.create(null)
-		var byLength = Object.create(null)
-		var types = Object.getOwnPropertyNames(map)
-		for (var i = 0; i < types.length; i++) {
-			var tokenType = types[i]
-			var item = map[tokenType]
-			var keywordList = Array.isArray(item) ? item : [item]
-			keywordList.forEach(function(keyword) {
-				(byLength[keyword.length] = byLength[keyword.length] || []).push(keyword)
-				if (typeof keyword !== 'string') {
-					throw new Error("keyword must be string (in keyword '" + tokenType + "')")
-				}
-				reverseMap[keyword] = tokenType
-			})
-		}
-
-		// fast string lookup
-		// https://jsperf.com/string-lookups
-		function str(x) { return JSON.stringify(x) }
-		var source = ''
-		source += '(function(value) {\n'
-		source += 'switch (value.length) {\n'
-		for (var length in byLength) {
-			var keywords = byLength[length]
-			source += 'case ' + length + ':\n'
-			source += 'switch (value) {\n'
-			keywords.forEach(function(keyword) {
-				var tokenType = reverseMap[keyword]
-				source += 'case ' + str(keyword) + ': return ' + str(tokenType) + '\n'
-			})
-			source += '}\n'
-		}
-		source += '}\n'
-		source += '})'
-		return eval(source) // getType
 	}
 
 	/***************************************************************************/
@@ -449,8 +476,12 @@
 
 		// BLAINE
 		// we'll have to use this area to inject all token categories into the token
+		var tokenTypeAndCategories = group.getTypeAndCategories ? group.getTypeAndCategories(text) : undefined
+		var tokenType = tokenTypeAndCategories ? tokenTypeAndCategories.tokenType : undefined
+		var tokenCategories = tokenTypeAndCategories ? tokenTypeAndCategories.categories : undefined
+
 		var token = {
-			type: (group.getType && group.getType(text)) || group.tokenType,
+			type: tokenType || group.tokenType,
 			value: group.value ? group.value(text) : text,
 			text: text,
 			toString: tokenToString,
@@ -459,7 +490,7 @@
 			line: this.line,
 			col: this.col,
 			// BLAINE
-			categories: group.categories,
+			categories: tokenCategories || group.categories,
 		}
 		// nb. adding more props to token object will make V8 sad!
 
@@ -542,7 +573,17 @@
 			var state = this.states[stateKey]
 			for (var i = 0; i < state.groups.length; i++) {
 				var group = state.groups[i]
-				console.log(group.keywords)
+
+				if (group.keywords) {
+					for (const keyword of group.keywords) {
+						const { type, categories } = keyword
+						if (type in library) throw "there are overlapping token names in multiple states: " + type
+						library[type] = {
+							type: type, categories: categories,
+						}
+					}
+				}
+
 				var type = group.tokenType
 				if (type in library) throw "there are overlapping token names in multiple states: " + type
 				library[type] = {
