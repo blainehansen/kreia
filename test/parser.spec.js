@@ -529,7 +529,6 @@ describe("fuller grammars", () => {
 			Whitespace: { match: /\s+/, ignore: true, lineBreaks: true },
 		})
 
-		// const { Primitive, Str, Num, Comma, LeftBracket, LeftBrace, Colon, Whitespace } = lexer.tokenLibrary()
 		const { Primitive, Str, Num, Comma, LeftBracket, RightBracket, LeftBrace, RightBrace, Colon } = lexer.tokenLibrary()
 		const miniJson = new Parser(lexer)
 		const {

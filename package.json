@@ -2,7 +2,7 @@
   "name": "kreia",
   "version": "0.1.0",
   "description": "A flexible and easy to use parser library. Look into chaos, and see order.",
-  "main": "src/parser.js",
+  "main": "kreia.js",
   "scripts": {
     "preversion": "npm test",
     "finalize-version": "git push origin master && git push origin master --tags && npm publish",
