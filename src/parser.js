@@ -105,7 +105,7 @@ class DecisionPathStack {
 
 
 class Parser {
-	constructor(lexer, lookahead = 4) {
+	constructor(lexer, lookahead = 3) {
 		this.lexer = lexer
 		this.lookQueue = []
 		this.lookahead = lookahead
@@ -456,6 +456,9 @@ class Parser {
 		const branch = topDecisionPath.path[0]
 		const nextTokens = this.lookRange(topDecisionPath.maxLength)
 		const [whichChoice, , remainingTokens] = branch.testAgainstTokens(nextTokens)
+		// log(branch)
+		// console.log(remainingTokens)
+		// console.log(whichChoice)
 
 		if (remainingTokens !== false && nextTokens.length != remainingTokens.length) {
 			this.decisionPathStack.enterDecision()

@@ -2,12 +2,12 @@ const Parser = require('./src/parser')
 
 const lexingFunctions = require('./src/lexing')
 
-function createParser(lexerDefinition, defaultLookahead = 5) {
+function createParser(lexerDefinition, defaultLookahead) {
 	const lexer = lexingFunctions.compile(lexerDefinition)
 	return [new Parser(lexer, defaultLookahead), lexer.tokenLibrary()]
 }
 
-function createStatesParser(lexerDefinition, defaultLookahead = 5) {
+function createStatesParser(lexerDefinition, defaultLookahead) {
 	const lexer = lexingFunctions.states(lexerDefinition)
 	return [new Parser(lexer, defaultLookahead), lexer.tokenLibrary()]
 }

@@ -140,46 +140,48 @@ class Or extends ParseNode {
 }
 
 class Many extends ParseNode {
-	getManyBranch(subPath, lookahead) {
-		const continuationBranch = new DecisionBranch()
+	// getManyBranch(subPath, lookahead) {
+	// 	const continuationBranch = new DecisionBranch()
 
-		// let's say we have 5 lookahead remaining
-		// and the sep path is 3 minimum tokens and 6 maximum
-		// that means the longest iteration would be two, it would be a six minimum and a 12 maximum
-		const maxIterations = Math.ceil(lookahead / subPath.minLength)
-		let currentIterations = maxIterations
-		while (currentIterations > 0) {
-			const iterationsPath = new DecisionPath()
+	// 	// let's say we have 5 lookahead remaining
+	// 	// and the sep path is 3 minimum tokens and 6 maximum
+	// 	// that means the longest iteration would be two, it would be a six minimum and a 12 maximum
+	// 	const maxIterations = Math.ceil(lookahead / subPath.minLength)
+	// 	let currentIterations = maxIterations
+	// 	while (currentIterations > 0) {
+	// 		const iterationsPath = new DecisionPath()
 
-			for (var i = 1; i <= currentIterations; i++) {
-				iterationsPath.push(subPath)
-			}
+	// 		for (var i = 1; i <= currentIterations; i++) {
+	// 			iterationsPath.push(subPath)
+	// 		}
 
-			continuationBranch.push(iterationsPath)
+	// 		continuationBranch.push(iterationsPath)
 
-			currentIterations--
-		}
+	// 		currentIterations--
+	// 	}
 
-		const largestMinLength = maxIterations * subPath.minLength
-		const largestMaxLength = maxIterations * subPath.maxLength
+	// 	const largestMinLength = maxIterations * subPath.minLength
+	// 	const largestMaxLength = maxIterations * subPath.maxLength
 
-		return [largestMinLength, largestMaxLength, continuationBranch]
-	}
+	// 	return [largestMinLength, largestMaxLength, continuationBranch]
+	// }
 
 	getEntryPath(lookahead) {
 		const [brokeEarly, entryPath] = this.getLinearEntryPath(this.definition, lookahead)
 		if (brokeEarly) return entryPath
+		entryPath.push(TERMINATE_NODE)
+		return entryPath
 
-		const realEntryPath = new DecisionPath()
+		// const realEntryPath = new DecisionPath()
 
-		const [
-			largestMinLength, largestMaxLength, continuationBranch
-		] = this.getManyBranch(entryPath, lookahead - realEntryPath.minLength)
+		// const [
+		// 	largestMinLength, largestMaxLength, continuationBranch
+		// ] = this.getManyBranch(entryPath, lookahead - entryPath.minLength)
 
-		realEntryPath.push(continuationBranch)
-		realEntryPath.minLength += largestMinLength
-		realEntryPath.maxLength += largestMaxLength
-		return realEntryPath
+		// realEntryPath.push(continuationBranch)
+		// realEntryPath.minLength += largestMinLength
+		// realEntryPath.maxLength += largestMaxLength
+		// return realEntryPath
 	}
 }
 
@@ -196,47 +198,50 @@ class ManySeparated extends Many {
 	}
 
 	getEntryPath(lookahead) {
-		const [definition, separator] = this.definition
+		// const [definition, separator] = this.definition
+		const [definition, ] = this.definition
 
 		// if this broke early, it will have a terminate at the end
 		// if they match it but it terminates, they just won't look at the continuation
 		// even if that happens, we need to
 		const [enterBrokeEarly, enterDecisionPath] = this.getLinearEntryPath(definition, lookahead)
 		if (enterBrokeEarly) return enterDecisionPath
+		enterDecisionPath.push(TERMINATE_NODE)
+		return enterDecisionPath
 
-		const [separatorBrokeEarly, separatorDecisionPath] = this.getLinearEntryPath(separator, lookahead)
+		// const [separatorBrokeEarly, separatorDecisionPath] = this.getLinearEntryPath(separator, lookahead)
 
-		const totalEntryPath = new DecisionPath()
-		totalEntryPath.push(enterDecisionPath)
-		totalEntryPath.minLength += enterDecisionPath.minLength
-		totalEntryPath.maxLength += enterDecisionPath.maxLength
+		// const totalEntryPath = new DecisionPath()
+		// totalEntryPath.push(enterDecisionPath)
+		// totalEntryPath.minLength += enterDecisionPath.minLength
+		// totalEntryPath.maxLength += enterDecisionPath.maxLength
 
-		let continuationBranch
-		let branchMinLength = separatorDecisionPath.minLength
-		let branchMaxLength = separatorDecisionPath.maxLength
-		if (!separatorBrokeEarly) {
-			separatorDecisionPath.maxLength += enterDecisionPath.maxLength
-			separatorDecisionPath.minLength += enterDecisionPath.minLength
-			separatorDecisionPath.push(enterDecisionPath)
+		// let continuationBranch
+		// let branchMinLength = separatorDecisionPath.minLength
+		// let branchMaxLength = separatorDecisionPath.maxLength
+		// if (!separatorBrokeEarly) {
+		// 	separatorDecisionPath.maxLength += enterDecisionPath.maxLength
+		// 	separatorDecisionPath.minLength += enterDecisionPath.minLength
+		// 	separatorDecisionPath.push(enterDecisionPath)
 
-			const [
-				tempBranchMinLength, tempBranchMaxLength, tempContinuationBranch
-			] = this.getManyBranch(separatorDecisionPath, lookahead - totalEntryPath.minLength)
-			branchMinLength = tempBranchMinLength
-			branchMaxLength = tempBranchMaxLength
-			continuationBranch = tempContinuationBranch
-		}
-		else {
-			continuationBranch = new DecisionBranch()
-			continuationBranch.push(separatorDecisionPath)
-			continuationBranch.push(EMPTY_BRANCH)
-		}
+		// 	const [
+		// 		tempBranchMinLength, tempBranchMaxLength, tempContinuationBranch
+		// 	] = this.getManyBranch(separatorDecisionPath, lookahead - totalEntryPath.minLength)
+		// 	branchMinLength = tempBranchMinLength
+		// 	branchMaxLength = tempBranchMaxLength
+		// 	continuationBranch = tempContinuationBranch
+		// }
+		// else {
+		// 	continuationBranch = new DecisionBranch()
+		// 	continuationBranch.push(separatorDecisionPath)
+		// 	continuationBranch.push(EMPTY_BRANCH)
+		// }
 
-		totalEntryPath.push(continuationBranch)
-		totalEntryPath.minLength += branchMinLength
-		totalEntryPath.maxLength += branchMaxLength
+		// totalEntryPath.push(continuationBranch)
+		// totalEntryPath.minLength += branchMinLength
+		// totalEntryPath.maxLength += branchMaxLength
 
-		return totalEntryPath
+		// return totalEntryPath
 	}
 }
 

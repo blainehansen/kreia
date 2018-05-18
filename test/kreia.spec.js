@@ -140,7 +140,7 @@ describe("the top level api", () => {
 	it("works for returning miniJson", () => {
 		const [miniJsonParser, tokenLibrary] = kreia.createParser({
 		  Primitive: ['null', 'undefined', 'true', 'false'],
-		  Str: /"(?:\\["\\]|[^\n"\\])*"/,
+		  Str: { match: /"(?:\\["\\]|[^\n"\\])*"/, value: x => x.slice(1, -1) },
 		  Num: /[0-9]+/,
 		  Comma: ',',
 		  LeftBracket: '[',
@@ -225,6 +225,7 @@ describe("the top level api", () => {
 
 		rule('jsonKey', () => {
 		  const key = consume(Str)
+		  consume(Colon)
 		  if (quit()) return
 		  return key.value
 		})
@@ -246,10 +247,10 @@ describe("the top level api", () => {
 		const str = miniJsonParser.jsonEntity()
 		expect(str).to.be.a('string').that.eql("various stuff")
 
-		miniJson.reset(`not valid`)
+		miniJsonParser.reset(`not valid`)
 		expect(() => miniJsonParser.jsonEntity()).to.throw
 
-		miniJson.reset(`["valid", "json"] (not valid extra)`)
+		miniJsonParser.reset(`["valid", "json"] (not valid extra)`)
 		expect(() => miniJsonParser.jsonEntity()).to.throw
 	})
 })
