@@ -92,7 +92,7 @@ const kreia = require('kreia')
 // createStatesParser() (that uses moo.states) is also available
 const [miniJsonParser, tokenLibrary] = kreia.createParser({
   Primitive: ['null', 'undefined', 'true', 'false'],
-  Str: /"(?:\\["\\]|[^\n"\\])*"/,
+  Str: { match: /"(?:\\["\\]|[^\n"\\])*"/, value: x => x.slice(1, -1) },
   Num: /[0-9]+/,
   Comma: ',',
   LeftBracket: '[',
@@ -177,11 +177,12 @@ rule('atomicEntity', () => {
   )
   if (quit()) return
 
+  const tokenValue = entity.value
   switch (entity.type) {
-    case 'Str': return entity.value
-    case 'Num': return parseInt(entity.value)
+    case 'Str': return tokenValue
+    case 'Num': return parseInt(tokenValue)
     case 'Primitive':
-      switch (entity.value) {
+      switch (tokenValue) {
         case 'true': return true
         case 'false': return false
         case 'null': return null
@@ -192,6 +193,7 @@ rule('atomicEntity', () => {
 
 rule('jsonKey', () => {
   const key = consume(Str)
+  consume(Colon)
   if (quit()) return
   // value is already a string
   return key.value
@@ -208,13 +210,16 @@ miniJsonParser.reset(`{
 // this will act as a top level rule,
 // and will error if it doesn't
 // consume the entire token stream
-miniJsonParser.jsonEntity()
+const obj = miniJsonParser.jsonEntity()
+console.log(obj)
 
 miniJsonParser.reset(`[1, 2, 3, 4]`)
-miniJsonParser.jsonEntity()
+const arr = miniJsonParser.jsonEntity()
+console.log(arr)
 
 miniJsonParser.reset(`"various stuff"`)
-miniJsonParser.jsonEntity()
+const str = miniJsonParser.jsonEntity()
+console.log(str)
 
 miniJson.reset(`not valid`)
 miniJsonParser.jsonEntity()

@@ -140,48 +140,11 @@ class Or extends ParseNode {
 }
 
 class Many extends ParseNode {
-	// getManyBranch(subPath, lookahead) {
-	// 	const continuationBranch = new DecisionBranch()
-
-	// 	// let's say we have 5 lookahead remaining
-	// 	// and the sep path is 3 minimum tokens and 6 maximum
-	// 	// that means the longest iteration would be two, it would be a six minimum and a 12 maximum
-	// 	const maxIterations = Math.ceil(lookahead / subPath.minLength)
-	// 	let currentIterations = maxIterations
-	// 	while (currentIterations > 0) {
-	// 		const iterationsPath = new DecisionPath()
-
-	// 		for (var i = 1; i <= currentIterations; i++) {
-	// 			iterationsPath.push(subPath)
-	// 		}
-
-	// 		continuationBranch.push(iterationsPath)
-
-	// 		currentIterations--
-	// 	}
-
-	// 	const largestMinLength = maxIterations * subPath.minLength
-	// 	const largestMaxLength = maxIterations * subPath.maxLength
-
-	// 	return [largestMinLength, largestMaxLength, continuationBranch]
-	// }
-
 	getEntryPath(lookahead) {
 		const [brokeEarly, entryPath] = this.getLinearEntryPath(this.definition, lookahead)
 		if (brokeEarly) return entryPath
 		entryPath.push(TERMINATE_NODE)
 		return entryPath
-
-		// const realEntryPath = new DecisionPath()
-
-		// const [
-		// 	largestMinLength, largestMaxLength, continuationBranch
-		// ] = this.getManyBranch(entryPath, lookahead - entryPath.minLength)
-
-		// realEntryPath.push(continuationBranch)
-		// realEntryPath.minLength += largestMinLength
-		// realEntryPath.maxLength += largestMaxLength
-		// return realEntryPath
 	}
 }
 

@@ -37,12 +37,9 @@ class DecisionPath {
 	}
 
 	testAgainstTokens(tokenList) {
-		// console.log('entering path testAgainstTokens')
 		let terminated = false
 		for (const tokenListOrBranch of this.path) {
-			// console.log('tokenListOrBranch: ', tokenListOrBranch)
 			if (tokenListOrBranch === TERMINATE_NODE) {
-				// console.log('tokenListOrBranch is terminate')
 				return [true, tokenList]
 			}
 
@@ -54,8 +51,6 @@ class DecisionPath {
 			else {
 				tokenList = matchAndTrimTokens(tokenList, tokenListOrBranch)
 			}
-			// console.log('terminated', terminated)
-			// console.log('tokenList', tokenList)
 
 			if (terminated || tokenList === false) {
 				return [terminated, tokenList]
@@ -80,12 +75,9 @@ class DecisionBranch {
 	}
 
 	testAgainstTokens(tokenList) {
-		// console.log('entering branch testAgainstTokens')
-
 		for (const [whichIndex, path] of this.branches.entries()) {
 			// we got to the end of an optional branch
 			if (path === EMPTY_BRANCH) {
-				// console.log('EMPTY_BRANCH', tokenList.slice(0, 3))
 				return [-1, false, tokenList]
 			}
 
