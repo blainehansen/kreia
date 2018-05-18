@@ -228,6 +228,8 @@
 
 	// BLAINE
 	function matchToken(testToken, matchTokenOrCategory) {
+		if (testToken === undefined) return false
+
 		if (matchTokenOrCategory.isCategory) {
 			if (!testToken.categories) return false
 
@@ -240,6 +242,18 @@
 		}
 		else return testToken.type == matchTokenOrCategory.type
 	}
+
+	function matchTokens(testTokens, matchTokensOrCategories) {
+		if (testTokens.length != matchTokensOrCategories.length) return false
+
+	 	for (var i = testTokens.length - 1; i >= 0; i--) {
+	 		var testToken = testTokens[i]
+	 		var matchTokenOrCategory = matchTokensOrCategories[i]
+	 		if (!matchToken(testToken, matchTokenOrCategory)) return false
+	 	}
+
+	 	return true
+	 }
 
 
 	function validateCategories(categoriesArray) {
@@ -511,6 +525,8 @@
 		if (group.pop) this.popState()
 		else if (group.push) this.pushState(group.push)
 		else if (group.next) this.setState(group.next)
+
+		if (group.ignore) return this.next()
 		return token
 	}
 
@@ -602,6 +618,7 @@
 		error: Object.freeze({error: true}),
 		// BLAINE
 		matchToken: matchToken,
+		matchTokens: matchTokens,
 		createCategory: createCategory,
 	}
 

@@ -1,7 +1,7 @@
 const { expect } = require('chai')
 
-const moo = require('../src/moo')
-const { createCategory, matchToken } = moo
+const lexing = require('../src/lexing')
+const { createCategory, matchToken, matchTokens } = lexing
 
 describe("createCategory", () => {
 	it("works", () => {
@@ -29,6 +29,69 @@ describe("createCategory", () => {
 	})
 })
 
+describe("matchToken", () => {
+	const Punctuation = createCategory('Punctuation')
+	const Paren = createCategory('Paren', Punctuation)
+
+	const lexer = lexing.compile({
+		Dot: { match: '.', categories: Punctuation },
+		LeftParen: { match: '(', categories: Paren },
+		Space: / +/,
+	})
+
+	const { Dot, LeftParen, Space } = lexer.tokenLibrary()
+
+	lexer.reset(".( ")
+	const tokens = Array.from(lexer)
+	const [DotToken, LeftParenToken, SpaceToken] = tokens
+
+	it("works in the singular form", () => {
+		expect(matchToken(DotToken, Dot)).to.be.true
+		expect(matchToken(LeftParenToken, LeftParen)).to.be.true
+		expect(matchToken(SpaceToken, Space)).to.be.true
+
+		expect(matchToken(DotToken, LeftParen)).to.be.false
+		expect(matchToken(DotToken, Space)).to.be.false
+
+		expect(matchToken(LeftParenToken, Dot)).to.be.false
+		expect(matchToken(LeftParenToken, Space)).to.be.false
+
+		expect(matchToken(SpaceToken, Dot)).to.be.false
+		expect(matchToken(SpaceToken, LeftParen)).to.be.false
+
+
+		expect(matchToken(DotToken, Punctuation)).to.be.true
+		expect(matchToken(DotToken, Paren)).to.be.false
+
+		expect(matchToken(LeftParenToken, Punctuation)).to.be.true
+		expect(matchToken(LeftParenToken, Paren)).to.be.true
+
+		expect(matchToken(SpaceToken, Punctuation)).to.be.false
+		expect(matchToken(SpaceToken, Paren)).to.be.false
+	})
+
+	it("works in the plural form", () => {
+		expect(matchTokens(tokens, [Dot, LeftParen, Space])).to.be.true
+
+		expect(matchTokens(tokens, [Punctuation, Punctuation, Space])).to.be.true
+
+		expect(matchTokens(tokens, [Punctuation, Paren, Space])).to.be.true
+
+		expect(matchTokens(tokens, [Dot, Punctuation, Space])).to.be.true
+
+		expect(matchTokens(tokens, [Dot, Paren, Space])).to.be.true
+
+
+		expect(matchTokens(tokens, [Space, Dot, LeftParen])).to.be.false
+
+		expect(matchTokens(tokens, [Paren, Paren, Paren])).to.be.false
+
+		expect(matchTokens(tokens, [Punctuation, Punctuation, Punctuation])).to.be.false
+
+		expect(matchTokens(tokens, [Dot, Dot, Dot])).to.be.false
+	})
+})
+
 
 
 describe("categories", () => {
@@ -37,7 +100,7 @@ describe("categories", () => {
 
 	const Exclamatory = createCategory('Exclamatory')
 
-	const noKeywordLexer = moo.compile({
+	const noKeywordLexer = lexing.compile({
 		Dot: { match: '.', categories: Punctuation },
 		BangParen: { match: '!()', categories: [Paren, Exclamatory] },
 		LeftParen: { match: '(', categories: Paren },
@@ -163,7 +226,7 @@ describe("keywords", () => {
 
 	const Numeric = createCategory('Numeric')
 
-	const keywordLexer = moo.compile({
+	const keywordLexer = lexing.compile({
 		Identifier: { match: /[a-z]+/, categories: IdentifierCategory, keywords: [
 			{ type: 'Null', values: ['null'] },
 			{ type: 'ControlFlowKeyword', values: ['while', 'for'], categories: Keyword },
@@ -288,5 +351,22 @@ describe("keywords", () => {
 		expect(ThreeBangToken).to.have.property('categories').that.is.null
 
 		expect(SpaceToken).to.have.property('categories').that.is.null
+	})
+})
+
+describe("ignore", () => {
+	it("works as expected", () => {
+		const ignoringLexer = lexing.compile({
+			Dot: '.',
+			Bang: '!',
+			Space: { match: / +/, ignore: true },
+		})
+
+		const { Dot, Bang, Space } = ignoringLexer.tokenLibrary()
+
+		ignoringLexer.reset(" . ! . ")
+		const tokens = Array.from(ignoringLexer)
+		expect(tokens).to.have.lengthOf(3)
+		expect(matchTokens(tokens, [Dot, Bang, Dot])).to.be.true
 	})
 })

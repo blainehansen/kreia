@@ -1,177 +1,590 @@
-// const { expect } = require('chai')
+const { expect } = require('chai')
 
-// const Parser = require('../src/parser')
-// // const moo = require('moo')
-// const moo = require('../src/moo')
+const Parser = require('../src/parser')
+const lexing = require('../src/lexing')
 
-// const lexer = moo.compile({
-// 	LeftParen: '(',
-// 	RightParen: ')',
-// 	Number: /[0-9]+/,
-// 	Space: / +/,
-// 	Dot: '.',
-// })
+const { matchToken, matchTokens } = lexing
 
-// // lexer.reset(" (9) ")
-// // let token
-// // while (token = lexer.next()) {
-// // 	log(token)
-// // }
-// // const tok = lexer.tokenLibrary()
+const lexer = lexing.compile({
+	LeftParen: '(',
+	RightParen: ')',
+	Num: /[0-9]+/,
+	Space: / +/,
+	Dot: '.',
+	Plus: '+',
+	Mult: '*',
+})
 
-// let parser
-
-// const basicParser = new Parser(lexer)
-
-// const {
-// 	look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-// 	or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
-// } = basicParser.getFunctions()
-
-// rule('consumeOne', () =>{
-// 	consume('Space')
-// })
+const { LeftParen, RightParen, Num, Space, Dot, Plus, Mult } = lexer.tokenLibrary()
 
 
+describe("basic tests for", () => {
 
-// basicParser.reset(" (4)")
-// basicParser.only()
+	const basicParser = new Parser(lexer)
 
-// // basicParser.reset(" (4).(4)")
-// // basicParser.only()
+	const {
+		look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+		or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+	} = basicParser.getPrimitives()
 
-// // basicParser.reset(" ")
-// // basicParser.only()
+	rule('testConsumeOne', () => {
+		consume(Space)
+		return consume(Num)
+	})
+	rule('testConsumeMultiple', () => {
+		consume(Space)
+		return consume(Num, Space, Num)
+	})
+	rule('testMaybeConsume', () => {
+		consume(Space)
+		return maybeConsume(Num)
+	})
+	rule('testMaybeConsumeMultiple', () => {
+		consume(Space)
+		return maybeConsume(Num, Space, Num)
+	})
+
+	rule('testMaybe', () => {
+		consume(Space)
+		return maybe(() => {
+			consume(LeftParen, Dot)
+			const num = consume(Num)
+			consume(Dot, RightParen)
+			return num
+		})
+	})
+
+	rule('testOr', () => {
+		consume(Space)
+		return or(
+			() => consume(LeftParen, LeftParen),
+			() => consume(RightParen, RightParen),
+		)
+	})
+	rule('testMaybeOr', () => {
+		consume(Space)
+		return maybeOr(
+			() => consume(LeftParen, LeftParen),
+			() => consume(RightParen, RightParen),
+		)
+	})
+
+	rule('testMany', () => {
+		consume(Space)
+		return many(() => consume(Num, Dot))
+	})
+	rule('testMaybeMany', () => {
+		consume(Space)
+		return maybeMany(() => consume(Num, Dot))
+	})
+
+	rule('testManySeparated', () => {
+		consume(Space)
+		return manySeparated(
+			() => consume(Num),
+			() => consume(Space),
+		)
+	})
+	rule('testMaybeManySeparated', () => {
+		consume(Space)
+		return maybeManySeparated(
+			() => consume(Num),
+			() => consume(Space),
+		)
+	})
+
+	rule('targetSubrule', () => {
+		consume(LeftParen, Dot)
+		const num = consume(Num)
+		consume(Dot, RightParen)
+		return num
+	})
+
+	rule('testSubrule', () => {
+		consume(Space, Dot)
+		const targetResult = subrule('targetSubrule')
+		consume(Dot, Space)
+		return targetResult
+	})
+
+	rule('testMaybeSubrule', () => {
+		consume(Space, Dot)
+		const targetResult = maybeSubrule('targetSubrule')
+		consume(Dot, Space)
+		return targetResult
+	})
+
+	basicParser.analyze()
+
+	let output
+
+	it("testConsumeOne", () => {
+		basicParser.reset(" 0")
+		output = basicParser.testConsumeOne()
+		expect(matchToken(output, Num)).to.be.true
+
+		basicParser.reset(" ")
+		expect(() => basicParser.testConsumeOne()).to.throw
+	})
+	it("testConsumeMultiple", () => {
+		basicParser.reset(" 0 0")
+		output = basicParser.testConsumeMultiple()
+		expect(matchTokens(output, [Num, Space, Num])).to.be.true
+
+		basicParser.reset(" ()")
+		expect(() => basicParser.testConsumeMultiple()).to.throw
+	})
+	it("testMaybeConsume", () => {
+		basicParser.reset(" 0")
+		output = basicParser.testMaybeConsume()
+		expect(matchToken(output, Num)).to.be.true
+
+		basicParser.reset(" ")
+		output = basicParser.testMaybeConsume()
+		expect(output).to.be.undefined
+
+		basicParser.reset(" ()")
+		expect(() => basicParser.testMaybeConsume()).to.throw
+	})
+	it("testMaybeConsumeMultiple", () => {
+		basicParser.reset(" 0 0")
+		output = basicParser.testMaybeConsumeMultiple()
+		expect(matchToken(output, [Num, Space, Num])).to.be.true
+
+		basicParser.reset(" ")
+		output = basicParser.testMaybeConsumeMultiple()
+		expect(output).to.be.undefined
+
+		basicParser.reset(" ()")
+		expect(() => basicParser.testMaybeConsumeMultiple()).to.throw
+	})
+
+	it("testMaybe", () => {
+		basicParser.reset(" (.0.)")
+		output = basicParser.testMaybe()
+		expect(matchToken(output, Num)).to.be.true
+
+		basicParser.reset(" ")
+		output = basicParser.testMaybe()
+		expect(output).to.be.undefined
+
+		basicParser.reset(" 0")
+		expect(() => basicParser.testMaybe()).to.throw
+
+		basicParser.reset(" (..)")
+		expect(() => basicParser.testMaybe()).to.throw
+	})
+
+	it("testOr", () => {
+		basicParser.reset(" ((")
+		output = basicParser.testOr()
+		expect(matchTokens(output, [LeftParen, LeftParen])).to.be.true
+
+		basicParser.reset(" ))")
+		output = basicParser.testOr()
+		expect(matchTokens(output, [RightParen, RightParen])).to.be.true
+
+		basicParser.reset(" (")
+		expect(() => basicParser.testOr()).to.throw
+
+		basicParser.reset(" )")
+		expect(() => basicParser.testOr()).to.throw
+
+		basicParser.reset(" 0")
+		expect(() => basicParser.testOr()).to.throw
+	})
+	it("testMaybeOr", () => {
+		basicParser.reset(" ((")
+		output = basicParser.testMaybeOr()
+		expect(matchTokens(output, [LeftParen, LeftParen])).to.be.true
+
+		basicParser.reset(" ))")
+		output = basicParser.testMaybeOr()
+		expect(matchTokens(output, [RightParen, RightParen])).to.be.true
+
+		basicParser.reset(" ")
+		output = basicParser.testMaybeOr()
+		expect(output).to.be.undefined
+
+		basicParser.reset(" (")
+		expect(() => basicParser.testMaybeOr()).to.throw
+
+		basicParser.reset(" )")
+		expect(() => basicParser.testMaybeOr()).to.throw
+
+		basicParser.reset(" 0")
+		expect(() => basicParser.testMaybeOr()).to.throw
+	})
+
+	it("testMany", () => {
+		basicParser.reset(" 4.")
+		output = basicParser.testMany()
+		expect(matchTokens(output, [Num, Dot]))
+
+		basicParser.reset(" 4.4.")
+		output = basicParser.testMany()
+		expect(matchTokens(output, [Num, Dot, Num, Dot]))
+
+		basicParser.reset(" 4.4.4.")
+		output = basicParser.testMany()
+		expect(matchTokens(output, [Num, Dot, Num, Dot, Num, Dot]))
+
+		basicParser.reset(" ")
+		expect(() => basicParser.testMany()).to.throw
+
+		basicParser.reset(" .")
+		expect(() => basicParser.testMany()).to.throw
+	})
+	it("testMaybeMany", () => {
+		basicParser.reset(" 4.")
+		output = basicParser.testMaybeMany()
+		expect(matchTokens(output, [Num, Dot]))
+
+		basicParser.reset(" 4.4.")
+		output = basicParser.testMaybeMany()
+		expect(matchTokens(output, [Num, Dot, Num, Dot]))
+
+		basicParser.reset(" 4.4.4.")
+		output = basicParser.testMaybeMany()
+		expect(matchTokens(output, [Num, Dot, Num, Dot, Num, Dot]))
+
+		basicParser.reset(" ")
+		output = basicParser.testMaybeMany()
+		expect(output).to.be.undefined
+
+		basicParser.reset(" .")
+		expect(() => basicParser.testMaybeMany()).to.throw
+	})
+
+	it("testManySeparated", () => {
+		basicParser.reset(" 0")
+		output = basicParser.testManySeparated()
+		expect(matchTokens(output, [Num]))
+
+		basicParser.reset(" 0 0")
+		output = basicParser.testManySeparated()
+		expect(matchTokens(output, [Num, Num]))
+
+		basicParser.reset(" 0 0 0")
+		output = basicParser.testManySeparated()
+		expect(matchTokens(output, [Num, Num, Num]))
+
+		basicParser.reset(" ")
+		expect(() => basicParser.testManySeparated()).to.throw
+
+		basicParser.reset(" .")
+		expect(() => basicParser.testManySeparated()).to.throw
+	})
+	it("testMaybeManySeparated", () => {
+		basicParser.reset(" 0")
+		output = basicParser.testMaybeManySeparated()
+		expect(matchTokens(output, [Num]))
+
+		basicParser.reset(" 0 0")
+		output = basicParser.testMaybeManySeparated()
+		expect(matchTokens(output, [Num, Num]))
+
+		basicParser.reset(" 0 0 0")
+		output = basicParser.testMaybeManySeparated()
+		expect(matchTokens(output, [Num, Num, Num]))
+
+		basicParser.reset(" ")
+		output = basicParser.testMaybeManySeparated()
+		expect(output).to.be.undefined
+
+		basicParser.reset(" .")
+		expect(() => basicParser.testMaybeManySeparated()).to.throw
+	})
+
+	it("testSubrule", () => {
+		basicParser.reset(" .(.4.). ")
+		output = basicParser.testSubrule()
+		expect(matchToken(output, Num)).to.be.true
+
+		basicParser.reset(" .(..). ")
+		expect(() => basicParser.testSubrule()).to.throw
+
+		basicParser.reset("4")
+		expect(() => basicParser.testSubrule()).to.throw
+
+		basicParser.reset(" .. ")
+		expect(() => basicParser.testSubrule()).to.throw
+	})
+	it("testMaybeSubrule", () => {
+		basicParser.reset(" .(.4.). ")
+		output = basicParser.testMaybeSubrule()
+		expect(matchToken(output, Num)).to.be.true
+
+		basicParser.reset(" .(..). ")
+		expect(() => basicParser.testMaybeSubrule()).to.throw
+
+		basicParser.reset("4")
+		expect(() => basicParser.testMaybeSubrule()).to.throw
+
+		basicParser.reset(" .. ")
+		output = basicParser.testMaybeSubrule()
+		expect(output).to.be.undefined
+	})
+
+})
 
 
-// describe("consume", () => {
-// 	it("tests", () => {
-// 		expect(true).to.be.true
-// 	})
-// })
+describe("error checking", () => {
 
-// describe("maybeConsume", () => {
-// 	it("tests", () => {
-// 		expect(true).to.be.true
-// 	})
-// })
+	it("catches all optional definitions", () => {
+		const allOptionalParser = new Parser(lexer)
+		const {
+			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+		} = allOptionalParser.getPrimitives()
 
-// describe("maybeConsume", () => {
-// 	it("tests", () => {
-// 		expect(true).to.be.true
-// 	})
-// })
+		rule('A', () => {
+			maybeConsume(Space, Dot)
+			maybe(() => {
+				consume(Dot)
+				many(() => {
+					consume(LeftParen, Num, RightParen)
+				})
+				consume(Dot)
+			})
+			maybeConsume(Dot, Space)
+		})
+
+		expect(() => allOptionalParser.analyze()).to.throw
+	})
+
+	it("catches unresolved subrules", () => {
+		const unresolvedParser = new Parser(lexer)
+		const {
+			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+		} = unresolvedParser.getPrimitives()
+
+		rule('A', () => {
+			consume(Space)
+			subrule('B')
+		})
+
+		expect(() => unresolvedParser.analyze()).to.throw
+	})
+
+	describe("left recursion", () => {
+		it("works for obvious ones", () => {
+			const leftRecursiveParser = new Parser(lexer)
+			const {
+				look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+				or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+			} = leftRecursiveParser.getPrimitives()
+
+			rule('A', () => {
+				maybeConsume(Num)
+				subrule('B')
+			})
+
+			rule('B', () => {
+				maybeConsume(Num)
+				subrule('A')
+			})
+
+			expect(() => leftRecursiveParser.analyze()).to.throw
+		})
+
+		it("works for nested ones", () => {
+			const leftRecursiveParser = new Parser(lexer)
+			const {
+				look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+				or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+			} = leftRecursiveParser.getPrimitives()
+
+			rule('A', () => {
+				maybeConsume(Num)
+				subrule('B')
+			})
+
+			rule('B', () => {
+				maybeConsume(Num)
+				subrule('C')
+			})
+
+			rule('C', () => {
+				maybeConsume(Num)
+				subrule('D')
+			})
+
+			rule('D', () => {
+				maybeConsume(Num)
+				subrule('A')
+			})
+
+			expect(() => leftRecursiveParser.analyze()).to.throw
+		})
+
+		it("doesn't incorrectly throw on safe recursion", () => {
+			const safeRecursiveParser = new Parser(lexer)
+			const {
+				look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+				or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+			} = safeRecursiveParser.getPrimitives()
+
+			rule('A', () => {
+				maybeConsume(Space)
+				consume(LeftParen)
+				subrule('B')
+				consume(RightParen)
+			})
+
+			rule('B', () => {
+				maybeConsume(Space)
+				consume(Dot)
+				subrule('A')
+				consume(Dot)
+			})
+
+			expect(() => safeRecursiveParser.analyze()).to.not.throw
+		})
+	})
+
+})
 
 
-// rule('only', () => {
-// 	consume(['Number', 'Dot'])
-// 	maybe(() => {
-// 		consume('Space')
-// 		subrule('other')
-// 		consume('Space')
-// 	})
-// 	consume(['Dot', 'Number'])
-// })
+describe("fuller grammars", () => {
+	it("tiny calculator", () => {
+		const tinyCalculator = new Parser(lexer)
+		const {
+			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, quit
+		} = tinyCalculator.getPrimitives()
 
-// rule('other', () => {
-// 	consume('LeftParen')
-// 	maybeConsume('Number')
-// 	consume('RightParen')
-// })
+		rule('binaryExpression', () => {
+			const a = subrule('atomicExpression')
 
+			const next = maybe(() => {
+				maybeConsume(Space)
+				const op = or(
+					() => consume(Plus).value,
+					() => consume(Mult).value,
+				)
+				maybeConsume(Space)
+				const b = subrule('binaryExpression')
+				return [op, b]
+			})
 
-// // // this is a left recursive grammar
-// // rule('A', () => {
-// // 	maybeConsume('Plus')
-// // 	subrule('B')
-// // 	// consume('LeftParen')
-// // 	// subrule('A')
-// // 	// consume('RightParen')
-// // })
+			if (quit()) return
+			if (!next) return a
 
-// // rule('B', () => {
-// // 	maybeConsume('Space')
-// // 	subrule('A')
-// // 	// maybeConsume('Space')
-// // })
+			const [op, b] = next
+			if (op == '+') return a + b
+			if (op == '*') return a * b
+		})
 
+		rule('parenExpression', () => {
+			consume(LeftParen)
+			maybeConsume(Space)
+			const expressionResult = subrule('binaryExpression')
+			maybeConsume(Space)
+			consume(RightParen)
+			return expressionResult
+		})
 
-// // // this is a grammar with recursion
-// // // but it's not left recursion
-// // // because every time a rule ends up at itself again, the stream has been advanced
+		rule('atomicExpression', () => {
+			return or(
+				() => subrule('parenExpression'),
+				() => subrule('number'),
+			)
+		})
 
-// // // path from A to B is [LeftParen]
-// // rule('A', () => {
-// // 	consume(tok.LeftParen)
-// // 	subrule('B')
-// // 	consume(tok.RightParen)
-// // })
+		rule('number', () => {
+			const numToken = consume(Num)
+			if (quit()) return
+			return parseInt(numToken.value)
+		})
 
-// // // path from B to A is [Number, Space]
-// // // probably we can get away with just incrementing a mandatoryTokenCount. we don't actually need the whole path
-// // rule('B', () => {
-// // 	consume(tok.Number)
-// // 	// there would the mandatory lookahead path of this is the mandatory path to the first optional thing
-// // 	// here that would ironically involve
-// // 	option(() => {
-// // 		consume(tok.Space)
-// // 		subrule('A')
-// // 	})
-// // })
+		tinyCalculator.analyze()
 
+		function expectParseTo(input, expectedOutput) {
+			tinyCalculator.reset(input)
+			let output = tinyCalculator.binaryExpression()
+			expect(output).equal(expectedOutput)
+		}
 
-// // basicParser.reset("1. (4) .1")
-// // basicParser.only()
+		expectParseTo("4 + 4", 8)
+		expectParseTo("4 * 4", 16)
 
-// // basicParser.reset("1..1")
-// // basicParser.only()
+		expectParseTo("4 * 4 * 2", 32)
 
+		expectParseTo("(1 + 1 + 1) * 2 * 2 * (1 + 1 + 1)", 36)
 
-// // rule('only', () => {
-// // 	consume('Space')
-// // 	or(() => {
-// // 		consume('LeftParen')
-// // 	}, () => {
-// // 		consume('RightParen')
-// // 	})
-// // })
-
-// // basicParser.reset(" (")
-// // basicParser.only()
-
-// // basicParser.reset(" )")
-// // basicParser.only()
-
-// // basicParser.reset(" ")
-// // basicParser.only()
+	})
 
 
-// // rule('only', () => {
-// // 	consume('Space')
-// // 	maybeMany(() => {
-// // 		consume(['Number', 'Dot'])
-// // 	})
-// // })
+	it("mini json", () => {
+		const lexer = lexing.compile({
+			Primitive: ['null', 'undefined', 'true', 'false'],
+			Str: /"(?:\\["\\]|[^\n"\\])*"/,
+			Num: /[0-9]+/,
+			Comma: ',',
+			LeftBracket: '[', RightBracket: ']',
+			LeftBrace: '{', RightBrace: '}',
+			Colon: ':',
+			Whitespace: { match: /\s+/, ignore: true, lineBreaks: true },
+		})
 
-// // basicParser.reset(" 4.4")
-// // basicParser.only()
+		// const { Primitive, Str, Num, Comma, LeftBracket, LeftBrace, Colon, Whitespace } = lexer.tokenLibrary()
+		const { Primitive, Str, Num, Comma, LeftBracket, RightBracket, LeftBrace, RightBrace, Colon } = lexer.tokenLibrary()
+		const miniJson = new Parser(lexer)
+		const {
+			rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, quit, INSPECT
+		} = miniJson.getPrimitives()
 
+		rule('jsonEntity', () => {
+			or(
+				() => subrule('array'),
+				() => subrule('object'),
+				() => consume(Str),
+				() => consume(Num),
+				() => consume(Primitive),
+			)
+		})
 
+		function separatedByCommas(func) {
+			maybeManySeparated(
+				func,
+				() => consume(Comma),
+			)
+		}
 
-// // rule('only', () => {
-// // 	consume('Space')
-// // 	maybeOr(() => {
-// // 		consume('LeftParen')
-// // 	}, () => {
-// // 		consume('RightParen')
-// // 	})
-// // })
+		rule('array', () => {
+			consume(LeftBracket)
+			separatedByCommas(() => subrule('jsonEntity'))
+			consume(RightBracket)
+		})
 
-// // basicParser.reset(" (")
-// // basicParser.only()
+		rule('object', () => {
+			consume(LeftBrace)
+			separatedByCommas(() => {
+				consume(Str, Colon)
+				subrule('jsonEntity')
+			})
+			consume(RightBrace)
+		})
 
-// // basicParser.reset(" )")
-// // basicParser.only()
+		function expectCanParse(input) {
+			miniJson.reset(input)
+			expect(() => miniJson.jsonEntity()).to.not.throw
+		}
 
-// // basicParser.reset(" ")
-// // basicParser.only()
+		expectCanParse(`1`)
+		expectCanParse(`null`)
+		expectCanParse(`true`)
+		expectCanParse(`""`)
+		expectCanParse(`"various stuff"`)
+		expectCanParse(`[1, 2, 3, 4]`)
+		expectCanParse(`{ "stuff": null, "other": [], "things": {} }`)
+
+		miniJson.reset("not valid")
+		expect(() => miniJson.jsonEntity()).to.throw
+
+	})
+
+})

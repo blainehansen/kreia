@@ -5,9 +5,15 @@ function subclassOf(BClass, AClass) {
 	return BClass.prototype instanceof AClass || BClass === AClass
 }
 
+
 class ParseNode {
-	constructor(definition, optional) {
-		if (definition !== null && !(definition instanceof Array) && !subclassOf(definition, ParseNode)) throw "tried to create a parseNode with something other than an Array, ParseNode, or null"
+	constructor(definition, optional, check = true) {
+		if (definition !== null && !(definition instanceof Array)) throw new Error("tried to create a parseNode with something other than an Array or null")
+
+		if (check && definition !== null && definition.every((node) => node.optional)) {
+			console.log(definition)
+			throw new Error("A definition was given where everything was optional. Instead of making all the items within something optional, make the whole thing optional.")
+		}
 
 		this.definition = definition
 		this.optional = optional
@@ -67,16 +73,16 @@ class Subrule {
 
 class SubruleNode extends ParseNode {
 	constructor(subrule, optional) {
-		if (subrule && !(subrule instanceof Subrule)) throw "can't put anything other than a subrule into a subrule wrapper"
+		if (subrule && !(subrule instanceof Subrule)) throw new Error("can't put anything other than a subrule into a subrule wrapper")
 		super(subrule ? subrule.definition : null, optional)
 		this.resolved = !!subrule
 		this.subrule = subrule
 	}
 
 	resolveWith(subrule) {
-		if (!(subrule instanceof Subrule)) throw "can't put anything other than a subrule into a subrule wrapper"
+		if (!(subrule instanceof Subrule)) throw new Error("can't put anything other than a subrule into a subrule wrapper")
 
-		if (this.resolved) throw "SubruleNode has already been resolved"
+		if (this.resolved) throw new Error("SubruleNode has already been resolved")
 		this.definition = subrule.definition
 		this.resolved = true
 		this.subrule = subrule
@@ -86,6 +92,10 @@ class SubruleNode extends ParseNode {
 
 // this holds an array of tokens
 class Consume extends ParseNode {
+	constructor(definition, optional) {
+		super(definition, optional, false)
+	}
+
 	getEntryPath(lookahead) {
 		const entryPath = new DecisionPath()
 
@@ -235,10 +245,14 @@ function isDecidingNode(inst) {
 	return !(inst instanceof Consume || inst instanceof SubruleNode)
 }
 
+function isNestedNode(inst) {
+	return inst instanceof Or || inst instanceof ManySeparated
+}
+
 function isRecurringNode(inst) {
 	return !(inst instanceof Consume)
 }
 
 module.exports = {
-	isDecidingNode, isRecurringNode, Maybe, Consume, Subrule, SubruleNode, Or, Many, ManySeparated
+	isDecidingNode, isNestedNode, isRecurringNode, Maybe, Consume, Subrule, SubruleNode, Or, Many, ManySeparated
 }

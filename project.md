@@ -3,7 +3,7 @@ Lexer
 - X token categories
 -- X compatible with matching
 - X token library
-- make categories compatible with keywords
+- X make categories compatible with keywords
 
 Gates
 - gate executes in addition to lookahead

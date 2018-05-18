@@ -1,21 +1,11 @@
-function matchToken(token, tokenType) {
-	if (token === undefined) return false
-	console.log(token.type)
-	console.log(tokenType)
-	return token.type == tokenType
-}
+const { matchToken } = require('./lexing')
 
 const EMPTY_BRANCH = Symbol()
 const TERMINATE_NODE = Symbol()
 
 function matchAndTrimTokens(tokens, tokenTypes) {
-	// console.log('matching and trimming')
-	// console.log('tokens: ', tokens)
-	// console.log('tokenTypes: ', tokenTypes)
 	for (const [index, tokenType] of tokenTypes.entries()) {
 		const token = tokens[index]
-		// console.log('tokenType: ', tokenType)
-		// console.log('token: ', token)
 
 		if (!matchToken(token, tokenType)) return false
 	}
@@ -39,23 +29,20 @@ class DecisionPath {
 			// this.maxLength += tokenListOrBranch.maxLength
 			// this.minLength += tokenListOrBranch.minLength
 		}
-		else if (!(tokenListOrBranch instanceof DecisionBranch) && !(tokenListOrBranch instanceof Array)) {
+		else if (tokenListOrBranch !== TERMINATE_NODE && !(tokenListOrBranch instanceof DecisionBranch) && !(tokenListOrBranch instanceof Array)) {
 			console.log(tokenListOrBranch)
-			throw "paths can only hold paths, arrays of tokens, or branches"
+			throw new Error("paths can only hold paths, arrays of tokens, or branches")
 		}
 		else this.path.push(tokenListOrBranch)
 	}
 
 	testAgainstTokens(tokenList) {
-		// console.log('path testing against: ', tokenList)
-
 		let terminated = false
 		for (const tokenListOrBranch of this.path) {
 			if (tokenListOrBranch === TERMINATE_NODE) {
 				return [true, tokenList]
 			}
 
-			// console.log('encountering: ', tokenListOrBranch)
 			terminated = false
 			if (tokenListOrBranch instanceof DecisionBranch) {
 				// this replaces the tokenList with one that has been trimmed because of a successful match
@@ -64,7 +51,6 @@ class DecisionPath {
 			else {
 				tokenList = matchAndTrimTokens(tokenList, tokenListOrBranch)
 			}
-			// console.log('new tokenList: ', tokenList)
 
 			if (terminated || tokenList === false) {
 				return [terminated, tokenList]
@@ -83,16 +69,13 @@ class DecisionBranch {
 	push(path) {
 		if (!(path instanceof DecisionPath) && path !== EMPTY_BRANCH) {
 			console.log(path)
-			throw "branches can only hold paths"
+			throw new Error("branches can only hold paths")
 		}
 		else this.branches.push(path)
 	}
 
 	testAgainstTokens(tokenList) {
-		// console.log('branch testing against: ', tokenList)
-
 		for (const [whichIndex, path] of this.branches.entries()) {
-			// console.log('encountering: ', path)
 			// we got to the end of an optional branch
 			if (path === EMPTY_BRANCH) {
 				return [-1, false, tokenList]
@@ -100,7 +83,6 @@ class DecisionBranch {
 
 			const [terminated, newTokenList] = path.testAgainstTokens(tokenList)
 
-			// console.log('new tokenList: ', newTokenList)
 			if (terminated || newTokenList !== false) {
 				return [whichIndex, terminated, newTokenList]
 			}
@@ -110,7 +92,7 @@ class DecisionBranch {
 	}
 }
 
-module.exports = { DecisionPath, DecisionBranch, EMPTY_BRANCH, TERMINATE_NODE, matchToken }
+module.exports = { DecisionPath, DecisionBranch, EMPTY_BRANCH, TERMINATE_NODE }
 
 
 // const trunk = new DecisionPath()
