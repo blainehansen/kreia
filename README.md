@@ -14,6 +14,10 @@ There are lots of little features that are undone, and the "friendliness" of man
 
 Kreia makes it effortless to build completely custom lookahead parsers in pure javascript, and all the looking ahead is completely handled for you.
 
+```bash
+npm install --save-dev kreia
+```
+
 ```js
 const kreia = require('kreia')
 
