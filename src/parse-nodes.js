@@ -160,51 +160,42 @@ class ManySeparated extends Many {
 		return this.getLinearEntryPath(this.definition[1], lookahead)[1]
 	}
 
+	// getRuntimeEntryPath(lookahead) {
+
+	// }
+
 	getEntryPath(lookahead) {
-		// const [definition, separator] = this.definition
-		const [definition, ] = this.definition
+		const [definition, separator] = this.definition
 
 		// if this broke early, it will have a terminate at the end
 		// if they match it but it terminates, they just won't look at the continuation
 		// even if that happens, we need to
 		const [enterBrokeEarly, enterDecisionPath] = this.getLinearEntryPath(definition, lookahead)
 		if (enterBrokeEarly) return enterDecisionPath
-		enterDecisionPath.push(TERMINATE_NODE)
-		return enterDecisionPath
 
-		// const [separatorBrokeEarly, separatorDecisionPath] = this.getLinearEntryPath(separator, lookahead)
+		const [separatorBrokeEarly, separatorDecisionPath] = this.getLinearEntryPath(separator, lookahead)
 
-		// const totalEntryPath = new DecisionPath()
-		// totalEntryPath.push(enterDecisionPath)
-		// totalEntryPath.minLength += enterDecisionPath.minLength
-		// totalEntryPath.maxLength += enterDecisionPath.maxLength
+		const totalEntryPath = new DecisionPath()
+		totalEntryPath.push(enterDecisionPath)
+		totalEntryPath.minLength += enterDecisionPath.minLength
+		totalEntryPath.maxLength += enterDecisionPath.maxLength
 
-		// let continuationBranch
-		// let branchMinLength = separatorDecisionPath.minLength
-		// let branchMaxLength = separatorDecisionPath.maxLength
-		// if (!separatorBrokeEarly) {
-		// 	separatorDecisionPath.maxLength += enterDecisionPath.maxLength
-		// 	separatorDecisionPath.minLength += enterDecisionPath.minLength
-		// 	separatorDecisionPath.push(enterDecisionPath)
+		let continuationBranch = new DecisionBranch()
+		continuationBranch.push(separatorDecisionPath)
+		continuationBranch.push(EMPTY_BRANCH)
+		totalEntryPath.minLength += separatorDecisionPath.minLength
+		totalEntryPath.maxLength += separatorDecisionPath.maxLength
 
-		// 	const [
-		// 		tempBranchMinLength, tempBranchMaxLength, tempContinuationBranch
-		// 	] = this.getManyBranch(separatorDecisionPath, lookahead - totalEntryPath.minLength)
-		// 	branchMinLength = tempBranchMinLength
-		// 	branchMaxLength = tempBranchMaxLength
-		// 	continuationBranch = tempContinuationBranch
-		// }
-		// else {
-		// 	continuationBranch = new DecisionBranch()
-		// 	continuationBranch.push(separatorDecisionPath)
-		// 	continuationBranch.push(EMPTY_BRANCH)
-		// }
+		if (!separatorBrokeEarly) {
+			separatorDecisionPath.push(enterDecisionPath)
+			separatorDecisionPath.minLength += enterDecisionPath.minLength
+			separatorDecisionPath.maxLength += enterDecisionPath.maxLength
+			totalEntryPath.minLength += enterDecisionPath.minLength
+			totalEntryPath.maxLength += enterDecisionPath.maxLength
+		}
 
-		// totalEntryPath.push(continuationBranch)
-		// totalEntryPath.minLength += branchMinLength
-		// totalEntryPath.maxLength += branchMaxLength
-
-		// return totalEntryPath
+		totalEntryPath.push(TERMINATE_NODE)
+		return totalEntryPath
 	}
 }
 
