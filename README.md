@@ -80,6 +80,67 @@ parser.lists()
 ```
 
 
+## Parser Functions
+
+look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, quit
+
+
+## Important Concepts
+
+There are a few important things to understand to use Kreia intelligently.
+
+### Always Analyze
+
+Before you can actually feed the parser any input, the parser needs to run an analysis and prepare all the lookahead information. Just call `parser.analyze()` *after* you've defined all your `rule`s.
+
+If you don't do this, parsing won't actually work.
+
+### Inspection
+
+In order for the parser to know when it needs to look ahead and what it needs to look for, it has to call all your rule functions before parsing actually begins to see what functions they use. This means that before your functions are called to do real work, they'll be called in a fake "inspection mode" where all of the parsing functions (`consume`, `many`, etc), won't return real results. If you try to call functions or access properties of these fake results, bad things will happen.
+
+To avoid this, use the `quit` function to determine if you're currently in inspection mode. The simplest way to go about using parse results is to have two stages in your rule functions, a gathering stage and a processing stage.
+
+```js
+rule('example', () => {
+  // gathering
+  const gatheredToken = consume(SomeToken)
+
+  // don't continue if in inspection mode
+  if (quit()) return
+
+  // process, doing whatever it is you need to do
+  return gatheredToken.value.slice(2)
+})
+```
+
+It's also **very important** that all the parsing functions you call aren't hidden behind any kind of control flows that won't run in inspection mode. For example, in a rule like this, the subrule call will never be called in inspection mode, and so the parser won't know it exists! That means it won't be able to do any looking ahead at that stage.
+
+```js
+rule('example', () => {
+  const firstToken = consume(SomeToken)
+
+  // this will never be true in inspection mode
+  if (firstToken.value == 'whatever') {
+    // so this will never be called in inspection mode!
+    subrule('someSubrule')
+  }
+})
+```
+
+
+
+
+lookahead distances
+left recursion
+first match is taken
+
+functions
+
+
+
+
 Here's a fuller example with explanations, a simple json parser that actually uses the parse results to return a javascript entity.
 
 ```js
@@ -133,12 +194,10 @@ rule('jsonEntity', () => {
 // note how we're defining a pure function
 // that calls a parser primitive function
 function separatedByCommas(func) {
-  const possibleArray = maybeManySeparated(
+  return maybeManySeparated(
     func,
     () => consume(Comma),
   )
-  // "maybe" functions return undefined if they weren't entered
-  return possibleArray !== undefined ? possibleArray : []
 }
 
 rule('array', () => {

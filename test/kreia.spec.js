@@ -171,11 +171,10 @@ describe("the top level api", () => {
 		})
 
 		function separatedByCommas(func) {
-		  const possibleArray = maybeManySeparated(
+		  return maybeManySeparated(
 		    func,
 		    () => consume(Comma),
 		  )
-		  return possibleArray !== undefined ? possibleArray : []
 		}
 
 		rule('array', () => {

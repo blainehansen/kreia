@@ -1,7 +1,17 @@
+function flatten(array) {
+	const finalArray = []
+	for (const item of array) {
+		if (Array.isArray(item)) finalArray.push.apply(finalArray, item)
+		else finalArray.push(item)
+	}
+	return finalArray
+}
+
 const { expect } = require('chai')
 
 const Parser = require('../src/parser')
-const lexing = require('../src/lexing')
+// const lexing = require('../src/lexing')
+const lexing = require('../../moo/moo')
 
 const { matchToken, matchTokens } = lexing
 
@@ -19,7 +29,6 @@ const { LeftParen, RightParen, Num, Space, Dot, Plus, Mult } = lexer.tokenLibrar
 
 
 describe("basic tests for", () => {
-
 	const basicParser = new Parser(lexer)
 
 	const {
@@ -219,15 +228,15 @@ describe("basic tests for", () => {
 	it("testMany", () => {
 		basicParser.reset(" 4.")
 		output = basicParser.testMany()
-		expect(matchTokens(output, [Num, Dot]))
+		expect(matchTokens(flatten(output), [Num, Dot])).to.be.true
 
 		basicParser.reset(" 4.4.")
 		output = basicParser.testMany()
-		expect(matchTokens(output, [Num, Dot, Num, Dot]))
+		expect(matchTokens(flatten(output), [Num, Dot, Num, Dot])).to.be.true
 
 		basicParser.reset(" 4.4.4.")
 		output = basicParser.testMany()
-		expect(matchTokens(output, [Num, Dot, Num, Dot, Num, Dot]))
+		expect(matchTokens(flatten(output), [Num, Dot, Num, Dot, Num, Dot])).to.be.true
 
 		basicParser.reset(" ")
 		expect(() => basicParser.testMany()).to.throw
@@ -238,19 +247,19 @@ describe("basic tests for", () => {
 	it("testMaybeMany", () => {
 		basicParser.reset(" 4.")
 		output = basicParser.testMaybeMany()
-		expect(matchTokens(output, [Num, Dot]))
+		expect(matchTokens(flatten(output), [Num, Dot])).to.be.true
 
 		basicParser.reset(" 4.4.")
 		output = basicParser.testMaybeMany()
-		expect(matchTokens(output, [Num, Dot, Num, Dot]))
+		expect(matchTokens(flatten(output), [Num, Dot, Num, Dot])).to.be.true
 
 		basicParser.reset(" 4.4.4.")
 		output = basicParser.testMaybeMany()
-		expect(matchTokens(output, [Num, Dot, Num, Dot, Num, Dot]))
+		expect(matchTokens(flatten(output), [Num, Dot, Num, Dot, Num, Dot])).to.be.true
 
 		basicParser.reset(" ")
 		output = basicParser.testMaybeMany()
-		expect(output).to.be.undefined
+		expect(output).to.be.an('array').with.lengthOf(0)
 
 		basicParser.reset(" .")
 		expect(() => basicParser.testMaybeMany()).to.throw
@@ -259,15 +268,15 @@ describe("basic tests for", () => {
 	it("testManySeparated", () => {
 		basicParser.reset(" 0")
 		output = basicParser.testManySeparated()
-		expect(matchTokens(output, [Num]))
+		expect(matchTokens(flatten(output), [Num])).to.be.true
 
 		basicParser.reset(" 0 0")
 		output = basicParser.testManySeparated()
-		expect(matchTokens(output, [Num, Num]))
+		expect(matchTokens(flatten(output), [Num, Num])).to.be.true
 
 		basicParser.reset(" 0 0 0")
 		output = basicParser.testManySeparated()
-		expect(matchTokens(output, [Num, Num, Num]))
+		expect(matchTokens(flatten(output), [Num, Num, Num])).to.be.true
 
 		basicParser.reset(" ")
 		expect(() => basicParser.testManySeparated()).to.throw
@@ -278,19 +287,19 @@ describe("basic tests for", () => {
 	it("testMaybeManySeparated", () => {
 		basicParser.reset(" 0")
 		output = basicParser.testMaybeManySeparated()
-		expect(matchTokens(output, [Num]))
+		expect(matchTokens(flatten(output), [Num])).to.be.true
 
 		basicParser.reset(" 0 0")
 		output = basicParser.testMaybeManySeparated()
-		expect(matchTokens(output, [Num, Num]))
+		expect(matchTokens(flatten(output), [Num, Num])).to.be.true
 
 		basicParser.reset(" 0 0 0")
 		output = basicParser.testMaybeManySeparated()
-		expect(matchTokens(output, [Num, Num, Num]))
+		expect(matchTokens(flatten(output), [Num, Num, Num])).to.be.true
 
 		basicParser.reset(" ")
 		output = basicParser.testMaybeManySeparated()
-		expect(output).to.be.undefined
+		expect(output).to.be.an('array').with.lengthOf(0)
 
 		basicParser.reset(" .")
 		expect(() => basicParser.testMaybeManySeparated()).to.throw

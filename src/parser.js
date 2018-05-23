@@ -12,12 +12,11 @@ function log(obj) {
 	console.log(util.inspect(obj, { depth: null }))
 }
 
-const { matchTokens } = require('./lexing')
+// const { matchTokens } = require('./lexing')
+const { matchTokens } = require('../../moo/moo')
 const {
 	isDecidingNode, isNestedNode, isRecurringNode, Maybe, Consume, Subrule, SubruleNode, Or, Many, ManySeparated
 } = require('./parse-nodes')
-
-const INSPECT = Symbol()
 
 function toArray(item) {
 	return item instanceof Array ? item : [item]
@@ -153,15 +152,13 @@ class Parser {
 
 		return {
 			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, quit, INSPECT
+			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, quit
 		}
 	}
 
 	reset(inputText) {
 		this.lexer.reset(inputText)
 		this.lookQueue = []
-
-		// this.decisionPathStack = new DecisionPathStack()
 
 		this.currentTokenIndex = 0
 	}
@@ -282,7 +279,7 @@ class Parser {
 			if (isDecidingNode(subNode)) {
 				const lookahead = this.lookahead
 				const decisionPath = subNode instanceof ManySeparated
-					? [subNode.getDefEntryPath(lookahead), subNode.getSepEntryPath(lookahead)]
+					? subNode.getRuntimeEntryPath(lookahead)
 					: subNode.getEntryPath(lookahead)
 
 				this.decisionPathStack.pushDecisionPath(decisionPath)
@@ -352,7 +349,7 @@ class Parser {
 				this.definitionScope.push(subruleNode)
 			}
 
-			return INSPECT
+			return {}
 		}
 
 		let shouldEnter = true
@@ -389,7 +386,7 @@ class Parser {
 			oldDefinitionScope.push(new Maybe(currentDefinitionScope))
 			this.definitionScope = oldDefinitionScope
 
-			return INSPECT
+			return {}
 		}
 
 		// we grab the decision path at the right key, and then we increment the decision number
@@ -440,7 +437,7 @@ class Parser {
 			oldDefinitionScope.push(new Or(alternations, optional))
 			this.definitionScope = oldDefinitionScope
 
-			return [true, INSPECT]
+			return [true, undefined]
 		}
 
 		let choiceResults
@@ -489,7 +486,8 @@ class Parser {
 	}
 
 	maybeMany(def) {
-		return unwrapEmptyArray(this.manyInternal(def, false))
+		// return unwrapEmptyArray(this.manyInternal(def, false))
+		return this.manyInternal(def, false)
 	}
 
 	manyInternal(def, requireFirst) {
@@ -500,7 +498,7 @@ class Parser {
 			oldDefinitionScope.push(new Many(currentDefinitionScope, !requireFirst))
 			this.definitionScope = oldDefinitionScope
 
-			return INSPECT
+			return {}
 		}
 
 		const allResults = []
@@ -552,7 +550,7 @@ class Parser {
 			oldDefinitionScope.push(new ManySeparated(currentDefinitionScope, currentSeparatorScope, !requireFirst))
 			this.definitionScope = oldDefinitionScope
 
-			return INSPECT
+			return {}
 		}
 
 		const [enterDecisionPath, continueDecisionPath] = this.decisionPathStack.getDecisionPath()
@@ -561,7 +559,7 @@ class Parser {
 		if (!requireFirst) {
 			const nextTokens = this.lookRange(enterDecisionPath.maxLength)
 			const [, remainingTokens] = enterDecisionPath.testAgainstTokens(nextTokens)
-			if (!(remainingTokens !== false && nextTokens.length != remainingTokens.length)) return
+			if (!(remainingTokens !== false && nextTokens.length != remainingTokens.length)) return allResults
 		}
 
 		// since we have two alternating decisions
@@ -601,7 +599,7 @@ class Parser {
 	consume(...tokenTypeArray) {
 		if (this.inspecting) {
 			this.definitionScope.push(new Consume(tokenTypeArray, false))
-			return INSPECT
+			return {}
 		}
 
 		// this can just go ahead and advance then check, since if the match doesn't succeed we'll just error
@@ -610,12 +608,10 @@ class Parser {
 		else throw `next tokens didn't match:\n\texpected: ${tokenTypeArray}\n\tfound: ${nextTokens}`
 	}
 
-	// TODO could be a good idea to have a consumeMany and maybeConsumeMany, instead of a token option for many and many sep
-
 	maybeConsume(...tokenTypeArray) {
 		if (this.inspecting) {
 			this.definitionScope.push(new Consume(tokenTypeArray, true))
-			return INSPECT
+			return {}
 		}
 
 		const nextTokens = this.testLookTokenList(tokenTypeArray)
@@ -624,10 +620,6 @@ class Parser {
 			return unwrapOneItemArray(nextTokens)
 		}
 	}
-}
-
-function quit(possibleInspect) {
-	return possibleInspect === INSPECT
 }
 
 

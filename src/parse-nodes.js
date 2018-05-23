@@ -153,27 +153,34 @@ class ManySeparated extends Many {
 		super([definition, separator], optional)
 	}
 
-	getDefEntryPath(lookahead) {
-		return this.getLinearEntryPath(this.definition[0], lookahead)[1]
-	}
-	getSepEntryPath(lookahead) {
-		return this.getLinearEntryPath(this.definition[1], lookahead)[1]
+	getContinuationEntryPath(lookahead, enterDecisionPath) {
+		const [separatorBrokeEarly, separatorDecisionPath] = this.getLinearEntryPath(this.definition[1], lookahead)
+		if (separatorBrokeEarly) return separatorDecisionPath
+
+		separatorDecisionPath.push(enterDecisionPath)
+		separatorDecisionPath.minLength += enterDecisionPath.minLength
+		separatorDecisionPath.maxLength += enterDecisionPath.maxLength
+		return [separatorBrokeEarly, separatorDecisionPath]
 	}
 
-	// getRuntimeEntryPath(lookahead) {
+	getFullEntryPath(lookahead) {
+		const [enterBrokeEarly, enterDecisionPath] = this.getLinearEntryPath(this.definition[0], lookahead)
 
-	// }
+		const [separatorBrokeEarly, continueDecisionPath] = this.getContinuationEntryPath(lookahead, enterDecisionPath)
+		return [enterBrokeEarly, enterDecisionPath, separatorBrokeEarly, continueDecisionPath]
+	}
+
+	getRuntimeEntryPath(lookahead) {
+		const [, enterDecisionPath, , continueDecisionPath] = this.getFullEntryPath(lookahead)
+		return [enterDecisionPath, continueDecisionPath]
+	}
 
 	getEntryPath(lookahead) {
-		const [definition, separator] = this.definition
+		const [
+			enterBrokeEarly, enterDecisionPath, separatorBrokeEarly, continueDecisionPath
+		] = this.getFullEntryPath(lookahead)
 
-		// if this broke early, it will have a terminate at the end
-		// if they match it but it terminates, they just won't look at the continuation
-		// even if that happens, we need to
-		const [enterBrokeEarly, enterDecisionPath] = this.getLinearEntryPath(definition, lookahead)
 		if (enterBrokeEarly) return enterDecisionPath
-
-		const [separatorBrokeEarly, separatorDecisionPath] = this.getLinearEntryPath(separator, lookahead)
 
 		const totalEntryPath = new DecisionPath()
 		totalEntryPath.push(enterDecisionPath)
@@ -181,18 +188,10 @@ class ManySeparated extends Many {
 		totalEntryPath.maxLength += enterDecisionPath.maxLength
 
 		let continuationBranch = new DecisionBranch()
-		continuationBranch.push(separatorDecisionPath)
+		continuationBranch.push(continueDecisionPath)
 		continuationBranch.push(EMPTY_BRANCH)
-		totalEntryPath.minLength += separatorDecisionPath.minLength
-		totalEntryPath.maxLength += separatorDecisionPath.maxLength
-
-		if (!separatorBrokeEarly) {
-			separatorDecisionPath.push(enterDecisionPath)
-			separatorDecisionPath.minLength += enterDecisionPath.minLength
-			separatorDecisionPath.maxLength += enterDecisionPath.maxLength
-			totalEntryPath.minLength += enterDecisionPath.minLength
-			totalEntryPath.maxLength += enterDecisionPath.maxLength
-		}
+		totalEntryPath.minLength += continueDecisionPath.minLength
+		totalEntryPath.maxLength += continueDecisionPath.maxLength
 
 		totalEntryPath.push(TERMINATE_NODE)
 		return totalEntryPath

@@ -1,6 +1,7 @@
 const { expect } = require('chai')
 
-const lexing = require('../src/lexing')
+// const lexing = require('../src/lexing')
+const lexing = require('../../moo/moo')
 const { createCategory, matchToken, matchTokens } = lexing
 
 describe("createCategory", () => {
@@ -227,19 +228,19 @@ describe("keywords", () => {
 	const Numeric = createCategory('Numeric')
 
 	const keywordLexer = lexing.compile({
-		Identifier: { match: /[a-z]+/, categories: IdentifierCategory, keywords: [
-			{ type: 'Null', values: ['null'] },
-			{ type: 'ControlFlowKeyword', values: ['while', 'for'], categories: Keyword },
-			{ type: 'HtmlTag', values: ['div', 'span'], categories: Html },
-			{ type: 'Scary', values: ['argh'], categories: [Keyword, Exclamatory] },
-		]},
+		Identifier: { match: /[a-z]+/, categories: IdentifierCategory, keywords: {
+			Null: { values: ['null'] },
+			ControlFlowKeyword: { values: ['while', 'for'], categories: Keyword },
+			HtmlTag: { values: ['div', 'span'], categories: Html },
+			Scary: { values: ['argh'], categories: [Keyword, Exclamatory] },
+		}},
 		Num: { match: /[0-9]+/, categories: Numeric, keywords: {
 			ScaryNum: '666',
 			NiceNum: '000',
 		}},
-		Dots: { match: /\.+/, keywords: [
-			{ type: 'ScaryDots', values: ['...'], categories: Exclamatory }
-		]},
+		Dots: { match: /\.+/, keywords: {
+			ScaryDots: { values: ['...'], categories: Exclamatory }
+		}},
 		Bangs: { match: /\!+/, keywords: { ThreeBang: '!!!' }},
 		Space: / +/,
 	})

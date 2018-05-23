@@ -1,4 +1,5 @@
-const { matchToken } = require('./lexing')
+// const { matchToken } = require('./lexing')
+const { matchToken } = require('../../moo/moo')
 
 const EMPTY_BRANCH = Symbol()
 const TERMINATE_NODE = Symbol()
