@@ -1,7 +1,6 @@
 const { expect } = require('chai')
 
-// const lexing = require('../src/lexing')
-const lexing = require('../../moo/moo')
+const lexing = require('kreia-moo')
 const { createCategory, matchToken, matchTokens } = lexing
 
 describe("createCategory", () => {

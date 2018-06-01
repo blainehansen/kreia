@@ -69,7 +69,7 @@ class ParseNodeStack {
     const currentNode = this.getCurrentNode()
     if (!currentNode.optional) throw "tried to get decisionPaths for a non optional node"
 
-    return currentNode.getEntryPath(this.lookahead)
+    return currentNode.getInlineEntryPath(this.lookahead)
   }
 
   push(parseNode) {

@@ -1,8 +1,7 @@
-// const { matchToken } = require('./lexing')
-const { matchToken } = require('../../moo/moo')
+const { matchToken } = require('kreia-moo')
 
 const EMPTY_BRANCH = Symbol()
-const TERMINATE_NODE = Symbol()
+const UNKNOWN_AFTER = Symbol()
 
 function matchAndTrimTokens(tokens, tokenTypes) {
 	for (const [index, tokenType] of tokenTypes.entries()) {
@@ -26,11 +25,8 @@ class DecisionPath {
 	push(tokenListOrBranch) {
 		if (tokenListOrBranch instanceof DecisionPath) {
 			this.path.push.apply(this.path, tokenListOrBranch.path)
-			// not doing this in favor of doing it when we push
-			// this.maxLength += tokenListOrBranch.maxLength
-			// this.minLength += tokenListOrBranch.minLength
 		}
-		else if (tokenListOrBranch !== TERMINATE_NODE && !(tokenListOrBranch instanceof DecisionBranch) && !(tokenListOrBranch instanceof Array)) {
+		else if (tokenListOrBranch !== UNKNOWN_AFTER && !(tokenListOrBranch instanceof DecisionBranch) && !(tokenListOrBranch instanceof Array)) {
 			console.log(tokenListOrBranch)
 			throw new Error("paths can only hold paths, arrays of tokens, or branches")
 		}
@@ -40,7 +36,8 @@ class DecisionPath {
 	testAgainstTokens(tokenList) {
 		let terminated = false
 		for (const tokenListOrBranch of this.path) {
-			if (tokenListOrBranch === TERMINATE_NODE) {
+			// we matched to a point that we shouldn't continue matching past
+			if (tokenListOrBranch === UNKNOWN_AFTER) {
 				return [true, tokenList]
 			}
 
@@ -93,7 +90,7 @@ class DecisionBranch {
 	}
 }
 
-module.exports = { DecisionPath, DecisionBranch, EMPTY_BRANCH, TERMINATE_NODE }
+module.exports = { DecisionPath, DecisionBranch, EMPTY_BRANCH, UNKNOWN_AFTER }
 
 
 // const trunk = new DecisionPath()

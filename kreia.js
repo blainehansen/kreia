@@ -1,6 +1,6 @@
 const Parser = require('./src/parser')
 
-const lexingFunctions = require('./src/lexing')
+const lexingFunctions = require('kreia-moo')
 
 function createParser(lexerDefinition, defaultLookahead) {
 	const lexer = lexingFunctions.compile(lexerDefinition)

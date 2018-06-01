@@ -1,3 +1,14 @@
+Considering a "mode" function, that based on input tries to choose different options
+
+```js
+mode(mode, modeOptions) {
+	oneMode() {},
+	twoMode() {},
+	// ...
+}
+```
+
+
 [Basic Features]
 Lexer
 - X token categories

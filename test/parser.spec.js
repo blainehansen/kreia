@@ -10,8 +10,7 @@ function flatten(array) {
 const { expect } = require('chai')
 
 const Parser = require('../src/parser')
-// const lexing = require('../src/lexing')
-const lexing = require('../../moo/moo')
+const lexing = require('kreia-moo')
 
 const { matchToken, matchTokens } = lexing
 
@@ -334,32 +333,459 @@ describe("basic tests for", () => {
 		output = basicParser.testMaybeSubrule()
 		expect(output).to.be.undefined
 	})
+})
 
+
+describe("args and custom lookahead", () => {
+	const optionsParser = new Parser(lexer)
+	const {
+		look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+		or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, quit,
+		optionsMaybeSubrule, optionsMaybe, optionsMany, optionsManySeparated,
+	} = optionsParser.getPrimitives()
+
+	const args = [1, 2]
+	const lookahead = 4
+
+	rule("testOptionsOr", () => {
+		function wearOut() {
+			consume(LeftParen, Num, RightParen)
+		}
+		return or({
+			args, lookahead, choice: (num1, num2) => {
+				wearOut()
+				maybeConsume(Space)
+				consume(Plus)
+				return `plus${num1 + num2}`
+			}
+		}, {
+			args, lookahead, choice: (num1, num2) => {
+				wearOut()
+				maybeConsume(Space)
+				consume(Mult)
+				return `mult${num1 + num2}`
+			}
+		},
+		() => {
+			wearOut()
+			return 1
+		})
+	})
+
+	rule("hasArgs", (num1, num2) => {
+		consume(LeftParen, Num, RightParen, Plus)
+		return num1 + num2
+	})
+
+	rule("testOptionsMaybeSubrule", () => {
+		const output = optionsMaybeSubrule('hasArgs', lookahead, ...args)
+		consume(LeftParen, Num, RightParen, Mult)
+		return output
+	})
+
+	rule("testArgsMaybe", () => {
+		consume(Space)
+		return maybe((num1, num2) => {
+			consume(LeftParen, Num, RightParen)
+			return num1 + num2
+		}, ...args)
+	})
+
+	rule("testOptionsMaybe", () => {
+		const output = optionsMaybe((num1, num2) => {
+			consume(LeftParen, Num, RightParen, Plus)
+			return num1 + num2
+		}, lookahead, ...args)
+		consume(LeftParen, Num, RightParen, Mult)
+
+		return output
+	})
+
+	rule("testArgsMany", () => {
+		consume(Space)
+		return many((num1, num2) => {
+			consume(LeftParen, Num, RightParen)
+			return num1 + num2
+		}, ...args)
+	})
+
+	rule("testArgsMaybeMany", () => {
+		consume(Space)
+		return maybeMany((num1, num2) => {
+			consume(LeftParen, Num, RightParen)
+			return num1 + num2
+		}, ...args)
+	})
+
+	rule("testOptionsMany", () => {
+		const output = optionsMany((num1, num2) => {
+			consume(LeftParen, Num, RightParen, Plus)
+			return num1 + num2
+		}, lookahead, ...args)
+		consume(LeftParen, Num, RightParen, Mult)
+
+		return output
+	})
+
+	rule("testArgsManySeparated", () => {
+		consume(Space)
+		return manySeparated(
+			(num1, num2) => {
+				consume(LeftParen, Num, RightParen)
+				return num1 + num2
+			},
+			() => consume(Dot),
+			...args
+		)
+	})
+
+	rule("testArgsMaybeManySeparated", () => {
+		consume(Space)
+		return maybeManySeparated(
+			(num1, num2) => {
+				consume(LeftParen, Num, RightParen)
+				return num1 + num2
+			},
+			() => consume(Dot),
+			...args
+		)
+	})
+
+	let testOptionsManySeparatedSepStack = []
+	rule("testOptionsManySeparated", () => {
+		const output = optionsManySeparated(
+			{ choice: (num1, num2) => {
+				consume(LeftParen, Num, RightParen, Plus)
+				return num1 + num2
+			}, lookahead, args },
+			{ choice: (sepArg) => {
+
+				consume(LeftParen, Num, RightParen, Dot)
+				if (quit()) return
+				testOptionsManySeparatedSepStack.push(sepArg)
+
+			}, lookahead, args: [0] },
+		true)
+		consume(LeftParen, Num, RightParen, Mult)
+
+		return output
+	})
+
+	optionsParser.analyze()
+
+
+	let output
+
+	it("testOptionsOr", () => {
+		optionsParser.reset("(0)+")
+		output = optionsParser.testOptionsOr()
+		expect(output).to.equal("plus3")
+
+		optionsParser.reset("(0)*")
+		output = optionsParser.testOptionsOr()
+		expect(output).to.equal("mult3")
+
+		optionsParser.reset("(0)")
+		output = optionsParser.testOptionsOr()
+		expect(output).to.equal(1)
+	})
+
+	it("testOptionsMaybeSubrule", () => {
+		optionsParser.reset("(0)+(0)*")
+		output = optionsParser.testOptionsMaybeSubrule()
+		expect(output).to.equal(3)
+
+		optionsParser.reset("(0)*")
+		output = optionsParser.testOptionsMaybeSubrule()
+		expect(output).to.be.undefined
+	})
+
+	it("testArgsMaybe", () => {
+		optionsParser.reset(" (0)")
+		output = optionsParser.testArgsMaybe()
+		expect(output).to.equal(3)
+
+		optionsParser.reset(" ")
+		output = optionsParser.testArgsMaybe()
+		expect(output).to.be.undefined
+	})
+
+	it("testOptionsMaybe", () => {
+		optionsParser.reset("(0)+(0)*")
+		output = optionsParser.testOptionsMaybe()
+		expect(output).to.equal(3)
+
+		optionsParser.reset("(0)*")
+		output = optionsParser.testOptionsMaybe()
+		expect(output).to.be.undefined
+	})
+
+	it("testOptionsMany", () => {
+		optionsParser.reset("(0)+(0)*")
+		output = optionsParser.testOptionsMany()
+		expect(output).to.eql([3])
+
+		optionsParser.reset("(0)+(0)+(0)+(0)*")
+		output = optionsParser.testOptionsMany()
+		expect(output).to.eql([3, 3, 3])
+
+		optionsParser.reset("(0)*")
+		output = optionsParser.testOptionsMany()
+		expect(output).to.eql([])
+	})
+
+	it("testArgsMany", () => {
+		optionsParser.reset(" ")
+		expect(() => optionsParser.testArgsMany()).to.throw
+
+		optionsParser.reset(" (0)")
+		output = optionsParser.testArgsMany()
+		expect(output).to.eql([3])
+
+		optionsParser.reset(" (0)(0)")
+		output = optionsParser.testArgsMany()
+		expect(output).to.eql([3, 3])
+	})
+
+	it("testArgsMaybeMany", () => {
+		optionsParser.reset(" ")
+		output = optionsParser.testArgsMaybeMany()
+		expect(output).to.eql([])
+
+		optionsParser.reset(" (0)")
+		output = optionsParser.testArgsMaybeMany()
+		expect(output).to.eql([3])
+
+		optionsParser.reset(" (0)(0)")
+		output = optionsParser.testArgsMaybeMany()
+		expect(output).to.eql([3, 3])
+	})
+
+	it("testArgsManySeparated", () => {
+		optionsParser.reset(" ")
+		expect(() => optionsParser.testArgsManySeparated()).to.throw
+
+		optionsParser.reset(" (0)")
+		output = optionsParser.testArgsManySeparated()
+		expect(output).to.eql([3])
+
+		optionsParser.reset(" (0).(0)")
+		output = optionsParser.testArgsManySeparated()
+		expect(output).to.eql([3, 3])
+	})
+
+	it("testArgsMaybeManySeparated", () => {
+		optionsParser.reset(" ")
+		output = optionsParser.testArgsMaybeManySeparated()
+		expect(output).to.eql([])
+
+		optionsParser.reset(" (0)")
+		output = optionsParser.testArgsMaybeManySeparated()
+		expect(output).to.eql([3])
+
+		optionsParser.reset(" (0).(0)")
+		output = optionsParser.testArgsMaybeManySeparated()
+		expect(output).to.eql([3, 3])
+	})
+
+	it("testOptionsManySeparated", () => {
+		optionsParser.reset("(0)+(0)*")
+		output = optionsParser.testOptionsManySeparated()
+		expect(output).to.eql([3])
+		expect(testOptionsManySeparatedSepStack).to.eql([])
+
+		optionsParser.reset("(0)+(0).(0)+(0).(0)+(0)*")
+		output = optionsParser.testOptionsManySeparated()
+		expect(output).to.eql([3, 3, 3])
+		expect(testOptionsManySeparatedSepStack).to.eql([0, 0])
+		testOptionsManySeparatedSepStack = []
+
+		optionsParser.reset("(0)*")
+		output = optionsParser.testOptionsManySeparated()
+		expect(output).to.eql([])
+		expect(testOptionsManySeparatedSepStack).to.eql([])
+	})
+
+
+	describe("situations that fail with small lookahead", () => {
+		it("manySeparated with long distance", () => {
+			const failingParser = new Parser(lexer)
+			const {
+				look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+				or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+			} = failingParser.getPrimitives()
+
+			rule('similarManyAfter', () => {
+				maybeManySeparated(
+					() => {
+						// this will take up more space than the lookahead distance will allow
+						// so the parser will take this route when it shouldn't
+						consume(LeftParen, Num, RightParen)
+						maybeConsume(Space)
+						// this plus won't be picked up
+						consume(Mult)
+					},
+					() => {
+						maybeConsume(Space)
+						consume(Dot)
+						maybeConsume(Space)
+					}
+				)
+
+				consume(LeftParen, Num, RightParen, Plus, LeftParen, RightParen)
+			})
+
+			failingParser.analyze()
+			// this has the many sep, so it will pass
+			// the separator will save it
+			failingParser.reset("(0)*(4)+()")
+			expect(() => failingParser.similarManyAfter()).to.not.throw
+
+			// same thing here. as long as the parser enters the manysep, it will be fine from there
+			failingParser.reset("(0)*.(0)*(4)+()")
+			expect(() => failingParser.similarManyAfter()).to.not.throw
+
+			// but when that manysep isn't really there, it won't have the lookahead distance to know it shouldn't enter
+			failingParser.reset("(4)+()")
+			expect(() => failingParser.similarManyAfter()).to.throw
+		})
+	})
+
+	it("custom lookahead solves ambiguity errors", () => {
+		const moreLookaheadParser = new Parser(lexer)
+		const {
+			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, optionsManySeparated,
+		} = moreLookaheadParser.getPrimitives()
+
+		rule('similarManyAfter', () => {
+			optionsManySeparated(
+				// let's just bump the lookahead here
+				{ choice: () => {
+					consume(LeftParen, Num, RightParen)
+					maybeConsume(Space)
+					// now this will be picked up
+					consume(Mult)
+				}, lookahead: 4 },
+				() => {
+					maybeConsume(Space)
+					consume(Dot)
+					maybeConsume(Space)
+				},
+			true)
+
+			consume(LeftParen, Num, RightParen, Plus, LeftParen, RightParen)
+		})
+
+		moreLookaheadParser.analyze()
+		moreLookaheadParser.reset("(0)*(4)+()")
+		expect(() => moreLookaheadParser.similarManyAfter()).to.not.throw
+
+		moreLookaheadParser.reset("(0)*.(0)*(4)+()")
+		expect(() => moreLookaheadParser.similarManyAfter()).to.not.throw
+
+		moreLookaheadParser.reset("(4)+()")
+		expect(() => moreLookaheadParser.similarManyAfter()).to.not.throw
+	})
+})
+
+
+describe("tricky parsing situations", () => {
+	it("potentially ambiguous manySeparated", () => {
+		const trickyParser = new Parser(lexer)
+		const {
+			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+		} = trickyParser.getPrimitives()
+
+		rule('similarManyAfter', () => {
+			maybeManySeparated(
+				() => {
+					// this will eat up the lookahead distance
+					consume(LeftParen, Num, RightParen)
+				},
+				() => {
+					maybeConsume(Space)
+					consume(Dot)
+					maybeConsume(Space)
+				}
+			)
+
+			// the thing we're trying to know is if the parser is smart enough to not treat this as part of the manySep
+			// we're probably abusing the default lookahead distance of 3
+			consume(LeftParen, Num, RightParen, Plus)
+		})
+
+		trickyParser.analyze()
+
+		trickyParser.reset("(0)(4)+")
+		expect(() => trickyParser.similarManyAfter()).to.not.throw
+
+		trickyParser.reset("(0).(0) .(0). (0) . (0)(4)+")
+		expect(() => trickyParser.similarManyAfter()).to.not.throw
+	})
 })
 
 
 describe("error checking", () => {
+	describe("catches all optional definitions", () => {
+		it("entire rule", () => {
+			const allOptionalParser = new Parser(lexer)
+			const {
+				look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+				or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+			} = allOptionalParser.getPrimitives()
 
-	it("catches all optional definitions", () => {
-		const allOptionalParser = new Parser(lexer)
+			rule('A', () => {
+				maybeConsume(Space, Dot)
+				maybe(() => {
+					consume(Dot)
+					many(() => {
+						consume(LeftParen, Num, RightParen)
+					})
+					consume(Dot)
+				})
+				maybeConsume(Dot, Space)
+			})
+
+			expect(() => allOptionalParser.analyze()).to.throw
+		})
+
+		it("nested maybe", () => {
+			const allOptionalParser = new Parser(lexer)
+			const {
+				look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
+				or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+			} = allOptionalParser.getPrimitives()
+
+			expect(() => {
+				rule('B', () => {
+					consume(Space, Dot)
+					maybe(() => {
+						maybeConsume(Dot)
+						maybeMany(() => {
+							consume(LeftParen, Num, RightParen)
+						})
+						maybeConsume(Dot)
+					})
+				})
+			}).to.throw
+		})
+	})
+
+
+	it("catches empty rules", () => {
+		const emptyParser = new Parser(lexer)
 		const {
 			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
 			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
-		} = allOptionalParser.getPrimitives()
+		} = emptyParser.getPrimitives()
 
-		rule('A', () => {
-			maybeConsume(Space, Dot)
-			maybe(() => {
-				consume(Dot)
-				many(() => {
-					consume(LeftParen, Num, RightParen)
-				})
-				consume(Dot)
+		expect(() => {
+			rule('A', () => {
+				return 4
 			})
-			maybeConsume(Dot, Space)
-		})
-
-		expect(() => allOptionalParser.analyze()).to.throw
+		}).to.throw
 	})
 
 	it("catches unresolved subrules", () => {
@@ -452,7 +878,6 @@ describe("error checking", () => {
 			expect(() => safeRecursiveParser.analyze()).to.not.throw
 		})
 	})
-
 })
 
 
@@ -522,7 +947,6 @@ describe("fuller grammars", () => {
 		expectParseTo("4 * 4 * 2", 32)
 
 		expectParseTo("(1 + 1 + 1) * 2 * 2 * (1 + 1 + 1)", 36)
-
 	})
 
 
@@ -592,7 +1016,5 @@ describe("fuller grammars", () => {
 
 		miniJson.reset("not valid")
 		expect(() => miniJson.jsonEntity()).to.throw
-
 	})
-
 })

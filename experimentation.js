@@ -3,7 +3,7 @@ function log(obj) {
 	console.log(util.inspect(obj, { depth: null }))
 }
 
-const lexing = require('./src/lexing')
+const lexing = require('kreia-moo')
 
 const lexer = lexing.compile({
 	Primitive: ['null', 'undefined', 'true', 'false'],

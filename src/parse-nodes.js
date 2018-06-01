@@ -1,38 +1,47 @@
-const { DecisionPath, DecisionBranch, EMPTY_BRANCH, TERMINATE_NODE } = require('./decision-paths')
+const { DecisionPath, DecisionBranch, EMPTY_BRANCH, UNKNOWN_AFTER } = require('./decision-paths')
 
 
 function subclassOf(BClass, AClass) {
 	return BClass.prototype instanceof AClass || BClass === AClass
 }
 
+const NO_LOOKAHEAD = Symbol()
 
 class ParseNode {
-	constructor(definition, optional, check = true) {
-		if (definition !== null && !(definition instanceof Array)) throw new Error("tried to create a parseNode with something other than an Array or null")
+	constructor(definition, optional, lookahead, check = true) {
+		const isArray = definition instanceof Array
+		if (definition !== null && !isArray) throw new Error("tried to create a parseNode with something other than an Array or null")
+
+		if (isArray && definition.length <= 0) throw new Error("tried to create a rule without any parse functions in it")
 
 		if (check && definition !== null && definition.every((node) => node.optional)) {
 			console.log(definition)
 			throw new Error("A definition was given where everything was optional. Instead of making all the items within something optional, make the whole thing optional.")
 		}
 
+		if ((typeof lookahead != 'number' || lookahead <= 0) && lookahead !== NO_LOOKAHEAD) {
+			console.log('lookahead: ', lookahead)
+			throw new Error(`An invalid lookahead was passed: ${lookahead}`)
+		}
+
 		this.definition = definition
 		this.optional = optional
+		this.lookahead = lookahead
 	}
 
-	getLinearEntryPath(definition, lookahead) {
+	static getLinearEntryPath(definition, lookahead) {
 		let entryPath = new DecisionPath()
 
 		let brokeEarly = false
 		for (const node of definition) {
-			if (entryPath.minLength >= lookahead) {
+			const remainingLookahead = lookahead - entryPath.minLength
+			if (remainingLookahead <= 0) {
 				brokeEarly = true
-				entryPath.push(TERMINATE_NODE)
 				break
 			}
 
-			const remainingLookahead = lookahead - entryPath.minLength
+			const [nodeBrokeEarly, nodeEntryPath] = node.getInlineEntryPath(remainingLookahead)
 
-			const nodeEntryPath = node.getEntryPath(remainingLookahead)
 			let thingToPush = nodeEntryPath
 			// when an Or is called as the top level tester, it shouldn't have an empty branch pushed, but should simply rely on the "maybeness" of the calling function to panic or not
 			// but when it's simply on a path within another thing, it needs to allow continuation
@@ -52,14 +61,25 @@ class ParseNode {
 			entryPath.minLength += node.optional ? 0 : nodeEntryPath.minLength
 			entryPath.maxLength += nodeEntryPath.maxLength
 			entryPath.push(thingToPush)
+
+			if (nodeBrokeEarly && !node.optional) {
+				brokeEarly = true
+				break
+			}
 		}
 
+		if (brokeEarly) entryPath.push(UNKNOWN_AFTER)
 		return [brokeEarly, entryPath]
 	}
 
-	getEntryPath(lookahead) {
-		const [, entryPath] = this.getLinearEntryPath(this.definition, lookahead)
+	getRootEntryPath() {
+		const lookahead = this.lookahead
+		const [, entryPath] = this.getInlineEntryPath(lookahead)
 		return entryPath
+	}
+
+	getInlineEntryPath(lookahead) {
+		return ParseNode.getLinearEntryPath(this.definition, lookahead)
 	}
 }
 
@@ -72,9 +92,9 @@ class Subrule {
 }
 
 class SubruleNode extends ParseNode {
-	constructor(subrule, optional) {
+	constructor(subrule, optional, lookahead) {
 		if (subrule && !(subrule instanceof Subrule)) throw new Error("can't put anything other than a subrule into a subrule wrapper")
-		super(subrule ? subrule.definition : null, optional)
+		super(subrule ? subrule.definition : null, optional, lookahead)
 		this.resolved = !!subrule
 		this.subrule = subrule
 	}
@@ -93,108 +113,138 @@ class SubruleNode extends ParseNode {
 // this holds an array of tokens
 class Consume extends ParseNode {
 	constructor(definition, optional) {
-		super(definition, optional, false)
+		super(definition, optional, NO_LOOKAHEAD, false)
 	}
 
-	getEntryPath(lookahead) {
+	// don't have to worry about runtime entry path
+
+	getInlineEntryPath() {
 		const entryPath = new DecisionPath()
 
 		entryPath.push(this.definition)
 		const length = this.definition.length
-		// we no longer do this because the calling thing should use our optionalness to determine whether to add our minLength or not
-		// entryPath.minLength = this.optional ? 0 : length
 		entryPath.minLength = length
 		entryPath.maxLength = length
-		return entryPath
+		return [false, entryPath]
 	}
 }
 
 class Maybe extends ParseNode {
-	constructor(definition) {
-		super(definition, true)
+	constructor(definition, lookahead) {
+		super(definition, true, lookahead)
 	}
 }
 
 class Or extends ParseNode {
-	getEntryPath(lookahead) {
-		const branch = new DecisionBranch()
-		let overallMaxLength = 0
-		let overallMinLength = 0
+	constructor(definition, optional) {
+		super(definition, optional, NO_LOOKAHEAD)
+	}
 
-		for (const choice of this.definition) {
-			const [, choiceEntryPath] = this.getLinearEntryPath(choice, lookahead)
+	getRootEntryPath() {
+		const [, , alternates] = this.getAlternatesEntryPaths()
+		return alternates
+	}
+
+	getAlternatesEntryPaths(lookahead = undefined) {
+		let largestMaxLength = 0
+		let smallestMinLength = 0
+		const alternates = []
+		for (const { definition, lookahead: objLookahead } of this.definition) {
+			const actualLookahead = lookahead || objLookahead
+			const [, choiceEntryPath] = ParseNode.getLinearEntryPath(definition, actualLookahead)
 			const maxLength = choiceEntryPath.maxLength
 			const minLength = choiceEntryPath.minLength
-			if (maxLength > overallMaxLength) overallMaxLength = maxLength
-			if (minLength > overallMinLength) overallMinLength = minLength
+			if (maxLength > largestMaxLength) largestMaxLength = maxLength
+			if (smallestMinLength == 0 || minLength < smallestMinLength) smallestMinLength = minLength
 
-			branch.push(choiceEntryPath)
+			alternates.push(choiceEntryPath)
 		}
 
+		return [smallestMinLength, largestMaxLength, alternates]
+	}
+
+	getInlineEntryPath(lookahead) {
+		const [smallestMinLength, largestMaxLength, alternates] = this.getAlternatesEntryPaths(lookahead)
+		const branch = new DecisionBranch()
+		branch.branches = alternates
+
 		const entryPath = new DecisionPath()
-		entryPath.maxLength = overallMaxLength
-		entryPath.minLength = overallMinLength
+		entryPath.maxLength = largestMaxLength
+		entryPath.minLength = smallestMinLength
 		entryPath.push(branch)
-		return entryPath
+		return [false, entryPath]
 	}
 }
 
 class Many extends ParseNode {
-	getEntryPath(lookahead) {
-		const [brokeEarly, entryPath] = this.getLinearEntryPath(this.definition, lookahead)
-		if (brokeEarly) return entryPath
-		entryPath.push(TERMINATE_NODE)
-		return entryPath
+	getInlineEntryPath(lookahead) {
+		const [, entryPath] = ParseNode.getLinearEntryPath(this.definition, lookahead)
+		entryPath.push(UNKNOWN_AFTER)
+		return [true, entryPath]
 	}
 }
 
 class ManySeparated extends Many {
 	constructor(definition, separator, optional) {
-		super([definition, separator], optional)
+		super([definition, separator], optional, NO_LOOKAHEAD)
 	}
 
-	getContinuationEntryPath(lookahead, enterDecisionPath) {
-		const [separatorBrokeEarly, separatorDecisionPath] = this.getLinearEntryPath(this.definition[1], lookahead)
-		if (separatorBrokeEarly) return separatorDecisionPath
+	// this needs to be the enter and the continue, both with their embedded lookahead
+	getRootEntryPath() {
+		const { definition: defDefinition, lookahead: defLookahead } = this.definition[0]
+		const [, enterDecisionPath] = ParseNode.getLinearEntryPath(defDefinition, defLookahead)
 
-		separatorDecisionPath.push(enterDecisionPath)
-		separatorDecisionPath.minLength += enterDecisionPath.minLength
-		separatorDecisionPath.maxLength += enterDecisionPath.maxLength
-		return [separatorBrokeEarly, separatorDecisionPath]
-	}
+		const { definition: sepDefinition, lookahead: sepLookahead } = this.definition[1]
+		const [separatorBrokeEarly, separatorDecisionPath] = ParseNode.getLinearEntryPath(sepDefinition, sepLookahead)
 
-	getFullEntryPath(lookahead) {
-		const [enterBrokeEarly, enterDecisionPath] = this.getLinearEntryPath(this.definition[0], lookahead)
+		const continueDecisionPath = separatorDecisionPath
+		// if sep path broke early, don't append def onto it
+		if (!separatorBrokeEarly) {
+			continueDecisionPath.push(enterDecisionPath)
+			continueDecisionPath.minLength += enterDecisionPath.minLength
+			continueDecisionPath.maxLength += enterDecisionPath.maxLength
+		}
 
-		const [separatorBrokeEarly, continueDecisionPath] = this.getContinuationEntryPath(lookahead, enterDecisionPath)
-		return [enterBrokeEarly, enterDecisionPath, separatorBrokeEarly, continueDecisionPath]
-	}
-
-	getRuntimeEntryPath(lookahead) {
-		const [, enterDecisionPath, , continueDecisionPath] = this.getFullEntryPath(lookahead)
 		return [enterDecisionPath, continueDecisionPath]
 	}
 
-	getEntryPath(lookahead) {
-		const [
-			enterBrokeEarly, enterDecisionPath, separatorBrokeEarly, continueDecisionPath
-		] = this.getFullEntryPath(lookahead)
+	// this needs to be a single path created from the passed lookahead
+	getInlineEntryPath(lookahead) {
+		const { definition: defDefinition } = this.definition[0]
+		const [enterBrokeEarly, enterDecisionPath] = ParseNode.getLinearEntryPath(defDefinition, lookahead)
 
-		if (enterBrokeEarly) return enterDecisionPath
+		const remainingLookahead = lookahead - enterDecisionPath.minLength
+		if (enterBrokeEarly || remainingLookahead <= 0) {
+			enterDecisionPath.push(UNKNOWN_AFTER)
+			return [true, enterDecisionPath]
+		}
 
 		const totalEntryPath = new DecisionPath()
 		totalEntryPath.push(enterDecisionPath)
 		totalEntryPath.minLength += enterDecisionPath.minLength
 		totalEntryPath.maxLength += enterDecisionPath.maxLength
 
-		let continuationBranch = new DecisionBranch()
-		continuationBranch.push(continueDecisionPath)
-		continuationBranch.push(EMPTY_BRANCH)
-		totalEntryPath.minLength += continueDecisionPath.minLength
-		totalEntryPath.maxLength += continueDecisionPath.maxLength
+		const { definition: sepDefinition } = this.definition[1]
+		const [separatorBrokeEarly, separatorDecisionPath] = ParseNode.getLinearEntryPath(sepDefinition, remainingLookahead)
 
-		totalEntryPath.push(TERMINATE_NODE)
-		return totalEntryPath
+		// if sep didn't break early, and if there's some space in the lookahead, append one more
+		if (!separatorBrokeEarly && separatorDecisionPath.minLength < remainingLookahead) {
+			separatorDecisionPath.push(enterDecisionPath)
+			separatorDecisionPath.minLength += enterDecisionPath.minLength
+			separatorDecisionPath.maxLength += enterDecisionPath.maxLength
+		}
+
+		let continuationBranch = new DecisionBranch()
+		continuationBranch.push(separatorDecisionPath)
+		continuationBranch.push(EMPTY_BRANCH)
+		totalEntryPath.push(continuationBranch)
+		// we wouldn't do this because the separator is optional, it doesn't contribute to the guaranteed minLength
+		// totalEntryPath.minLength += separatorDecisionPath.minLength
+		totalEntryPath.maxLength += separatorDecisionPath.maxLength
+
+		// we put this on the separator path because if the continuation isn't taken, they could keep checking
+		separatorDecisionPath.push(UNKNOWN_AFTER)
+		return [false, totalEntryPath]
 	}
 }
 
