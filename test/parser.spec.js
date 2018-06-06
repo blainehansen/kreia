@@ -31,8 +31,9 @@ describe("basic tests for", () => {
 	const basicParser = new Parser(lexer)
 
 	const {
-		look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-		or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+		inspecting, rule, subrule, maybeSubrule, gateSubrule,
+		consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+		many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 	} = basicParser.getPrimitives()
 
 	rule('testConsumeOne', () => {
@@ -336,12 +337,234 @@ describe("basic tests for", () => {
 })
 
 
+describe("gate versions of functions", () => {
+	const gateParser = new Parser(lexer)
+	const {
+		inspecting, rule, subrule, maybeSubrule, gateSubrule,
+		consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+		many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
+	} = gateParser.getPrimitives()
+
+	const alwaysTrue = () => true
+	const alwaysFalse = () => false
+
+	rule("testTrueGateConsume", () => {
+		consume(Space)
+		return gateConsume(alwaysTrue, LeftParen, Num, RightParen)
+	})
+	rule("testFalseGateConsume", () => {
+		consume(Space)
+		return gateConsume(alwaysFalse, LeftParen, Num, RightParen)
+	})
+
+	rule("testTrueGate", () => {
+		consume(Space)
+		return gate(alwaysTrue, () => consume(Dot))
+	})
+	rule("testFalseGate", () => {
+		consume(Space)
+		return gate(alwaysFalse, () => consume(Dot))
+	})
+
+	rule("testTrueGateOr", () => {
+		consume(Space)
+		return gateOr(alwaysTrue,
+			() => consume(Mult),
+			() => consume(Plus)
+		)
+	})
+	rule("testFalseGateOr", () => {
+		consume(Space)
+		return gateOr(alwaysFalse,
+			() => consume(Mult),
+			() => consume(Plus)
+		)
+	})
+
+	rule("testTrueOrChoiceGate", () => {
+		consume(Space)
+		return or(
+			{ gate: alwaysTrue, func: () => consume(Mult) },
+			() => consume(Plus)
+		)
+	})
+
+	rule("testFalseOrChoiceGate", () => {
+		consume(Space)
+		return or(
+			{ gate: alwaysFalse, func: () => consume(Mult) },
+			() => consume(Plus)
+		)
+	})
+
+	rule("testTrueGateMany", () => {
+		consume(Space)
+		return gateMany(alwaysTrue, () => consume(Dot))
+	})
+	rule("testFalseGateMany", () => {
+		consume(Space)
+		return gateMany(alwaysFalse, () => consume(Dot))
+	})
+
+	rule("testTrueGateManySeparated", () => {
+		consume(Space)
+		return gateManySeparated(alwaysTrue,
+			() => consume(Num),
+			() => consume(Dot)
+		)
+	})
+	rule("testFalseGateManySeparated", () => {
+		consume(Space)
+		return gateManySeparated(alwaysFalse,
+			() => consume(Num),
+			() => consume(Dot)
+		)
+	})
+
+	gateParser.analyze()
+
+	it("testTrueGateConsume", () => {
+		gateParser.reset(" ")
+		output = gateParser.testTrueGateConsume()
+		expect(output).to.be.undefined
+
+		gateParser.reset(" (0)")
+		output = gateParser.testTrueGateConsume()
+		expect(matchTokens(output, [LeftParen, Num, RightParen])).to.be.true
+	})
+	it("testFalseGateConsume", () => {
+		gateParser.reset(" ")
+		output = gateParser.testFalseGateConsume()
+		expect(output).to.be.undefined
+
+		gateParser.reset(" (0)")
+		expect(() => gateParser.testFalseGateConsume()).to.throw
+	})
+
+	it("testTrueGate", () => {
+		gateParser.reset(" ")
+		output = gateParser.testTrueGate()
+		expect(output).to.be.undefined
+
+		gateParser.reset(" .")
+		output = gateParser.testTrueGate()
+		expect(matchToken(output, Dot)).to.be.true
+	})
+	it("testFalseGate", () => {
+		gateParser.reset(" ")
+		output = gateParser.testFalseGate()
+		expect(output).to.be.undefined
+
+		gateParser.reset(" .")
+		expect(() => gateParser.testFalseGate()).to.throw
+	})
+
+	it("testTrueGateOr", () => {
+		gateParser.reset(" ")
+		output = gateParser.testTrueGateOr()
+		expect(output).to.be.undefined
+
+		gateParser.reset(" +")
+		output = gateParser.testTrueGateOr()
+		expect(matchToken(output, Plus)).to.be.true
+
+		gateParser.reset(" *")
+		output = gateParser.testTrueGateOr()
+		expect(matchToken(output, Mult)).to.be.true
+	})
+	it("testFalseGateOr", () => {
+		gateParser.reset(" ")
+		output = gateParser.testFalseGateOr()
+		expect(output).to.be.undefined
+
+		gateParser.reset(" +")
+		expect(() => gateParser.testFalseGateOr()).to.throw
+
+		gateParser.reset(" *")
+		expect(() => gateParser.testFalseGateOr()).to.throw
+	})
+
+	it("testTrueOrChoiceGate", () => {
+		gateParser.reset(" ")
+		expect(() => gateParser.testTrueOrChoiceGate()).to.throw
+
+		gateParser.reset(" +")
+		output = gateParser.testTrueOrChoiceGate()
+		expect(matchToken(output, Plus)).to.be.true
+
+		gateParser.reset(" *")
+		output = gateParser.testTrueOrChoiceGate()
+		expect(matchToken(output, Mult)).to.be.true
+	})
+	it("testFalseOrChoiceGate", () => {
+		gateParser.reset(" ")
+		expect(() => gateParser.testFalseOrChoiceGate()).to.throw
+
+		gateParser.reset(" +")
+		output = gateParser.testFalseOrChoiceGate()
+		expect(matchToken(output, Plus)).to.be.true
+
+		gateParser.reset(" *")
+		expect(() => gateParser.testFalseOrChoiceGate()).to.throw
+	})
+
+	it("testTrueGateMany", () => {
+		gateParser.reset(" ")
+		output = gateParser.testTrueGateMany()
+		expect(output).eql([])
+
+		gateParser.reset(" .")
+		output = gateParser.testTrueGateMany()
+		expect(matchTokens(output, [Dot])).to.be.true
+
+		gateParser.reset(" ..")
+		output = gateParser.testTrueGateMany()
+		expect(matchTokens(output, [Dot, Dot])).to.be.true
+	})
+	it("testFalseGateMany", () => {
+		gateParser.reset(" ")
+		output = gateParser.testFalseGateMany()
+		expect(output).eql([])
+
+		gateParser.reset(" .")
+		expect(() => gateParser.testFalseGateMany()).to.throw
+
+		gateParser.reset(" ..")
+		expect(() => gateParser.testFalseGateMany()).to.throw
+	})
+
+	it("testTrueGateManySeparated", () => {
+		gateParser.reset(" ")
+		output = gateParser.testTrueGateManySeparated()
+		expect(output).eql([])
+
+		gateParser.reset(" 4")
+		output = gateParser.testTrueGateManySeparated()
+		expect(matchTokens(output, [Num])).to.be.true
+
+		gateParser.reset(" 4.4")
+		output = gateParser.testTrueGateManySeparated()
+		expect(matchTokens(output, [Num, Num])).to.be.true
+	})
+	it("testFalseGateManySeparated", () => {
+		gateParser.reset(" ")
+		output = gateParser.testFalseGateManySeparated()
+		expect(output).eql([])
+
+		gateParser.reset(" 4")
+		expect(() => gateParser.testFalseGateManySeparated()).to.throw
+
+		gateParser.reset(" 4.4")
+		expect(() => gateParser.testFalseGateManySeparated()).to.throw
+	})
+})
+
 describe("args and custom lookahead", () => {
 	const optionsParser = new Parser(lexer)
 	const {
-		look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-		or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, quit,
-		optionsMaybeSubrule, optionsMaybe, optionsMany, optionsManySeparated,
+		inspecting, rule, subrule, maybeSubrule, gateSubrule,
+		consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+		many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 	} = optionsParser.getPrimitives()
 
 	const args = [1, 2]
@@ -352,14 +575,14 @@ describe("args and custom lookahead", () => {
 			consume(LeftParen, Num, RightParen)
 		}
 		return or({
-			args, lookahead, choice: (num1, num2) => {
+			args, lookahead, func: (num1, num2) => {
 				wearOut()
 				maybeConsume(Space)
 				consume(Plus)
 				return `plus${num1 + num2}`
 			}
 		}, {
-			args, lookahead, choice: (num1, num2) => {
+			args, lookahead, func: (num1, num2) => {
 				wearOut()
 				maybeConsume(Space)
 				consume(Mult)
@@ -373,12 +596,14 @@ describe("args and custom lookahead", () => {
 	})
 
 	rule("hasArgs", (num1, num2) => {
-		consume(LeftParen, Num, RightParen, Plus)
+		consume(LeftParen, Num, RightParen)
+		maybeConsume(Space)
+		consume(Plus)
 		return num1 + num2
-	})
+	}, lookahead)
 
-	rule("testOptionsMaybeSubrule", () => {
-		const output = optionsMaybeSubrule('hasArgs', lookahead, ...args)
+	rule("testLookaheadSubrule", () => {
+		const output = maybeSubrule('hasArgs', ...args)
 		consume(LeftParen, Num, RightParen, Mult)
 		return output
 	})
@@ -392,10 +617,15 @@ describe("args and custom lookahead", () => {
 	})
 
 	rule("testOptionsMaybe", () => {
-		const output = optionsMaybe((num1, num2) => {
-			consume(LeftParen, Num, RightParen, Plus)
-			return num1 + num2
-		}, lookahead, ...args)
+		const output = maybe({
+			lookahead,
+			func: (num1, num2) => {
+				consume(LeftParen, Num, RightParen)
+				maybeConsume(Space)
+				consume(Plus)
+				return num1 + num2
+			}
+		}, ...args)
 		consume(LeftParen, Num, RightParen, Mult)
 
 		return output
@@ -418,10 +648,15 @@ describe("args and custom lookahead", () => {
 	})
 
 	rule("testOptionsMany", () => {
-		const output = optionsMany((num1, num2) => {
-			consume(LeftParen, Num, RightParen, Plus)
-			return num1 + num2
-		}, lookahead, ...args)
+		const output = maybeMany({
+			lookahead,
+			func: (num1, num2) => {
+				consume(LeftParen, Num, RightParen)
+				maybeConsume(Space)
+				consume(Plus)
+				return num1 + num2
+			}
+		}, ...args)
 		consume(LeftParen, Num, RightParen, Mult)
 
 		return output
@@ -453,19 +688,24 @@ describe("args and custom lookahead", () => {
 
 	let testOptionsManySeparatedSepStack = []
 	rule("testOptionsManySeparated", () => {
-		const output = optionsManySeparated(
-			{ choice: (num1, num2) => {
-				consume(LeftParen, Num, RightParen, Plus)
+		const output = maybeManySeparated({
+			lookahead, args,
+			func: (num1, num2) => {
+				consume(LeftParen, Num, RightParen)
+				maybeConsume(Space)
+				consume(Plus)
 				return num1 + num2
-			}, lookahead, args },
-			{ choice: (sepArg) => {
-
-				consume(LeftParen, Num, RightParen, Dot)
-				if (quit()) return
+			}
+		}, {
+			lookahead, args: [0],
+			func: (sepArg) => {
+				consume(LeftParen, Num, RightParen)
+				maybeConsume(Space)
+				consume(Dot)
+				if (inspecting()) return
 				testOptionsManySeparatedSepStack.push(sepArg)
-
-			}, lookahead, args: [0] },
-		true)
+			}
+		})
 		consume(LeftParen, Num, RightParen, Mult)
 
 		return output
@@ -490,13 +730,13 @@ describe("args and custom lookahead", () => {
 		expect(output).to.equal(1)
 	})
 
-	it("testOptionsMaybeSubrule", () => {
+	it("testLookaheadSubrule", () => {
 		optionsParser.reset("(0)+(0)*")
-		output = optionsParser.testOptionsMaybeSubrule()
+		output = optionsParser.testLookaheadSubrule()
 		expect(output).to.equal(3)
 
 		optionsParser.reset("(0)*")
-		output = optionsParser.testOptionsMaybeSubrule()
+		output = optionsParser.testLookaheadSubrule()
 		expect(output).to.be.undefined
 	})
 
@@ -611,8 +851,9 @@ describe("args and custom lookahead", () => {
 		it("manySeparated with long distance", () => {
 			const failingParser = new Parser(lexer)
 			const {
-				look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-				or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+				inspecting, rule, subrule, maybeSubrule, gateSubrule,
+				consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+				many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 			} = failingParser.getPrimitives()
 
 			rule('similarManyAfter', () => {
@@ -654,25 +895,27 @@ describe("args and custom lookahead", () => {
 	it("custom lookahead solves ambiguity errors", () => {
 		const moreLookaheadParser = new Parser(lexer)
 		const {
-			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, optionsManySeparated,
+			inspecting, rule, subrule, maybeSubrule, gateSubrule,
+			consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+			many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 		} = moreLookaheadParser.getPrimitives()
 
 		rule('similarManyAfter', () => {
-			optionsManySeparated(
+			maybeManySeparated({
 				// let's just bump the lookahead here
-				{ choice: () => {
+				lookahead: 4,
+				func: () => {
 					consume(LeftParen, Num, RightParen)
 					maybeConsume(Space)
 					// now this will be picked up
 					consume(Mult)
-				}, lookahead: 4 },
-				() => {
-					maybeConsume(Space)
-					consume(Dot)
-					maybeConsume(Space)
-				},
-			true)
+				}
+			},
+			() => {
+				maybeConsume(Space)
+				consume(Dot)
+				maybeConsume(Space)
+			})
 
 			consume(LeftParen, Num, RightParen, Plus, LeftParen, RightParen)
 		})
@@ -694,8 +937,9 @@ describe("tricky parsing situations", () => {
 	it("potentially ambiguous manySeparated", () => {
 		const trickyParser = new Parser(lexer)
 		const {
-			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+			inspecting, rule, subrule, maybeSubrule, gateSubrule,
+			consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+			many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 		} = trickyParser.getPrimitives()
 
 		rule('similarManyAfter', () => {
@@ -732,8 +976,9 @@ describe("error checking", () => {
 		it("entire rule", () => {
 			const allOptionalParser = new Parser(lexer)
 			const {
-				look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-				or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+				inspecting, rule, subrule, maybeSubrule, gateSubrule,
+				consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+				many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 			} = allOptionalParser.getPrimitives()
 
 			rule('A', () => {
@@ -754,8 +999,9 @@ describe("error checking", () => {
 		it("nested maybe", () => {
 			const allOptionalParser = new Parser(lexer)
 			const {
-				look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-				or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+				inspecting, rule, subrule, maybeSubrule, gateSubrule,
+				consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+				many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 			} = allOptionalParser.getPrimitives()
 
 			expect(() => {
@@ -777,8 +1023,9 @@ describe("error checking", () => {
 	it("catches empty rules", () => {
 		const emptyParser = new Parser(lexer)
 		const {
-			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+			inspecting, rule, subrule, maybeSubrule, gateSubrule,
+			consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+			many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 		} = emptyParser.getPrimitives()
 
 		expect(() => {
@@ -791,8 +1038,9 @@ describe("error checking", () => {
 	it("catches unresolved subrules", () => {
 		const unresolvedParser = new Parser(lexer)
 		const {
-			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+			inspecting, rule, subrule, maybeSubrule, gateSubrule,
+			consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+			many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 		} = unresolvedParser.getPrimitives()
 
 		rule('A', () => {
@@ -807,8 +1055,9 @@ describe("error checking", () => {
 		it("works for obvious ones", () => {
 			const leftRecursiveParser = new Parser(lexer)
 			const {
-				look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-				or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+				inspecting, rule, subrule, maybeSubrule, gateSubrule,
+				consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+				many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 			} = leftRecursiveParser.getPrimitives()
 
 			rule('A', () => {
@@ -827,8 +1076,9 @@ describe("error checking", () => {
 		it("works for nested ones", () => {
 			const leftRecursiveParser = new Parser(lexer)
 			const {
-				look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-				or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+				inspecting, rule, subrule, maybeSubrule, gateSubrule,
+				consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+				many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 			} = leftRecursiveParser.getPrimitives()
 
 			rule('A', () => {
@@ -857,8 +1107,9 @@ describe("error checking", () => {
 		it("doesn't incorrectly throw on safe recursion", () => {
 			const safeRecursiveParser = new Parser(lexer)
 			const {
-				look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-				or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
+				inspecting, rule, subrule, maybeSubrule, gateSubrule,
+				consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+				many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 			} = safeRecursiveParser.getPrimitives()
 
 			rule('A', () => {
@@ -885,8 +1136,9 @@ describe("fuller grammars", () => {
 	it("tiny calculator", () => {
 		const tinyCalculator = new Parser(lexer)
 		const {
-			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, quit
+			inspecting, rule, subrule, maybeSubrule, gateSubrule,
+			consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+			many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 		} = tinyCalculator.getPrimitives()
 
 		rule('binaryExpression', () => {
@@ -903,7 +1155,7 @@ describe("fuller grammars", () => {
 				return [op, b]
 			})
 
-			if (quit()) return
+			if (inspecting()) return
 			if (!next) return a
 
 			const [op, b] = next
@@ -929,7 +1181,7 @@ describe("fuller grammars", () => {
 
 		rule('number', () => {
 			const numToken = consume(Num)
-			if (quit()) return
+			if (inspecting()) return
 			return parseInt(numToken.value)
 		})
 
@@ -965,8 +1217,9 @@ describe("fuller grammars", () => {
 		const { Primitive, Str, Num, Comma, LeftBracket, RightBracket, LeftBrace, RightBrace, Colon } = lexer.tokenLibrary()
 		const miniJson = new Parser(lexer)
 		const {
-			rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, quit, INSPECT
+			inspecting, rule, subrule, maybeSubrule, gateSubrule,
+			consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+			many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 		} = miniJson.getPrimitives()
 
 		rule('jsonEntity', () => {

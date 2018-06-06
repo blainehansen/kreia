@@ -1,6 +1,10 @@
 const { expect } = require('chai')
 
 const kreia = require('../kreia')
+const lexing = require('kreia-moo')
+
+// const { matchToken, matchTokens } = lexing
+const { matchToken } = lexing
 
 describe("the top level api", () => {
 
@@ -28,9 +32,9 @@ describe("the top level api", () => {
 		})
 
 		const {
-		  rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-		  or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
-		  quit
+		  inspecting, rule, subrule, maybeSubrule, gateSubrule,
+		  consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+		  many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 		} = parser.getPrimitives()
 		const { LeftParen, RightParen, Num, Space, Dot, Bang } = tok
 
@@ -139,17 +143,17 @@ describe("the top level api", () => {
 
 	it("works for returning miniJson", () => {
 		const [miniJsonParser, tokenLibrary] = kreia.createParser({
-		  Primitive: ['null', 'undefined', 'true', 'false'],
-		  Str: { match: /"(?:\\["\\]|[^\n"\\])*"/, value: x => x.slice(1, -1) },
-		  Num: /[0-9]+/,
+		  Whitespace: { match: /\s+/, ignore: true, lineBreaks: true },
+		  Colon: ':',
 		  Comma: ',',
-		  LeftBracket: '[',
-		  RightBracket: ']',
 		  LeftBrace: '{',
 		  RightBrace: '}',
-		  Colon: ':',
-		  Whitespace: { match: /\s+/, ignore: true, lineBreaks: true },
-		})
+		  LeftBracket: '[',
+		  RightBracket: ']',
+		  Num: /[0-9]+/,
+		  Primitive: ['null', 'undefined', 'true', 'false'],
+		  Str: { match: /"(?:\\["\\]|[^\n"\\])*"/, value: x => x.slice(1, -1) },
+		}, 1)
 
 		const {
 		  Primitive, Str, Num, Comma,
@@ -157,9 +161,9 @@ describe("the top level api", () => {
 		} = tokenLibrary
 
 		const {
-		  rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-		  or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated,
-		  quit
+		  inspecting, rule, subrule, maybeSubrule, gateSubrule,
+		  consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+		  many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
 		} = miniJsonParser.getPrimitives()
 
 		rule('jsonEntity', () => {
@@ -193,7 +197,7 @@ describe("the top level api", () => {
 		  })
 		  consume(RightBrace)
 
-		  if (quit()) return
+		  if (inspecting()) return
 
 		  const object = {}
 		  for (const [key, value] of keyValuePairs) object[key] = value
@@ -206,7 +210,7 @@ describe("the top level api", () => {
 		    () => consume(Num),
 		    () => consume(Primitive),
 		  )
-		  if (quit()) return
+		  if (inspecting()) return
 
 		  const tokenValue = entity.value
 		  switch (entity.type) {
@@ -225,7 +229,7 @@ describe("the top level api", () => {
 		rule('jsonKey', () => {
 		  const key = consume(Str)
 		  consume(Colon)
-		  if (quit()) return
+		  if (inspecting()) return
 		  return key.value
 		})
 
@@ -251,5 +255,60 @@ describe("the top level api", () => {
 
 		miniJsonParser.reset(`["valid", "json"] (not valid extra)`)
 		expect(() => miniJsonParser.jsonEntity()).to.throw
+	})
+
+	it("programmatic example works", () => {
+		const [modeParser, tokenLibrary] = kreia.createParser({
+			HappyToken: 'happy',
+			AngryToken: 'angry',
+			NeutralToken: 'meh',
+		})
+
+		const { HappyToken, AngryToken, NeutralToken } = tokenLibrary
+
+		const {
+		  inspecting, rule, subrule, maybeSubrule, gateSubrule,
+		  consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+		  many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
+		} = modeParser.getPrimitives()
+
+		const modeTokenMap = {
+			happy: HappyToken,
+			angry: AngryToken,
+			neutral: NeutralToken,
+		}
+
+		function makeModeRule(mode) {
+		  rule(`${mode}Rule`, () => consume(modeTokenMap[mode]))
+		}
+
+		for (const mode of ['happy', 'angry', 'neutral']) {
+		  makeModeRule(mode)
+		}
+
+		let output
+
+		modeParser.reset("happy")
+		output = modeParser.happyRule()
+		expect(matchToken(output, HappyToken)).to.be.true
+
+		modeParser.reset("angry")
+		expect(() => modeParser.happyRule()).to.throw
+
+		modeParser.reset("meh")
+		expect(() => modeParser.happyRule()).to.throw
+
+		modeParser.reset("")
+		expect(() => modeParser.happyRule()).to.throw
+
+
+		modeParser.reset("angry")
+		output = modeParser.angryRule()
+		expect(matchToken(output, AngryToken)).to.be.true
+
+
+		modeParser.reset("meh")
+		output = modeParser.neutralRule()
+		expect(matchToken(output, NeutralToken)).to.be.true
 	})
 })

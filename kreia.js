@@ -16,7 +16,7 @@ module.exports = {
 	createParser,
 	createStatesParser,
 	lexingError: lexingFunctions.error,
-	createTokenCategory: lexingFunctions.createCategory,
+	createTokenCategory: (categoryName, ...parentCategories) => lexingFunctions.createCategory(categoryName, parentCategories),
 	matchToken: lexingFunctions.matchToken,
 	matchTokens: lexingFunctions.matchTokens,
 }

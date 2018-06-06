@@ -84,17 +84,19 @@ class ParseNode {
 }
 
 class Subrule {
-	constructor(definition, ruleName, ruleFunction) {
+	constructor(definition, ruleName, ruleFunction, lookahead) {
 		this.definition = definition
 		this.ruleName = ruleName
 		this.ruleFunction = ruleFunction
+		this.lookahead = lookahead
 	}
 }
 
 class SubruleNode extends ParseNode {
-	constructor(subrule, optional, lookahead) {
+	constructor(subrule, optional) {
 		if (subrule && !(subrule instanceof Subrule)) throw new Error("can't put anything other than a subrule into a subrule wrapper")
-		super(subrule ? subrule.definition : null, optional, lookahead)
+		const { definition, lookahead } = subrule ? subrule : { definition: null, lookahead: NO_LOOKAHEAD }
+		super(definition, optional, lookahead)
 		this.resolved = !!subrule
 		this.subrule = subrule
 	}
@@ -104,6 +106,7 @@ class SubruleNode extends ParseNode {
 
 		if (this.resolved) throw new Error("SubruleNode has already been resolved")
 		this.definition = subrule.definition
+		this.lookahead = subrule.lookahead
 		this.resolved = true
 		this.subrule = subrule
 	}
@@ -177,6 +180,11 @@ class Or extends ParseNode {
 }
 
 class Many extends ParseNode {
+	constructor(definition, optional, lookahead) {
+		super(definition, optional, lookahead)
+		// many doesn't need a decision if the definition is tokens or a subrule
+	}
+
 	getInlineEntryPath(lookahead) {
 		const [, entryPath] = ParseNode.getLinearEntryPath(this.definition, lookahead)
 		entryPath.push(UNKNOWN_AFTER)

@@ -111,7 +111,7 @@ class Parser {
 		this.ruleEntryPaths = {}
 
 		// for inspection
-		this.inspecting = false
+		this.inInspectionMode = false
 		this.definitionScope = null
 
 		// maps subruleNames to lists of unresolved items
@@ -122,41 +122,65 @@ class Parser {
 		this.currentTokenIndex = 0
 	}
 
-	quit() {
-		return this.inspecting
+	inspecting() {
+		return this.inInspectionMode
 	}
+
+	formatError(token, message) {
+		return this.lexer.formatError(token, message)
+	}
+
+	createError(token, message) {
+		return new Error(this.lexer.formatError(token, message))
+	}
+
+	// formatRangeError(beginToken, endToken, message) {
+	// 	return this.lexer.formatRangeError(beginToken, endToken, message)
+	// }
 
 	getPrimitives() {
 		let {
-			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, quit,
-			optionsMaybeSubrule, optionsMaybe, optionsMany, optionsManySeparated,
+			inspecting,
+			rule, subrule, maybeSubrule, gateSubrule,
+			consume, maybeConsume, gateConsume,
+			maybe, gate,
+			or, maybeOr, gateOr,
+			many, maybeMany, gateMany,
+			manySeparated, maybeManySeparated, gateManySeparated,
+			formatError, // formatRangeError,
 		} = this
 
-		look = look.bind(this)
-		lookRange = lookRange.bind(this)
+		inspecting = inspecting.bind(this)
 		rule = rule.bind(this)
 		subrule = subrule.bind(this)
 		maybeSubrule = maybeSubrule.bind(this)
-		maybe = maybe.bind(this)
+		gateSubrule = gateSubrule.bind(this)
 		consume = consume.bind(this)
 		maybeConsume = maybeConsume.bind(this)
+		gateConsume = gateConsume.bind(this)
+		maybe = maybe.bind(this)
+		gate = gate.bind(this)
 		or = or.bind(this)
 		maybeOr = maybeOr.bind(this)
+		gateOr = gateOr.bind(this)
 		many = many.bind(this)
 		maybeMany = maybeMany.bind(this)
+		gateMany = gateMany.bind(this)
 		manySeparated = manySeparated.bind(this)
 		maybeManySeparated = maybeManySeparated.bind(this)
-		quit = quit.bind(this)
-		optionsMaybeSubrule = optionsMaybeSubrule.bind(this)
-		optionsMaybe = optionsMaybe.bind(this)
-		optionsMany = optionsMany.bind(this)
-		optionsManySeparated = optionsManySeparated.bind(this)
+		gateManySeparated = gateManySeparated.bind(this)
+		formatError = formatError.bind(this)
+		// formatRangeError = formatRangeError.bind(this)
 
 		return {
-			look, lookRange, rule, subrule, maybeSubrule, maybe, consume, maybeConsume,
-			or, maybeOr, many, maybeMany, manySeparated, maybeManySeparated, quit,
-			optionsMaybeSubrule, optionsMaybe, optionsMany, optionsManySeparated,
+			inspecting,
+			rule, subrule, maybeSubrule, gateSubrule,
+			consume, maybeConsume, gateConsume,
+			maybe, gate,
+			or, maybeOr, gateOr,
+			many, maybeMany, gateMany,
+			manySeparated, maybeManySeparated, gateManySeparated,
+			formatError, // formatRangeError,
 		}
 	}
 
@@ -188,7 +212,7 @@ class Parser {
 	}
 
 	advance(amount = 1) {
-		if (amount <= 0) throw new Error("advance can't be called with a negative number")
+		if (amount <= 0) throw new Error("advance can't be called with a non positive whole number")
 
 		this.currentTokenIndex += amount
 
@@ -203,7 +227,7 @@ class Parser {
 		else return false
 	}
 
-	rule(ruleName, ruleFunction) {
+	rule(ruleName, ruleFunction, lookahead = this.lookahead) {
 		this[ruleName] = (...args) => {
 			const subruleResults = this.subrule(ruleName, ...args)
 
@@ -218,13 +242,13 @@ class Parser {
 		if (this.definitionScope !== null) throw new Error("rule should only be invoked to create rules, and not from other rules")
 
 		const definition = this.definitionScope = []
-		// since inspecting is true, all parser primitive functions will push their definitions to definitionScope
-		this.inspecting = true
+		// since inInspectionMode is true, all parser primitive functions will push their definitions to definitionScope
+		this.inInspectionMode = true
 		ruleFunction()
-		this.inspecting = false
+		this.inInspectionMode = false
 		this.definitionScope = null
 
-		const subrule = this.rules[ruleName] = new Subrule(definition, ruleName, ruleFunction)
+		const subrule = this.rules[ruleName] = new Subrule(definition, ruleName, ruleFunction, lookahead)
 
 		const canResolveSubruleNodes = this.unresolvedSubruleNodes[ruleName] || []
 		// this will also look at all unresolved subrules and resolve them with this
@@ -329,6 +353,25 @@ class Parser {
 		}
 	}
 
+	processDefs(defs, allowArgs = true, allowGate = true) {
+		return defs.map((def) => this.processDef(def, allowArgs, allowGate))
+	}
+
+	processDef(def, allowArgs = false, allowGate = false) {
+		const type = typeof def
+		if (type == 'function') def = { func: def }
+		// there will be a case for passing through tokens or tokens of arrays here
+		if (allowArgs) def.args = def.args || []
+		else if ('args' in def) throw new Error("this method doesn't allow args, use the ... in the function instead")
+
+		if (allowGate) def.gate = def.gate || null
+		else if ('gate' in def) throw new Error("this method doesn't allow a gate, use the gate version of this method instead")
+
+		def.lookahead = def.lookahead || this.lookahead
+
+		return def
+	}
+
 	subrule(ruleName, ...args) {
 		return this.subruleInternal(ruleName, false, args)
 	}
@@ -337,18 +380,17 @@ class Parser {
 		return this.subruleInternal(ruleName, true, args)
 	}
 
-	optionsMaybeSubrule(ruleName, lookahead, ...args) {
-		return this.subruleInternal(ruleName, true, args, lookahead)
+	gateSubrule(gateFunction, ruleName, ...args) {
+		return this.subruleInternal(ruleName, true, args, gateFunction)
 	}
 
-	subruleInternal(ruleName, optional, args, lookahead = this.lookahead) {
+	subruleInternal(ruleName, optional, args, gate = undefined) {
 		const rule = this.rules[ruleName]
-		if (this.inspecting) {
+		if (this.inInspectionMode) {
 			if (!rule) {
 				// this looks to see if the subrule being invoked has already been defined
 				// if it hasn't, it adds this name to the set of unresolved
-				// we also create an unresolved decision tree and push it both to the current scopes and to the unresolved list
-				const unresolvedSubruleNode = new SubruleNode(null, optional, lookahead)
+				const unresolvedSubruleNode = new SubruleNode(null, optional)
 				this.definitionScope.push(unresolvedSubruleNode)
 
 				const existingUnresolved = this.unresolvedSubruleNodes[ruleName] || []
@@ -356,12 +398,14 @@ class Parser {
 				this.unresolvedSubruleNodes[ruleName] = existingUnresolved
 			}
 			else {
-				const subruleNode = new SubruleNode(rule, optional, lookahead)
+				const subruleNode = new SubruleNode(rule, optional)
 				this.definitionScope.push(subruleNode)
 			}
 
-			return {}
+			return
 		}
+
+		if (gate && !gate()) return
 
 		let shouldEnter = true
 		if (optional) {
@@ -388,24 +432,29 @@ class Parser {
 		return ruleReturnValue
 	}
 
+
 	maybe(def, ...args) {
 		return this.maybeInternal(def, args)
 	}
 
-	optionsMaybe(def, lookahead, ...args) {
-		return this.maybeInternal(def, args, lookahead)
+	gate(gateFunction, def, ...args) {
+		return this.maybeInternal(def, args, gateFunction)
 	}
 
-	maybeInternal(def, args, lookahead = this.lookahead) {
-		if (this.inspecting) {
+	maybeInternal(def, args, gate = undefined) {
+		const { lookahead, func: defFunc } = this.processDef(def)
+
+		if (this.inInspectionMode) {
 			const oldDefinitionScope = this.definitionScope
 			const currentDefinitionScope = this.definitionScope = []
-			def()
+			defFunc()
 			oldDefinitionScope.push(new Maybe(currentDefinitionScope, lookahead))
 			this.definitionScope = oldDefinitionScope
 
-			return {}
+			return
 		}
+
+		if (gate && !gate()) return
 
 		// we grab the decision path at the right key, and then we increment the decision number
 		const decisionPath = this.decisionPathStack.getDecisionPath()
@@ -416,7 +465,7 @@ class Parser {
 		let defResults
 		if (remainingTokens !== false && nextTokens.length != remainingTokens.length) {
 			this.decisionPathStack.enterDecision()
-			defResults = def(...args)
+			defResults = defFunc(...args)
 			this.decisionPathStack.exitDecision()
 		}
 
@@ -425,21 +474,7 @@ class Parser {
 		return defResults
 	}
 
-	processChoices(choices) {
-		return choices.map((choice) => this.processChoice(choice))
-	}
-
-	processChoice(choice) {
-		if (typeof choice == 'function') return { choice, args: [], lookahead: this.lookahead }
-		else if (!choice || typeof choice.choice != 'function') throw new Error(`You provided an invalid choice: ${choice}`)
-
-		choice.lookahead = choice.lookahead || this.lookahead
-		choice.args = choice.args || []
-		return choice
-	}
-
 	or(...choices) {
-		choices = this.processChoices(choices)
 		const [tookChoice, choiceResults] = this.orInternal(false, choices)
 
 		if (!tookChoice) {
@@ -450,18 +485,24 @@ class Parser {
 	}
 
 	maybeOr(...choices) {
-		choices = this.processChoices(choices)
 		const [, choiceResults] = this.orInternal(true, choices)
 		return choiceResults
 	}
 
-	orInternal(optional, choices) {
+	gateOr(gateFunction, ...choices) {
+		const [, choiceResults] = this.orInternal(true, choices, gateFunction)
+		return choiceResults
+	}
+
+	orInternal(optional, choices, gate = undefined) {
 		if (choices.length < 2) throw new Error("can't call an `or` variant with less than two choices")
 
-		if (this.inspecting) {
+		choices = this.processDefs(choices)
+
+		if (this.inInspectionMode) {
 			const alternations = []
 			const oldDefinitionScope = this.definitionScope
-			for (const { choice, lookahead } of choices) {
+			for (const { func: choice, lookahead } of choices) {
 				const currentAlternationScope = this.definitionScope = []
 				choice()
 				alternations.push({ lookahead, definition: currentAlternationScope })
@@ -472,6 +513,8 @@ class Parser {
 			return [true, undefined]
 		}
 
+		if (gate && !gate()) return [false, undefined]
+
 		let choiceResults
 		let tookChoice = false
 
@@ -481,7 +524,7 @@ class Parser {
 			throw new Error("an or() decisionPath wasn't an array")
 		}
 
-		for (const [whichChoice, { choice, args }] of choices.entries()) {
+		for (const [whichChoice, { func: choice, gate: choiceGate, args }] of choices.entries()) {
 			const decisionPath = decisionPaths[whichChoice]
 			if (decisionPath === undefined) {
 				log(whichChoice)
@@ -490,6 +533,9 @@ class Parser {
 				log(branch)
 				throw new Error("the choices and decisionPaths didn't line up")
 			}
+
+			// TODO maybe this should go first?
+			if (choiceGate && !choiceGate()) continue
 
 			const nextTokens = this.lookRange(decisionPath.maxLength)
 			const [, remainingTokens] = decisionPath.testAgainstTokens(nextTokens)
@@ -520,27 +566,31 @@ class Parser {
 		return this.manyInternal(def, true, args)
 	}
 
-	optionsMany(def, lookahead, ...args) {
-		return this.manyInternal(def, true, args, lookahead)
+	gateMany(gateFunction, def, ...args) {
+		return this.manyInternal(def, true, args, gateFunction)
 	}
 
-	manyInternal(def, optional, args, lookahead = this.lookahead) {
-		if (this.inspecting) {
+	manyInternal(def, optional, args, gate = undefined) {
+		const { func: defFunc, lookahead } = this.processDef(def)
+
+		if (this.inInspectionMode) {
 			const oldDefinitionScope = this.definitionScope
 			const currentDefinitionScope = this.definitionScope = []
-			def()
+			defFunc()
 			oldDefinitionScope.push(new Many(currentDefinitionScope, optional, lookahead))
 			this.definitionScope = oldDefinitionScope
 
-			return {}
+			return
 		}
+
+		if (gate && !gate()) return []
 
 		const allResults = []
 		if (!optional) {
 			this.decisionPathStack.enterDecision()
 			// this one is mandatory
 			// if it's unsuccessful, it will throw an expectation error
-			allResults.push(def(...args))
+			allResults.push(defFunc(...args))
 			this.decisionPathStack.exitDecision()
 		}
 
@@ -550,7 +600,7 @@ class Parser {
 		let [, remainingTokens] = decisionPath.testAgainstTokens(nextTokens)
 		while (remainingTokens !== false && nextTokens.length != remainingTokens.length) {
 			this.decisionPathStack.enterDecision()
-			allResults.push(def(...args))
+			allResults.push(defFunc(...args))
 			this.decisionPathStack.exitDecision()
 
 			nextTokens = this.lookRange(decisionPath.maxLength)
@@ -564,28 +614,33 @@ class Parser {
 
 
 	manySeparated(def, sep, ...args) {
-		def = this.processChoice({ choice: def, args })
-		sep = this.processChoice({ choice: sep })
-		return this.manySeparatedInternal(def, sep, false)
+		return this.manySeparatedInternal(def, sep, false, args)
 	}
 
 	maybeManySeparated(def, sep, ...args) {
-		def = this.processChoice({ choice: def, args })
-		sep = this.processChoice({ choice: sep })
-		return this.manySeparatedInternal(def, sep, true)
+		return this.manySeparatedInternal(def, sep, true, args)
 	}
 
-	optionsManySeparated(def, sep, optional) {
-		def = this.processChoice(def)
-		sep = this.processChoice(sep)
-		return this.manySeparatedInternal(def, sep, optional)
+	gateManySeparated(gateFunction, def, sep, ...args) {
+		return this.manySeparatedInternal(def, sep, true, args, gateFunction)
 	}
 
-	manySeparatedInternal(def, sep, optional) {
-		const { choice: defFunc, args: defArgs, lookahead: defLookahead } = def
-		const { choice: sepFunc, args: sepArgs, lookahead: sepLookahead } = sep
+	manySeparatedInternal(def, sep, optional, args, gate = undefined) {
+		const [
+			{ func: defFunc, args: defArgs, lookahead: defLookahead },
+			{ func: sepFunc, args: sepArgs, lookahead: sepLookahead }
+		] = this.processDefs([def, sep], true, false)
 
-		if (this.inspecting) {
+		if (args.length > 0) {
+			if (defArgs.length > 0 || sepArgs.length > 0) {
+				console.log(defArgs)
+				console.log(sepArgs)
+				throw new Error("can only use the variadic ...args by itself or the args property of the def or sep. You can't do both at the same time")
+			}
+			defArgs.push.apply(defArgs, args)
+		}
+
+		if (this.inInspectionMode) {
 			const oldDefinitionScope = this.definitionScope
 
 			const currentDefinitionScope = this.definitionScope = []
@@ -603,8 +658,10 @@ class Parser {
 			)
 			this.definitionScope = oldDefinitionScope
 
-			return {}
+			return
 		}
+
+		if (gate && !gate()) return []
 
 		const [enterDecisionPath, continueDecisionPath] = this.decisionPathStack.getDecisionPath()
 
@@ -650,7 +707,7 @@ class Parser {
 
 
 	consume(...tokenTypeArray) {
-		if (this.inspecting) {
+		if (this.inInspectionMode) {
 			this.definitionScope.push(new Consume(tokenTypeArray, false))
 			return {}
 		}
@@ -662,7 +719,7 @@ class Parser {
 	}
 
 	maybeConsume(...tokenTypeArray) {
-		if (this.inspecting) {
+		if (this.inInspectionMode) {
 			this.definitionScope.push(new Consume(tokenTypeArray, true))
 			return {}
 		}
@@ -674,9 +731,11 @@ class Parser {
 		}
 	}
 
-	// gateConsume(gate, ...tokenTypeArray) {
+	gateConsume(gateFunction, ...tokenTypeArray) {
+		if (!this.inInspectionMode && gateFunction && !gateFunction()) return
 
-	// }
+		return this.maybeConsume(...tokenTypeArray)
+	}
 }
 
 
