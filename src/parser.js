@@ -42,7 +42,6 @@ class DecisionPathStack {
 		const subruleName = this.subruleStack.last()
 		const indexList = this.subruleBranchIndexListStack.last()
 
-		// console.log('getCurrentKey: ', subruleName + '.' + indexList.join('.'))
 		return subruleName + '.' + indexList.join('.')
 	}
 
@@ -58,9 +57,7 @@ class DecisionPathStack {
 	}
 
 	enterDecision() {
-		// console.log('before enterDecision: ', this.subruleBranchIndexListStack)
 		this.subruleBranchIndexListStack.last().push(0)
-		// console.log('after enterDecision: ', this.subruleBranchIndexListStack)
 	}
 
 	exitDecision() {
@@ -193,7 +190,7 @@ class Parser {
 
 	// this method will primarily be used in the various gates
 	look(amount = 1) {
-		if (amount <= 0) throw new Error("you can't look a non positive whole number amount")
+		if (amount <= 0) throw new Error(`you can't look a non positive whole number amount: ${amount}`)
 
 		let current = amount - this.lookQueue.length
 		while (current > 0) {
@@ -205,14 +202,14 @@ class Parser {
 	}
 
 	lookRange(amount) {
-		if (amount <= 0) throw new Error("you can't look a non positive whole number amount")
+		if (amount <= 0) throw new Error(`you can't look a non positive whole number amount: ${amount}`)
 
 		this.look(amount)
 		return this.lookQueue.slice(0, amount)
 	}
 
 	advance(amount = 1) {
-		if (amount <= 0) throw new Error("advance can't be called with a non positive whole number")
+		if (amount <= 0) throw new Error(`advance can't be called with a non positive whole number: ${amount}`)
 
 		this.currentTokenIndex += amount
 
@@ -234,7 +231,12 @@ class Parser {
 			// this function would be called as a top level rule
 			// if there are any tokens still in the output, that's an error
 			const remainingQueue = this.lookQueue.filter((token) => token !== undefined)
-			if (this.lexer.next() !== undefined || remainingQueue.length != 0) throw new Error("there are still tokens in the output")
+			let nextToken = this.lexer.next()
+			if (nextToken !== undefined || remainingQueue.length != 0) {
+				console.log(this.lookQueue)
+				console.log(nextToken)
+				throw new Error("there are still tokens in the output")
+			}
 			return subruleResults
 		}
 
@@ -534,7 +536,6 @@ class Parser {
 				throw new Error("the choices and decisionPaths didn't line up")
 			}
 
-			// TODO maybe this should go first?
 			if (choiceGate && !choiceGate()) continue
 
 			const nextTokens = this.lookRange(decisionPath.maxLength)
@@ -550,6 +551,7 @@ class Parser {
 
 				this.decisionPathStack.exitDecision()
 				this.decisionPathStack.exitDecision()
+				break
 			}
 		}
 
@@ -715,7 +717,11 @@ class Parser {
 		// this can just go ahead and advance then check, since if the match doesn't succeed we'll just error
 		const nextTokens = this.advance(tokenTypeArray.length)
 		if (matchTokens(nextTokens, tokenTypeArray)) return unwrapOneItemArray(nextTokens)
-		else throw new Error(`next tokens didn't match:\n\texpected: ${tokenTypeArray}\n\tfound: ${nextTokens}`)
+		else {
+			console.log('expected: ', tokenTypeArray)
+			console.log('found: ', nextTokens)
+			throw new Error("next tokens didn't match")
+		}
 	}
 
 	maybeConsume(...tokenTypeArray) {

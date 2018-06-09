@@ -934,6 +934,44 @@ describe("args and custom lookahead", () => {
 
 
 describe("tricky parsing situations", () => {
+	it("or alternations follow each other so each is iterated (test break)", () => {
+		const trickyParser = new Parser(lexer)
+		const {
+			inspecting, rule, subrule, maybeSubrule, gateSubrule,
+			consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
+			many, maybeMany, gateMany, manySeparated, maybeManySeparated, gateManySeparated,
+		} = trickyParser.getPrimitives()
+
+		rule("rollingOr", () => {
+			return many(() => {
+				return or(
+					() => consume(Space),
+					() => consume(Dot),
+					() => consume(Num),
+				)
+			})
+		})
+
+		trickyParser.analyze()
+
+		trickyParser.reset(" .0")
+		output = trickyParser.rollingOr()
+		expect(matchTokens(output, [Space, Dot, Num])).to.be.true
+
+		trickyParser.reset("0. ")
+		output = trickyParser.rollingOr()
+		expect(matchTokens(output, [Num, Dot, Space])).to.be.true
+
+		trickyParser.reset("...")
+		output = trickyParser.rollingOr()
+		expect(matchTokens(output, [Dot, Dot, Dot])).to.be.true
+
+		trickyParser.reset("0.0")
+		output = trickyParser.rollingOr()
+		expect(matchTokens(output, [Num, Dot, Num])).to.be.true
+	})
+
+
 	it("potentially ambiguous manySeparated", () => {
 		const trickyParser = new Parser(lexer)
 		const {
