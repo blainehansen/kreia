@@ -27,7 +27,7 @@ class DecisionPath {
 			this.path.push.apply(this.path, tokenListOrBranch.path)
 		}
 		else if (tokenListOrBranch !== UNKNOWN_AFTER && !(tokenListOrBranch instanceof DecisionBranch) && !(tokenListOrBranch instanceof Array)) {
-			console.log(tokenListOrBranch)
+			console.error(tokenListOrBranch)
 			throw new Error("paths can only hold paths, arrays of tokens, or branches")
 		}
 		else this.path.push(tokenListOrBranch)
@@ -57,6 +57,27 @@ class DecisionPath {
 
 		return [terminated, tokenList]
 	}
+
+	giveExpected() {
+		const expectedPaths = []
+
+		for (const path of this.path) {
+			if (path === UNKNOWN_AFTER) return expectedPaths
+
+			if (path instanceof Array) {
+				expectedPaths.push(path)
+				return expectedPaths
+			}
+
+			if (path instanceof DecisionBranch) {
+				const [hasEmpty, branchExpectedPaths] = path.giveExpected()
+				expectedPaths.push.apply(expectedPaths, branchExpectedPaths)
+				if (!hasEmpty) return expectedPaths
+			}
+		}
+
+		return expectedPaths
+	}
 }
 
 class DecisionBranch {
@@ -66,7 +87,7 @@ class DecisionBranch {
 
 	push(path) {
 		if (!(path instanceof DecisionPath) && path !== EMPTY_BRANCH) {
-			console.log(path)
+			console.error(path)
 			throw new Error("branches can only hold paths")
 		}
 		else this.branches.push(path)
@@ -87,6 +108,16 @@ class DecisionBranch {
 		}
 
 		return [-1, false, false]
+	}
+
+	giveExpected() {
+		const expectedPaths = []
+		let hasEmpty = false
+		for (const path of this.branches) {
+			if (path !== EMPTY_BRANCH) expectedPaths.push(path)
+			else hasEmpty = true
+		}
+		return [hasEmpty, expectedPaths]
 	}
 }
 

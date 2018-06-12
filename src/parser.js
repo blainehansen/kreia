@@ -9,7 +9,7 @@ Array.prototype.setLast = function(value) {
 
 const util = require('util')
 function log(obj) {
-	console.log(util.inspect(obj, { depth: null }))
+	console.error(util.inspect(obj, { depth: null }))
 }
 
 const { matchTokens } = require('kreia-moo')
@@ -233,8 +233,8 @@ class Parser {
 			const remainingQueue = this.lookQueue.filter((token) => token !== undefined)
 			let nextToken = this.lexer.next()
 			if (nextToken !== undefined || remainingQueue.length != 0) {
-				console.log(this.lookQueue)
-				console.log(nextToken)
+				console.error(this.lookQueue)
+				console.error(nextToken)
 				throw new Error("there are still tokens in the output")
 			}
 			return subruleResults
@@ -477,23 +477,15 @@ class Parser {
 	}
 
 	or(...choices) {
-		const [tookChoice, choiceResults] = this.orInternal(false, choices)
-
-		if (!tookChoice) {
-			log(choices)
-			throw new Error("unsuccessful Or decision")
-		}
-		return choiceResults
+		return this.orInternal(false, choices)
 	}
 
 	maybeOr(...choices) {
-		const [, choiceResults] = this.orInternal(true, choices)
-		return choiceResults
+		return this.orInternal(true, choices)
 	}
 
 	gateOr(gateFunction, ...choices) {
-		const [, choiceResults] = this.orInternal(true, choices, gateFunction)
-		return choiceResults
+		return this.orInternal(true, choices, gateFunction)
 	}
 
 	orInternal(optional, choices, gate = undefined) {
@@ -522,10 +514,11 @@ class Parser {
 
 		const decisionPaths = this.decisionPathStack.getDecisionPath()
 		if (!(decisionPaths instanceof Array)) {
-			console.log(decisionPaths)
+			console.error(decisionPaths)
 			throw new Error("an or() decisionPath wasn't an array")
 		}
 
+		let maxDecisionLength = 0
 		for (const [whichChoice, { func: choice, gate: choiceGate, args }] of choices.entries()) {
 			const decisionPath = decisionPaths[whichChoice]
 			if (decisionPath === undefined) {
@@ -539,6 +532,7 @@ class Parser {
 			if (choiceGate && !choiceGate()) continue
 
 			const nextTokens = this.lookRange(decisionPath.maxLength)
+			if (maxDecisionLength < decisionPath.maxLength) maxDecisionLength = decisionPath.maxLength
 			const [, remainingTokens] = decisionPath.testAgainstTokens(nextTokens)
 
 			if (remainingTokens !== false && nextTokens.length != remainingTokens.length) {
@@ -556,7 +550,23 @@ class Parser {
 		}
 
 		this.decisionPathStack.incrementDecision()
-		return [tookChoice, choiceResults]
+
+		if (!optional && !tookChoice) throw Parser.throwUnsuccessfulOr(decisionPaths, this.lookRange(maxDecisionLength))
+
+		return choiceResults
+	}
+
+	static throwUnsuccessfulOr(decisionPaths, nextTokens) {
+		console.error("in or(), expected one of:")
+		for (const decisionPath of decisionPaths) {
+			for (const path of decisionPath.giveExpected()) {
+				console.error(path)
+			}
+			console.error('')
+		}
+		console.error("found:")
+		console.error(nextTokens)
+		return new Error("unsuccessful Or decision")
 	}
 
 
@@ -635,8 +645,8 @@ class Parser {
 
 		if (args.length > 0) {
 			if (defArgs.length > 0 || sepArgs.length > 0) {
-				console.log(defArgs)
-				console.log(sepArgs)
+				console.error(defArgs)
+				console.error(sepArgs)
 				throw new Error("can only use the variadic ...args by itself or the args property of the def or sep. You can't do both at the same time")
 			}
 			defArgs.push.apply(defArgs, args)
@@ -718,8 +728,8 @@ class Parser {
 		const nextTokens = this.advance(tokenTypeArray.length)
 		if (matchTokens(nextTokens, tokenTypeArray)) return unwrapOneItemArray(nextTokens)
 		else {
-			console.log('expected: ', tokenTypeArray)
-			console.log('found: ', nextTokens)
+			console.error('expected: ', tokenTypeArray)
+			console.error('found: ', nextTokens)
 			throw new Error("next tokens didn't match")
 		}
 	}

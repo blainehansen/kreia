@@ -6,12 +6,6 @@ A flexible and easy to use parser library.
 
 ---
 
-## This library is in active development.
-
-There are lots of little features that are undone, and the "friendliness" of many of the errors and apis hasn't been completely finished. Contributions are welcome!
-
----
-
 Kreia makes it effortless to build completely custom lookahead parsers in pure javascript, and all the looking ahead is completely handled for you.
 
 Here's a small example.

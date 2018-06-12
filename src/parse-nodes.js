@@ -15,12 +15,12 @@ class ParseNode {
 		if (isArray && definition.length <= 0) throw new Error("tried to create a rule without any parse functions in it")
 
 		if (check && definition !== null && definition.every((node) => node.optional)) {
-			console.log(definition)
+			console.error(definition)
 			throw new Error("A definition was given where everything was optional. Instead of making all the items within something optional, make the whole thing optional.")
 		}
 
 		if ((typeof lookahead != 'number' || lookahead <= 0) && lookahead !== NO_LOOKAHEAD) {
-			console.log('lookahead: ', lookahead)
+			console.error('lookahead: ', lookahead)
 			throw new Error(`An invalid lookahead was passed: ${lookahead}`)
 		}
 
