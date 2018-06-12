@@ -504,10 +504,10 @@ class Parser {
 			oldDefinitionScope.push(new Or(alternations, optional))
 			this.definitionScope = oldDefinitionScope
 
-			return [true, undefined]
+			return
 		}
 
-		if (gate && !gate()) return [false, undefined]
+		if (gate && !gate()) return
 
 		let choiceResults
 		let tookChoice = false
