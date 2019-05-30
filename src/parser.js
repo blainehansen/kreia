@@ -131,6 +131,10 @@ class Parser {
 		return new Error(this.lexer.formatError(token, message))
 	}
 
+	getTopLevel(key) {
+		return this[key].bind(this)
+	}
+
 	// formatRangeError(beginToken, endToken, message) {
 	// 	return this.lexer.formatRangeError(beginToken, endToken, message)
 	// }
