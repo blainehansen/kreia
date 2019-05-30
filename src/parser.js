@@ -132,7 +132,8 @@ class Parser {
 	}
 
 	getTopLevel(key) {
-		return this[key].bind(this)
+		const f = this[key]
+		return f.bind(this)
 	}
 
 	// formatRangeError(beginToken, endToken, message) {
@@ -253,6 +254,8 @@ class Parser {
 		ruleFunction()
 		this.inInspectionMode = false
 		this.definitionScope = null
+
+		if (definition.length === 0) throw new Error(`created a rule with no parsing functions: ${ruleName}`)
 
 		const subrule = this.rules[ruleName] = new Subrule(definition, ruleName, ruleFunction, lookahead)
 

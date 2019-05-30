@@ -15,6 +15,10 @@ describe("the top level api", () => {
 			Bang: '!',
 		})
 
+		const tokCategories: string[] = tok.LeftParen.categories || []
+		expect(tokCategories).to.be.an('array').with.lengthOf(1)
+		expect(tokCategories[0]).to.be.a('string').with.lengthOf(5)
+
 		const {
 		  inspecting, rule, subrule, maybeSubrule, gateSubrule,
 		  consume, maybeConsume, gateConsume, maybe, gate, or, maybeOr, gateOr,
@@ -43,11 +47,16 @@ describe("the top level api", () => {
 		})
 
 		rule('parenNumber', () => {
-			consume(LeftParen)
+			const l = consume(LeftParen)
 			maybeConsume(Space)
 			consume(Num)
 			maybeConsume(Space)
 			consume(RightParen)
+
+			if (inspecting()) return
+			const lCategories: string[] = l.categories || []
+			expect(lCategories).to.be.an('array').with.lengthOf(1)
+			expect(lCategories[0]).to.be.a('string').with.lengthOf(5)
 		})
 
 		rule('endingParens', () => {
@@ -57,21 +66,18 @@ describe("the top level api", () => {
 			})
 		})
 
-		expect(() => parser.analyze()).to.not.throw
+		parser.analyze()
 
 		const top = parser.getTopLevel('top') as any as () => void
 
-		function expectCanParse(input: string) {
-			parser.reset(input)
-			expect(() => top()).to.not.throw
-		}
+		parser.reset("(4) (4).(4) ! (.))()(.().(.)(.")
+		top()
 
-		expectCanParse("(4) (4).(4) ! (.))()(.().(.)(.")
-
-		expectCanParse("(4)( 4)(4 )( 4 ) (4).(4) (4) ( 4).( 4).(4) ( 4 ) ! ")
+		parser.reset("(4)( 4)(4 )( 4 ) (4).(4) (4) ( 4).( 4).(4) ( 4 ) ! ")
+		top()
 
 		parser.reset("asdf")
-		expect(() => top()).to.throw
+		expect(() => top()).to.throw()
 	})
 
 	it("readme example works", () => {
@@ -125,7 +131,7 @@ describe("the top level api", () => {
 		`)
 
 		const lists = parser.getTopLevel('lists') as () => void
-		expect(() => lists()).to.not.throw
+		expect(() => lists()).to.not.throw()
 	})
 
 	it("works for returning miniJson", () => {
@@ -200,6 +206,8 @@ describe("the top level api", () => {
 		  if (inspecting()) return
 
 		  const tokenValue = entity.value
+			const tokCategories = entity.categories
+			expect(tokCategories).to.be.null
 		  switch (entity.type) {
 		    case 'Str': return tokenValue
 		    case 'Num': return parseInt(tokenValue)
@@ -239,10 +247,10 @@ describe("the top level api", () => {
 		expect(str).to.be.a('string').that.eql("various stuff")
 
 		miniJsonParser.reset(`not valid`)
-		expect(() => jsonEntity()).to.throw
+		expect(() => jsonEntity()).to.throw()
 
 		miniJsonParser.reset(`["valid", "json"] (not valid extra)`)
-		expect(() => jsonEntity()).to.throw
+		expect(() => jsonEntity()).to.throw()
 	})
 
 	it("programmatic example works", () => {
@@ -283,13 +291,13 @@ describe("the top level api", () => {
 		expect(matchToken(output, HappyToken)).to.be.true
 
 		modeParser.reset("angry")
-		expect(() => happyRule()).to.throw
+		expect(() => happyRule()).to.throw()
 
 		modeParser.reset("meh")
-		expect(() => happyRule()).to.throw
+		expect(() => happyRule()).to.throw()
 
 		modeParser.reset("")
-		expect(() => happyRule()).to.throw
+		expect(() => happyRule()).to.throw()
 
 		modeParser.reset("angry")
 		output = angryRule()

@@ -73,11 +73,11 @@ describe("the top level api", () => {
 			})
 		})
 
-		expect(() => parser.analyze()).to.not.throw
+		expect(() => parser.analyze()).to.not.throw()
 
 		function expectCanParse(input) {
 			parser.reset(input)
-			expect(() => parser.top()).to.not.throw
+			expect(() => parser.top()).to.not.throw()
 		}
 
 		expectCanParse("(4) (4).(4) ! (.))()(.().(.)(.")
@@ -85,7 +85,7 @@ describe("the top level api", () => {
 		expectCanParse("(4)( 4)(4 )( 4 ) (4).(4) (4) ( 4).( 4).(4) ( 4 ) ! ")
 
 		parser.reset("asdf")
-		expect(() => parser.top()).to.throw
+		expect(() => parser.top()).to.throw()
 	})
 
 	it("readme example works", () => {
@@ -138,7 +138,7 @@ describe("the top level api", () => {
 		  (1, (2, 3, 4), (((), nil)))
 		`)
 
-		expect(() => parser.lists()).to.not.throw
+		expect(() => parser.lists()).to.not.throw()
 	})
 
 	it("works for returning miniJson", () => {
@@ -251,10 +251,10 @@ describe("the top level api", () => {
 		expect(str).to.be.a('string').that.eql("various stuff")
 
 		miniJsonParser.reset(`not valid`)
-		expect(() => miniJsonParser.jsonEntity()).to.throw
+		expect(() => miniJsonParser.jsonEntity()).to.throw()
 
 		miniJsonParser.reset(`["valid", "json"] (not valid extra)`)
-		expect(() => miniJsonParser.jsonEntity()).to.throw
+		expect(() => miniJsonParser.jsonEntity()).to.throw()
 	})
 
 	it("programmatic example works", () => {
@@ -293,13 +293,13 @@ describe("the top level api", () => {
 		expect(matchToken(output, HappyToken)).to.be.true
 
 		modeParser.reset("angry")
-		expect(() => modeParser.happyRule()).to.throw
+		expect(() => modeParser.happyRule()).to.throw()
 
 		modeParser.reset("meh")
-		expect(() => modeParser.happyRule()).to.throw
+		expect(() => modeParser.happyRule()).to.throw()
 
 		modeParser.reset("")
-		expect(() => modeParser.happyRule()).to.throw
+		expect(() => modeParser.happyRule()).to.throw()
 
 
 		modeParser.reset("angry")

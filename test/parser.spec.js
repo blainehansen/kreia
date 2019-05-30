@@ -133,7 +133,7 @@ describe("basic tests for", () => {
 		expect(matchToken(output, Num)).to.be.true
 
 		basicParser.reset(" ")
-		expect(() => basicParser.testConsumeOne()).to.throw
+		expect(() => basicParser.testConsumeOne()).to.throw()
 	})
 	it("testConsumeMultiple", () => {
 		basicParser.reset(" 0 0")
@@ -141,7 +141,7 @@ describe("basic tests for", () => {
 		expect(matchTokens(output, [Num, Space, Num])).to.be.true
 
 		basicParser.reset(" ()")
-		expect(() => basicParser.testConsumeMultiple()).to.throw
+		expect(() => basicParser.testConsumeMultiple()).to.throw()
 	})
 	it("testMaybeConsume", () => {
 		basicParser.reset(" 0")
@@ -153,7 +153,7 @@ describe("basic tests for", () => {
 		expect(output).to.be.undefined
 
 		basicParser.reset(" ()")
-		expect(() => basicParser.testMaybeConsume()).to.throw
+		expect(() => basicParser.testMaybeConsume()).to.throw()
 	})
 	it("testMaybeConsumeMultiple", () => {
 		basicParser.reset(" 0 0")
@@ -165,7 +165,7 @@ describe("basic tests for", () => {
 		expect(output).to.be.undefined
 
 		basicParser.reset(" ()")
-		expect(() => basicParser.testMaybeConsumeMultiple()).to.throw
+		expect(() => basicParser.testMaybeConsumeMultiple()).to.throw()
 	})
 
 	it("testMaybe", () => {
@@ -178,10 +178,10 @@ describe("basic tests for", () => {
 		expect(output).to.be.undefined
 
 		basicParser.reset(" 0")
-		expect(() => basicParser.testMaybe()).to.throw
+		expect(() => basicParser.testMaybe()).to.throw()
 
 		basicParser.reset(" (..)")
-		expect(() => basicParser.testMaybe()).to.throw
+		expect(() => basicParser.testMaybe()).to.throw()
 	})
 
 	it("testOr", () => {
@@ -194,13 +194,13 @@ describe("basic tests for", () => {
 		expect(matchTokens(output, [RightParen, RightParen])).to.be.true
 
 		basicParser.reset(" (")
-		expect(() => basicParser.testOr()).to.throw
+		expect(() => basicParser.testOr()).to.throw()
 
 		basicParser.reset(" )")
-		expect(() => basicParser.testOr()).to.throw
+		expect(() => basicParser.testOr()).to.throw()
 
 		basicParser.reset(" 0")
-		expect(() => basicParser.testOr()).to.throw
+		expect(() => basicParser.testOr()).to.throw()
 	})
 	it("testMaybeOr", () => {
 		basicParser.reset(" ((")
@@ -216,13 +216,13 @@ describe("basic tests for", () => {
 		expect(output).to.be.undefined
 
 		basicParser.reset(" (")
-		expect(() => basicParser.testMaybeOr()).to.throw
+		expect(() => basicParser.testMaybeOr()).to.throw()
 
 		basicParser.reset(" )")
-		expect(() => basicParser.testMaybeOr()).to.throw
+		expect(() => basicParser.testMaybeOr()).to.throw()
 
 		basicParser.reset(" 0")
-		expect(() => basicParser.testMaybeOr()).to.throw
+		expect(() => basicParser.testMaybeOr()).to.throw()
 	})
 
 	it("testMany", () => {
@@ -239,10 +239,10 @@ describe("basic tests for", () => {
 		expect(matchTokens(flatten(output), [Num, Dot, Num, Dot, Num, Dot])).to.be.true
 
 		basicParser.reset(" ")
-		expect(() => basicParser.testMany()).to.throw
+		expect(() => basicParser.testMany()).to.throw()
 
 		basicParser.reset(" .")
-		expect(() => basicParser.testMany()).to.throw
+		expect(() => basicParser.testMany()).to.throw()
 	})
 	it("testMaybeMany", () => {
 		basicParser.reset(" 4.")
@@ -262,7 +262,7 @@ describe("basic tests for", () => {
 		expect(output).to.be.an('array').with.lengthOf(0)
 
 		basicParser.reset(" .")
-		expect(() => basicParser.testMaybeMany()).to.throw
+		expect(() => basicParser.testMaybeMany()).to.throw()
 	})
 
 	it("testManySeparated", () => {
@@ -279,10 +279,10 @@ describe("basic tests for", () => {
 		expect(matchTokens(flatten(output), [Num, Num, Num])).to.be.true
 
 		basicParser.reset(" ")
-		expect(() => basicParser.testManySeparated()).to.throw
+		expect(() => basicParser.testManySeparated()).to.throw()
 
 		basicParser.reset(" .")
-		expect(() => basicParser.testManySeparated()).to.throw
+		expect(() => basicParser.testManySeparated()).to.throw()
 	})
 	it("testMaybeManySeparated", () => {
 		basicParser.reset(" 0")
@@ -302,7 +302,7 @@ describe("basic tests for", () => {
 		expect(output).to.be.an('array').with.lengthOf(0)
 
 		basicParser.reset(" .")
-		expect(() => basicParser.testMaybeManySeparated()).to.throw
+		expect(() => basicParser.testMaybeManySeparated()).to.throw()
 	})
 
 	it("testSubrule", () => {
@@ -311,13 +311,13 @@ describe("basic tests for", () => {
 		expect(matchToken(output, Num)).to.be.true
 
 		basicParser.reset(" .(..). ")
-		expect(() => basicParser.testSubrule()).to.throw
+		expect(() => basicParser.testSubrule()).to.throw()
 
 		basicParser.reset("4")
-		expect(() => basicParser.testSubrule()).to.throw
+		expect(() => basicParser.testSubrule()).to.throw()
 
 		basicParser.reset(" .. ")
-		expect(() => basicParser.testSubrule()).to.throw
+		expect(() => basicParser.testSubrule()).to.throw()
 	})
 	it("testMaybeSubrule", () => {
 		basicParser.reset(" .(.4.). ")
@@ -325,10 +325,10 @@ describe("basic tests for", () => {
 		expect(matchToken(output, Num)).to.be.true
 
 		basicParser.reset(" .(..). ")
-		expect(() => basicParser.testMaybeSubrule()).to.throw
+		expect(() => basicParser.testMaybeSubrule()).to.throw()
 
 		basicParser.reset("4")
-		expect(() => basicParser.testMaybeSubrule()).to.throw
+		expect(() => basicParser.testMaybeSubrule()).to.throw()
 
 		basicParser.reset(" .. ")
 		output = basicParser.testMaybeSubrule()
@@ -438,7 +438,7 @@ describe("gate versions of functions", () => {
 		expect(output).to.be.undefined
 
 		gateParser.reset(" (0)")
-		expect(() => gateParser.testFalseGateConsume()).to.throw
+		expect(() => gateParser.testFalseGateConsume()).to.throw()
 	})
 
 	it("testTrueGate", () => {
@@ -456,7 +456,7 @@ describe("gate versions of functions", () => {
 		expect(output).to.be.undefined
 
 		gateParser.reset(" .")
-		expect(() => gateParser.testFalseGate()).to.throw
+		expect(() => gateParser.testFalseGate()).to.throw()
 	})
 
 	it("testTrueGateOr", () => {
@@ -478,15 +478,15 @@ describe("gate versions of functions", () => {
 		expect(output).to.be.undefined
 
 		gateParser.reset(" +")
-		expect(() => gateParser.testFalseGateOr()).to.throw
+		expect(() => gateParser.testFalseGateOr()).to.throw()
 
 		gateParser.reset(" *")
-		expect(() => gateParser.testFalseGateOr()).to.throw
+		expect(() => gateParser.testFalseGateOr()).to.throw()
 	})
 
 	it("testTrueOrChoiceGate", () => {
 		gateParser.reset(" ")
-		expect(() => gateParser.testTrueOrChoiceGate()).to.throw
+		expect(() => gateParser.testTrueOrChoiceGate()).to.throw()
 
 		gateParser.reset(" +")
 		output = gateParser.testTrueOrChoiceGate()
@@ -498,14 +498,14 @@ describe("gate versions of functions", () => {
 	})
 	it("testFalseOrChoiceGate", () => {
 		gateParser.reset(" ")
-		expect(() => gateParser.testFalseOrChoiceGate()).to.throw
+		expect(() => gateParser.testFalseOrChoiceGate()).to.throw()
 
 		gateParser.reset(" +")
 		output = gateParser.testFalseOrChoiceGate()
 		expect(matchToken(output, Plus)).to.be.true
 
 		gateParser.reset(" *")
-		expect(() => gateParser.testFalseOrChoiceGate()).to.throw
+		expect(() => gateParser.testFalseOrChoiceGate()).to.throw()
 	})
 
 	it("testTrueGateMany", () => {
@@ -527,10 +527,10 @@ describe("gate versions of functions", () => {
 		expect(output).eql([])
 
 		gateParser.reset(" .")
-		expect(() => gateParser.testFalseGateMany()).to.throw
+		expect(() => gateParser.testFalseGateMany()).to.throw()
 
 		gateParser.reset(" ..")
-		expect(() => gateParser.testFalseGateMany()).to.throw
+		expect(() => gateParser.testFalseGateMany()).to.throw()
 	})
 
 	it("testTrueGateManySeparated", () => {
@@ -552,10 +552,10 @@ describe("gate versions of functions", () => {
 		expect(output).eql([])
 
 		gateParser.reset(" 4")
-		expect(() => gateParser.testFalseGateManySeparated()).to.throw
+		expect(() => gateParser.testFalseGateManySeparated()).to.throw()
 
 		gateParser.reset(" 4.4")
-		expect(() => gateParser.testFalseGateManySeparated()).to.throw
+		expect(() => gateParser.testFalseGateManySeparated()).to.throw()
 	})
 })
 
@@ -776,7 +776,7 @@ describe("args and custom lookahead", () => {
 
 	it("testArgsMany", () => {
 		optionsParser.reset(" ")
-		expect(() => optionsParser.testArgsMany()).to.throw
+		expect(() => optionsParser.testArgsMany()).to.throw()
 
 		optionsParser.reset(" (0)")
 		output = optionsParser.testArgsMany()
@@ -803,7 +803,7 @@ describe("args and custom lookahead", () => {
 
 	it("testArgsManySeparated", () => {
 		optionsParser.reset(" ")
-		expect(() => optionsParser.testArgsManySeparated()).to.throw
+		expect(() => optionsParser.testArgsManySeparated()).to.throw()
 
 		optionsParser.reset(" (0)")
 		output = optionsParser.testArgsManySeparated()
@@ -880,15 +880,15 @@ describe("args and custom lookahead", () => {
 			// this has the many sep, so it will pass
 			// the separator will save it
 			failingParser.reset("(0)*(4)+()")
-			expect(() => failingParser.similarManyAfter()).to.not.throw
+			expect(() => failingParser.similarManyAfter()).to.not.throw()
 
 			// same thing here. as long as the parser enters the manysep, it will be fine from there
 			failingParser.reset("(0)*.(0)*(4)+()")
-			expect(() => failingParser.similarManyAfter()).to.not.throw
+			expect(() => failingParser.similarManyAfter()).to.not.throw()
 
 			// but when that manysep isn't really there, it won't have the lookahead distance to know it shouldn't enter
 			failingParser.reset("(4)+()")
-			expect(() => failingParser.similarManyAfter()).to.throw
+			expect(() => failingParser.similarManyAfter()).to.throw()
 		})
 	})
 
@@ -922,13 +922,13 @@ describe("args and custom lookahead", () => {
 
 		moreLookaheadParser.analyze()
 		moreLookaheadParser.reset("(0)*(4)+()")
-		expect(() => moreLookaheadParser.similarManyAfter()).to.not.throw
+		expect(() => moreLookaheadParser.similarManyAfter()).to.not.throw()
 
 		moreLookaheadParser.reset("(0)*.(0)*(4)+()")
-		expect(() => moreLookaheadParser.similarManyAfter()).to.not.throw
+		expect(() => moreLookaheadParser.similarManyAfter()).to.not.throw()
 
 		moreLookaheadParser.reset("(4)+()")
-		expect(() => moreLookaheadParser.similarManyAfter()).to.not.throw
+		expect(() => moreLookaheadParser.similarManyAfter()).to.not.throw()
 	})
 })
 
@@ -1001,10 +1001,10 @@ describe("tricky parsing situations", () => {
 		trickyParser.analyze()
 
 		trickyParser.reset("(0)(4)+")
-		expect(() => trickyParser.similarManyAfter()).to.not.throw
+		expect(() => trickyParser.similarManyAfter()).to.not.throw()
 
 		trickyParser.reset("(0).(0) .(0). (0) . (0)(4)+")
-		expect(() => trickyParser.similarManyAfter()).to.not.throw
+		expect(() => trickyParser.similarManyAfter()).to.not.throw()
 	})
 })
 
@@ -1031,7 +1031,7 @@ describe("error checking", () => {
 				maybeConsume(Dot, Space)
 			})
 
-			expect(() => allOptionalParser.analyze()).to.throw
+			expect(() => allOptionalParser.analyze()).to.throw()
 		})
 
 		it("nested maybe", () => {
@@ -1053,7 +1053,7 @@ describe("error checking", () => {
 						maybeConsume(Dot)
 					})
 				})
-			}).to.throw
+			}).to.throw()
 		})
 	})
 
@@ -1070,7 +1070,7 @@ describe("error checking", () => {
 			rule('A', () => {
 				return 4
 			})
-		}).to.throw
+		}).to.throw()
 	})
 
 	it("catches unresolved subrules", () => {
@@ -1086,7 +1086,7 @@ describe("error checking", () => {
 			subrule('B')
 		})
 
-		expect(() => unresolvedParser.analyze()).to.throw
+		expect(() => unresolvedParser.analyze()).to.throw()
 	})
 
 	describe("left recursion", () => {
@@ -1108,7 +1108,7 @@ describe("error checking", () => {
 				subrule('A')
 			})
 
-			expect(() => leftRecursiveParser.analyze()).to.throw
+			expect(() => leftRecursiveParser.analyze()).to.throw()
 		})
 
 		it("works for nested ones", () => {
@@ -1139,7 +1139,7 @@ describe("error checking", () => {
 				subrule('A')
 			})
 
-			expect(() => leftRecursiveParser.analyze()).to.throw
+			expect(() => leftRecursiveParser.analyze()).to.throw()
 		})
 
 		it("doesn't incorrectly throw on safe recursion", () => {
@@ -1164,7 +1164,7 @@ describe("error checking", () => {
 				consume(Dot)
 			})
 
-			expect(() => safeRecursiveParser.analyze()).to.not.throw
+			expect(() => safeRecursiveParser.analyze()).to.not.throw()
 		})
 	})
 })
@@ -1292,9 +1292,11 @@ describe("fuller grammars", () => {
 			consume(RightBrace)
 		})
 
+		miniJson.analyze()
+
 		function expectCanParse(input) {
 			miniJson.reset(input)
-			expect(() => miniJson.jsonEntity()).to.not.throw
+			expect(() => miniJson.jsonEntity()).to.not.throw()
 		}
 
 		expectCanParse(`1`)
@@ -1306,6 +1308,6 @@ describe("fuller grammars", () => {
 		expectCanParse(`{ "stuff": null, "other": [], "things": {} }`)
 
 		miniJson.reset("not valid")
-		expect(() => miniJson.jsonEntity()).to.throw
+		expect(() => miniJson.jsonEntity()).to.throw()
 	})
 })

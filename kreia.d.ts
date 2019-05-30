@@ -127,12 +127,14 @@ export type Rules = {
 }
 // export type StatesRules = { [stateName: string]: Rules }
 
-export type TokenLibrary<L extends Rules> = { [tokenName in keyof L]: TokenDefinition }
+type KeywordManifest = { [keyword: string]: undefined }
+export type TokenLibrary<L extends Rules, K extends KeywordManifest> = { [tokenName in (keyof L | keyof K)]: TokenDefinition }
 // export type StatesTokenLibrary<L extends StatesRules> = { [tokenName in keyof L]: TokenDefinition }
 
-export function createParser<L extends Rules>(
-	lexerDefinition: L, defaultLookahead?: number,
-): [Parser, TokenLibrary<L>]
+
+export function createParser<L extends Rules, K extends KeywordManifest>(
+	lexerDefinition: L, defaultLookahead?: number, allLexerKeywords?: K,
+): [Parser, TokenLibrary<L, K>]
 
 // export function createStatesParser<L extends StatesRules>(
 // 	lexerDefinition: L, defaultLookahead?: number,
@@ -149,7 +151,7 @@ export interface Token {
 	lineBreaks: number,
 	line: number,
 	col: number,
-	categories: Category[] | null,
+	categories: string[] | null,
 }
 
 export type Category = {
@@ -160,7 +162,7 @@ export type Category = {
 
 export type TokenDefinition = {
 	type: string,
-	categories: Category[] | null,
+	categories: string[] | null,
 }
 
 export type TokenType = TokenDefinition | Category
