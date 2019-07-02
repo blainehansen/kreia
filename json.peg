@@ -1,0 +1,45 @@
+// special whitespace sensitive tokens!!
+// %indent, %deindent, %newline = %__indent, %__deindent, %__newline
+
+%Whitespace = /\s+/ (^anywhere)
+%Colon = ':'
+%Comma = ','
+%LeftBrace = '{'
+%RightBrace = '}'
+%LeftBracket = '['
+%RightBracket = ']'
+%Num = /[0-9]+/
+%Primitive = ['null', 'undefined', 'true', 'false']
+%Str = /"(?:\\["\\]|[^\n"\\])*"/
+// if we're making escapable sequences easy
+//%Str = @__token_enclosed(', ") // \ would be the default escape sequence
+//%Str = @__token_enclosed_different_escape([', "], *)
+// other things to worry about:
+// keywords (or other "matching rules could be shorter and different")
+
+json_entity =
+	| array
+	| object
+	| atomicEntity
+
+@separated_by_commas[$rule] = ($rule (%Comma $rule)*)?
+
+array =
+	%LeftBracket
+	@separated_by_commas[json_entity]
+	%RightBracket
+
+object =
+	%LeftBrace
+	@separated_by_commas[json_key, json_entity]
+	%RightBrace
+
+json_key =
+	%Str
+	%Colon
+
+atomic_entity =
+	| %Str
+	| %Num
+	| %Primitive
+
