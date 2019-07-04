@@ -90,13 +90,13 @@ type BothEntityTuple<L extends Lexer, A extends any[]> = {
 		: never
 }
 
-type UnionReturnBothEntityTuple<L extends Lexer, A extends any[]> = ({
+type UnionReturnBothEntityTuple<L extends Lexer, A extends any[]> = {
 	[K in keyof A]:
 		A[K] extends any[] ? TokenTuple<L, A[K]>
 		: A[K] extends Func ? ReturnType<A[K]>
 		: A[K] extends ParseObject<infer R> ? ReturnType<R>
 		: never
-})[number]
+}[number]
 
 
 function entity_is_function<F extends Func>(entity: ParseEntity<F>): entity is ParseFunction<F> {
@@ -139,14 +139,6 @@ const results: string | number | undefined = or(
 
 
 
-function maybe_consume<L extends Lexer, T extends any[]>(entity: TokenDefinitionTuple<L, T>): TokenTuple<L, T> | undefined {
-	return entity
-		.map(token_definition => ({
-			name: token_definition.name,
-			value: '' + token_definition.regex,
-		})) as TokenTuple<L, T>
-}
-
 function maybe<F extends Func>(entity: ParseEntity<F>): ReturnType<F> | undefined {
 	if (entity_is_function(entity)) {
 		console.log(entity.__lookahead)
@@ -185,3 +177,80 @@ function atomic_entity() {
 }
 
 json_entity.__lookahead_path = new Something()
+
+
+
+
+
+class Parser<L extends Lexer> {
+	private source: string = ''
+	constructor(readonly lexer: L) {}
+
+	reset(source: string) {
+		this.source = source
+	}
+
+	private _test<A extends any[]>(
+		toks: TokenDefinitionTuple<L, A>,
+	): TokenTuple<L, A> | string {
+		let source = this.source
+
+		// let consumed_length = 0
+		const output_tokens = [] as TokenTuple<L, A>
+
+		// const anywhere_tokens = this.anywhere_tokens.slice()
+
+		for (const token_definition of toks) {
+			// for (const tester of anywhere_tokens.concat([token_definition]))
+			// const match = tester.match(token_definition.regex)
+
+			// assume that token_definition has `^` at it's beginning
+			const match = source.match(token_definition.regex)
+			if (match === null) return source.slice(0, 15)
+				// this should try all anywhere_tokens in this case before failing
+
+			const text = match[0]
+			// output_tokens.push({ name: token_definition.name, text })
+			const length = text.length
+			source = source.slice(length)
+			// consumed_length += length
+		}
+
+		// this.source = source.slice(consumed_length)
+
+		// return output_tokens
+		return true
+	}
+
+	consume<A extends any[]>(...toks: TokenDefinitionTuple<L, A>): TokenTuple<L, A> {
+		const tokens = this._test(toks)
+		if (typeof tokens === 'string')
+			throw new ParseError(toks, tokens)
+
+		return tokens
+	}
+
+	maybe_consume<A extends any[]>(...toks: TokenDefinitionTuple<L, A>): TokenTuple<L, A> | undefined {
+		const tokens = this._test(toks)
+		return typeof tokens !== 'string'
+			? tokens
+			: undefined
+	}
+}
+
+
+
+
+
+
+
+
+
+
+class IndentationLexer {
+	private last_was_newline = false
+
+	next(tokens: TokenDefinition[]) {
+		//
+	}
+}

@@ -31,12 +31,8 @@ array =
 
 object =
 	%LeftBrace
-	@separated_by_commas[json_key, json_entity]
+	@separated_by_commas[%Str %Colon, json_entity]
 	%RightBrace
-
-json_key =
-	%Str
-	%Colon
 
 atomic_entity =
 	| %Str
