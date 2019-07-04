@@ -1,7 +1,7 @@
 // special whitespace sensitive tokens!!
 // %indent, %deindent, %newline = %__indent, %__deindent, %__newline
 
-%Whitespace = /\s+/ (^anywhere)
+%Whitespace = /\s+/, anywhere
 %Colon = ':'
 %Comma = ','
 %LeftBrace = '{'
@@ -10,12 +10,28 @@
 %RightBracket = ']'
 %Num = /[0-9]+/
 %Primitive = ['null', 'undefined', 'true', 'false']
-%Str = /"(?:\\["\\]|[^\n"\\])*"/
+%Str = /"(?:\\[\"\\]|[^\n\"\\])*"/
+
+// making tokens from other token definitions, with a slice
+%directive = '@' %ident ';', slice = 1:-1
+
 // if we're making escapable sequences easy
-//%Str = @__token_enclosed(', ") // \ would be the default escape sequence
-//%Str = @__token_enclosed_different_escape([', "], *)
+// %Str = @__enclosed(/\"|\'/,  escape_character = '/', discard_enclosure = true) // \ would be the default escape sequence
 // other things to worry about:
 // keywords (or other "matching rules could be shorter and different")
+
+
+%string = @__enclosed('"', escape_character = '\\')
+%multi_comment = @__enclosed_open_close('/*', '*/', stackable = true, includes_newlines = true)
+%comment = @__enclosed_open_close('//', '\n', includes_newlines = false)
+
+%postgres_string = @__enclosed('$' %ident* '$', includes_newlines = true)
+
+%indent, %deindent, %newline = @__significant_whitespace
+// doing it this way allows the parser to take over and process the stuff itself
+// basically, after %raw_block_begin is encountered, all newlines and indents and stuff will be handled as raw,
+// and then once a %deindent is actually given to the parser, that means that everything is back to normal?
+%indent, %deindent, %newline, %raw_block_begin = @__significant_whitespace_with_raw_block('|"')
 
 json_entity =
 	| array
