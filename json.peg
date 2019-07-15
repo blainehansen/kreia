@@ -33,6 +33,38 @@
 // and then once a %deindent is actually given to the parser, that means that everything is back to normal?
 %indent, %deindent, %newline, %raw_block_begin = @__significant_whitespace_with_raw_block('|"')
 
+block_string = @__raw_block(
+	'|"',
+	ident_interpolation = @__raw_block_capture('$' %ident),
+	expression_interpolation = @__raw_block_capture_open_close('${', '}', expression_stem)
+)
+
+
+%block_string_any = /(\\$|[^\\\$\n])+/
+
+%dollar_ident = '$' %ident
+
+%dollar_expression_open = '${'
+%right_brace = '}'
+
+block_string_line = (%block_string_any | %dollar_ident | %dollar_expression_open expression_stem %right_brace)+
+
+block_string_lines =
+	@many_separated[
+		%block_string_line | %indent block_string_lines %deindent,
+		%newline,
+	]
+
+
+block_string =
+	%block_string_begin
+	%indent
+	block_string_lines
+	%deindent
+
+
+
+
 json_entity =
 	| array
 	| object
