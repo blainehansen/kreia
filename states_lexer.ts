@@ -1,122 +1,147 @@
-import { Dict } from '@ts-std/types'
+import { Dict, tuple as t } from '@ts-std/types'
 import { Enum, empty, variant } from '@ts-std/enum'
 
-type Token = {
+
+type Token =
+	| RawToken
+	| VirtualToken
+
+type RawToken = {
 	type: TokenDefinition,
 	content: string,
 	is_virtual: false,
 }
-
 type VirtualToken = {
 	type: string,
 	is_virtual: true,
-	pop_current?: true,
 }
 
 const StateTransform = Enum({
 	Push: variant<() => State>(),
 	Pop: empty(),
-	None: empty(),
 })
-type StateTransform = Enum<typeof StateTransform>
+type StateTransform = Enum<typeof StateTransform> | undefined
 
 type TokenDefinition = {
 	name: string,
 	regex: RegExp,
-	state_transform: StateTransform,
+	state_transform?: StateTransform,
 }
 
 type State = {
 	tokens: TokenDefinition[],
-	virtual_lexers: VirtualLexer[],
+	virtual_lexer?: VirtualLexer,
 }
 
 interface VirtualLexer {
-	process(tok: Token): VirtualToken[]
-	exit(): Overwrite<VirtualToken, { pop_current: undefined }>[]
+	process(tok: RawToken): [VirtualToken[], StateTransform]
+	exit(): VirtualToken[]
 }
 
-function exhaustive(): never {
-	throw new Error()
-}
-
-// const LexerState = Enum({
-// 	Holding: variant<Token[]>(),
-// 	Empty: empty(),
-// })
-// type LexerState = Enum<typeof LexerState>
+const BufferState = Enum({
+	Holding: variant<Token[]>(),
+	Ready: empty(),
+	Exhausted: empty(),
+})
+type BufferState = Enum<typeof BufferState>
 
 class BaseLexer {
+	private buffer = BufferState.Ready() as BufferState
 	private state_stack: State[]
 	constructor(
-		readonly default_state: () => State,
-		readonly states: Dict<() => State>,
+		initial_state: State,
 		private source: string,
 	) {
-		this.state_stack = [default_state()]
+		if (source.length === 0)
+			throw new Error("created lexer with empty source")
+		this.state_stack = [initial_state]
 	}
 
+	static make_buffer(toks: Token[], fallback_buffer: BufferState) {
+		const [token, ...buffer_tokens] = toks
+		return t(
+			token,
+			buffer_tokens.length > 0
+				? BufferState.Holding(buffer_tokens)
+				: fallback_buffer
+		)
+	}
 
-	next() {
-		const { source, state_stack } = this
-		if (source.length === 0) return
+	next(): Token | undefined {
+		const { buffer, source, state_stack } = this
+		switch (buffer.key) {
+			case 'Exhausted':
+				return
+			case 'Holding':
+				const [token, new_buffer] = BaseLexer.make_buffer(buffer.content, BufferState.Ready())
+				this.buffer = new_buffer
+				return token
+		}
 
 		const output_tokens = [] as Token[]
+		if (this.source.length === 0) {
+			while (this.state_stack.length > 0) {
+				const { virtual_lexer } = this.state_stack.pop() as any as State
+				if (virtual_lexer) {
+					const virtual_tokens = virtual_lexer.exit()
+					Array.prototype.unshift.apply(output_tokens, virtual_tokens)
+				}
+			}
+
+			const [token, new_buffer] = BaseLexer.make_buffer(output_tokens, BufferState.Exhausted())
+			this.buffer = new_buffer
+			return token
+		}
+
 		const current_state = state_stack[state_stack.length - 1]
 		if (!current_state)
 			throw new Error("popped too many times")
 
-		for (const token_definition of current_state.tokens) {
+		const { tokens: token_definitions, virtual_lexer } = current_state
+
+		for (const token_definition of token_definitions) {
 			const match = source.match(token_definition.regex)
-			if (match === null) continue
+			if (match === null)
+				continue
 
 			const content = match[0]
-			const token = { type: token_definition, content, is_virtual: false }
-			output_tokens.push(token)
+			const matched_token: RawToken = { type: token_definition, content, is_virtual: false }
+			output_tokens.push(matched_token)
 
-			// allow all virtual lexers to process
-			// one of them may tell us to pop state
-			let virtual_popped = false
-			for (const virtual_lexer of current_state.virtual_lexers) {
-				const virtual_tokens = virtual_lexer.process(token)
-				virtual_popped = virtual_popped || virtual_tokens.some(v => v.pop_current)
-				// if (virtual_popped && any) throw new Error("more than one popped")
-				Array.prototype.push.apply(output_tokens, virtual_tokens)
+			let virtual_transform = undefined as StateTransform
+			if (virtual_lexer) {
+				const [virtual_tokens, state_transform] = virtual_lexer.process(matched_token)
+				virtual_transform = state_transform
+				Array.prototype.unshift.apply(output_tokens, virtual_tokens)
 			}
 
-			// if (virtual_popped && token_definition.state_transform.matches('Push'))
-			if (virtual_popped && token_definition.state_transform.key === 'Push')
-				throw new Error("a virtual popped and the matched token said to push")
+			if (virtual_transform && token_definition.state_transform)
+				throw new Error("both the virtual_lexer and the token_definition had a state_transform")
 
-			const state_transform = virtual_popped
-				? StateTransform.Pop()
-				: token_definition.state_transform
+			const state_transform = virtual_transform || token_definition.state_transform
 
-			// actually handle state transformations
-			state_transform.match({
-				Push: next_state => {
-					this.state_stack.push(next_state())
-				},
-				Pop: () => {
-					for (const virtual_lexer of current_state.virtual_lexers) {
-						const virtual_tokens = virtual_lexer.exit()
-						// if (virtual_tokens.any(v => v.pop_current)) throw new Error()
-						Array.prototype.push.apply(output_tokens, virtual_tokens)
-					}
-					this.state_stack.pop()
-				},
-				None: () => {},
-			})
+			if (state_transform)
+				state_transform.match({
+					Push: next_state => {
+						this.state_stack.push(next_state())
+					},
+					Pop: () => {
+						if (virtual_lexer) {
+							const virtual_tokens = virtual_lexer.exit()
+							Array.prototype.unshift.apply(output_tokens, virtual_tokens)
+						}
+						this.state_stack.pop()
+					},
+				})
 
 			// trim internal source
 			this.source = source.slice(content.length)
-
-			// return output
-			return output_tokens
+			const [token, new_buffer] = BaseLexer.make_buffer(output_tokens, BufferState.Ready())
+			this.buffer = new_buffer
+			return token
 		}
 
-		if (this.source.length === 0) return
-		// throw new Error("didn't match any tokens, unexpected")
+		throw new Error("didn't match any tokens, unexpected")
 	}
 }
 
@@ -128,152 +153,224 @@ const IndentationLexerState = Enum({
 })
 type IndentationLexerState = Enum<typeof IndentationLexerState>
 
-function produce_deindents(count: number) {
+class SpacesError extends Error {
+	constructor() {
+		super("spaces are not allowed at the beginning of lines")
+	}
+}
+
+function produce_deindents(count: number): VirtualToken[] {
+	if (count === 0)
+		return [{ is_virtual: true, type: 'indent_continue' }]
 	return Array
 		.from({ length: count })
 		.map(() => ({ is_virtual: true, type: 'deindent' }))
 }
 
-class IndentationLexer implements VirtualLexer {
-	// we start in this because an indent at this point is nonsensical
-	private current_indentation = 0
-	private state = IndentationLexerState.LastNewline()
+const empty_process = t([] as VirtualToken[], undefined as StateTransform)
 
-	process(tok: Token) {
+class IndentationLexer implements VirtualLexer {
+	private current_indentation: number
+	// we start in this because an indent at this point is nonsensical
+	private state = IndentationLexerState.LastNewline() as IndentationLexerState
+
+	constructor(starting_indentation?: number) {
+		this.current_indentation = starting_indentation || 0
+	}
+
+	readonly raw_block_transform = StateTransform.Push(() => ({
+		tokens: [
+			def('newline', /\n+/),
+			def('tab', /\t/),
+			def('space', / +/),
+			def('str', /.+/),
+			// def('interpolation_start', '${', StateTransform.Push(() => ({
+			// 	// except you need to remove a lot of the whitespace ones
+			// 	tokens: default_state_tokens.concat(),
+			// 	// newlines aren't allowed in interpolation
+			// }))),
+		],
+		virtual_lexer: new RawBlock(this.current_indentation),
+	}))
+
+
+	process(tok: RawToken): [VirtualToken[], StateTransform] {
 		const type = tok.type.name
+
+		if (type === 'newline') {
+			this.state = IndentationLexerState.LastNewline()
+			return empty_process
+		}
+		if (type === 'tab' && !this.state.matches('LastTab')) {
+			this.state = IndentationLexerState.LastTab(tok.content.length)
+			return empty_process
+		}
+
+		const [must_new_state, state_transform] = type === 'raw_block_start'
+			? t(IndentationLexerState.LastNewline(), this.raw_block_transform)
+			: t(undefined, undefined)
 
 		return this.state.match({
 			Normal: () => {
-				if (type === 'newline')
-					this.state = IndentationLexerState.LastNewline()
-				return []
+				this.state = must_new_state || IndentationLexerState.LastNewline()
+				return t([], this.raw_block_transform)
 			},
 
 			LastNewline: () => {
 				if (type === 'space')
-					throw new Error("spaces are not allowed at the beginning of lines")
-				if (type === 'tab') {
-					this.state = IndentationLexerState.LastTab(tok.content.length)
-					return []
-				}
-				if (type === 'newline') {
-					this.state = IndentationLexerState.LastNewline()
-					return []
-				}
+					throw new SpacesError()
 
 				// if it's just a normal token, then deindent
+				const virtual_tokens = produce_deindents(this.current_indentation)
 				this.current_indentation = 0
-				return produce_deindents(this.current_indentation)
+				this.state = must_new_state || IndentationLexerState.Normal()
+				return t(virtual_tokens, state_transform)
 			},
 
 			LastTab: tab_size => {
 				if (type === 'space')
-					throw new Error("spaces are not allowed at the beginning of lines")
+					throw new SpacesError()
 				if (type === 'tab')
 					throw new Error("zuh??")
-				if (type === 'newline') {
-					this.state = IndentationLexerState.LastNewline()
-					return []
-				}
 
 				const new_indentation = tab_size
 				const current_indentation = this.current_indentation
 				if (new_indentation > current_indentation + 1)
 					throw new Error("indentation can only increase by one")
 
-				if (new_indentation === current_indentation + 1) {
-					this.state = IndentationLexerState.Normal()
-					return [{ is_virtual: true, type: 'indent' }]
-				}
-				if (new_indentation === current_indentation) {
-					this.state = IndentationLexerState.Normal()
-					return [{ is_virtual: true, type: 'indent_continue' }]
-				}
+				this.state = must_new_state || IndentationLexerState.Normal()
+				this.current_indentation = new_indentation
 
-				return produce_deindents(current_indentation - new_indentation)
+				if (new_indentation === current_indentation + 1)
+					return t([{ is_virtual: true, type: 'indent' }], state_transform)
+
+				if (new_indentation === current_indentation)
+					return t([{ is_virtual: true, type: 'indent_continue' }], state_transform)
+
+				const virtual_tokens = produce_deindents(current_indentation - new_indentation)
+				return t(virtual_tokens, state_transform)
 			},
 		})
+	}
+
+	exit(): VirtualToken[] {
+		const virtual_tokens = produce_deindents(this.current_indentation)
+		this.current_indentation = 0
+		return virtual_tokens
 	}
 }
 
 
-const RawBlockState = Enum({
-	EnteringMustNewline: empty(),
-	// EnteringMustFirstIndent: empty(),
-	Normal: empty(),
-	LastNewline: empty(),
-	LastTab: empty(),
-})
-type RawBlockState = Enum<typeof RawBlockState>
-
 class RawBlock implements VirtualLexer {
-	private state = RawBlockState.EnteringMustNewline()
+	private state = IndentationLexerState.LastNewline() as IndentationLexerState
 	readonly block_indentation: number
 	constructor(program_indentation_at_entry: number) {
 		this.block_indentation = program_indentation_at_entry + 1
 	}
 
-	process(tok: Token) {
+	process(tok: RawToken): [VirtualToken[], StateTransform] {
 		const type = tok.type.name
-		const { state } = this
 
-		// if we are in normal, last_was_newline, entering_must_have_first_indent, or last_was_tab
-		// then we could possibly emit a pop_current
-		// if (!['space', 'tab', 'newline'].includes(type) && !state.key.matches('EnteringMustNewline'))
-		if (!['space', 'tab', 'newline'].includes(type) && state.key !== 'EnteringMustNewline')
-			return [{ is_virtual: true, type: 'raw_block_end', pop_current: true }]
+		if (type === 'newline') {
+			this.state = IndentationLexerState.LastNewline()
+			return empty_process
+		}
+		if (type === 'tab' && !this.state.matches('LastTab')) {
+			this.state = IndentationLexerState.LastTab(1)
+			return empty_process
+		}
 
-		return state.match({
-			EnteringMustNewline: () => {
-				if (type !== 'newline')
-					throw new Error("some token other than a newline came after a RawBlock began")
-				// this.state = RawBlockState.EnteringMustFirstIndent()
-				this.state = RawBlockState.Normal()
-				return []
-			},
-			// EnteringMustFirstIndent: () => {
-			// 	if (type === 'newline')
-			// 		return []
-			// 	if (type !== 'tab')
-			// 		throw new Error("raw blocks must begin with an indent")
-			// 	if (this.block_indentation !== tok.content.length)
-			// 		throw new Error("an incorrect amount of indentation appeared")
-			// 	this.state = RawBlockState.Normal()
-			// 	return []
-			// },
+		return this.state.match({
 			Normal: () => {
-				if (type === 'tab') {
-					this.state = RawBlockState.LastTab()
-					return [{ is_virtual: true, type: 'raw_block_indent_adjust', adjustment: tok.content.length }]
-				}
-				if (type === 'newline') {
-					this.state = RawBlockState.LastNewline()
-					return []
-				}
-				return []
+				return empty_process
 			},
 			LastNewline: () => {
-				if (type === 'tab') {
-					this.state = RawBlockState.LastTab()
-					return [{ is_virtual: true, type: 'raw_block_' }]
-				}
-				if (type === 'newline') {
-					this.state = RawBlockState.LastNewline()
-					return []
-				}
-				return []
+				if (type === 'space')
+					throw new SpacesError()
+
+				// by definition the indentation reset to 0, so the raw_block must be over
+				this.state = IndentationLexerState.Normal()
+				return t([{ is_virtual: true, type: 'raw_block_end' } as VirtualToken], StateTransform.Pop())
 			},
-			LastTab: () => {
+			LastTab: tab_count => {
+				const fulfilled_indentation = tab_count >= this.block_indentation
+				if (fulfilled_indentation) {
+					// we got to the minimum, so now anything goes
+					this.state = IndentationLexerState.Normal()
+					return empty_process
+				}
+
 				if (type === 'tab') {
-					this.state = RawBlockState.LastTab()
-					return [{ is_virtual: true, type: 'raw_block_indent_adjust', adjustment: tok.content.length }]
+					this.state = IndentationLexerState.LastTab(tab_count + 1)
+					return empty_process
 				}
-				if (type === 'newline') {
-					this.state = RawBlockState.LastNewline()
-					return []
-				}
-				return []
+
+				const exiting_raw_block = !fulfilled_indentation
+				if (type === 'space' && exiting_raw_block)
+					throw new SpacesError()
+
+				this.state = IndentationLexerState.Normal()
+				return t([], exiting_raw_block ? StateTransform.Pop() : undefined)
 			},
 		})
+	}
+
+	exit(): VirtualToken[] {
+		return []
+	}
+}
+
+
+
+
+
+const source = `\
+a
+	b
+	c
+		d
+	e
+		f
+			g
+	a
+
+z
+b
+	c`
+
+function def(name: string, regex: RegExp | string, state_transform?: StateTransform): TokenDefinition {
+	return {
+		name,
+		regex: typeof regex === 'string'
+			? new RegExp('^' + regex)
+			: new RegExp('^' + regex.source),
+		state_transform,
+	}
+}
+
+const default_state_tokens = [
+	def('newline', /\n+/),
+	def('tab', /\t+/),
+	def('space', / +/),
+	def('ident', /[a-z]+/),
+	// def('raw_block_start', '|"'),
+]
+
+const default_state: State = {
+	tokens: default_state_tokens,
+	virtual_lexer: new IndentationLexer(),
+}
+
+const lexer = new BaseLexer(default_state, source)
+
+let tok
+while (tok = lexer.next()) {
+	switch (tok.is_virtual) {
+		case true:
+			console.log(tok.type)
+			continue
+		case false:
+			console.log(tok.type.name, tok.content)
+			continue
 	}
 }
