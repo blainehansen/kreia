@@ -2,16 +2,16 @@ import { Dict, tuple as t } from '@ts-std/types'
 import { Enum, empty, variant } from '@ts-std/enum'
 
 
-type Token =
+export type Token =
 	| RawToken
 	| VirtualToken
 
-type RawToken = {
+export type RawToken = {
 	type: TokenDefinition,
 	content: string,
 	is_virtual: false,
 }
-type VirtualToken = {
+export type VirtualToken = {
 	type: string,
 	is_virtual: true,
 }
@@ -22,11 +22,29 @@ const StateTransform = Enum({
 })
 type StateTransform = Enum<typeof StateTransform> | undefined
 
-type TokenDefinition = {
+// export type TokenDefinition =
+// 	| RawTokenDefinition
+// 	| VirtualTokenDefinition
+// export type RawTokenDefinition = {
+// 	name: string,
+// 	regex: RegExp,
+// 	state_transform?: StateTransform,
+// 	is_virtual: false,
+// }
+// export type VirtualTokenDefinition = {
+// 	name: string,
+// 	state_transform?: StateTransform,
+// 	is_virtual: true,
+// }
+
+export type TokenDefinition = {
 	name: string,
 	regex: RegExp,
+	ignore?: true,
 	state_transform?: StateTransform,
 }
+
+
 
 type State = {
 	tokens: TokenDefinition[],
@@ -45,7 +63,7 @@ const BufferState = Enum({
 })
 type BufferState = Enum<typeof BufferState>
 
-class BaseLexer {
+export class BaseLexer {
 	private buffer = BufferState.Ready() as BufferState
 	private state_stack: State[]
 	constructor(
@@ -55,6 +73,24 @@ class BaseLexer {
 		if (source.length === 0)
 			throw new Error("created lexer with empty source")
 		this.state_stack = [initial_state]
+	}
+
+	advance(count: number): Token[] {
+		const tokens = [] as Token[]
+		let tok
+		while (tok = this.next()) {
+			tokens.push(tok)
+		}
+		return tokens
+	}
+
+	peek(count: number): Token[] {
+		const tokens = this.advance(count)
+		this.buffer = this.buffer.match({
+			Holding: buffer_tokens => BufferState.Holding(tokens.concat(buffer_tokens)),
+			_: () => BufferState.Holding(tokens),
+		})
+		return tokens
 	}
 
 	static make_buffer(toks: Token[], fallback_buffer: BufferState) {
@@ -105,6 +141,11 @@ class BaseLexer {
 				continue
 
 			const content = match[0]
+			if (token_definition.ignore) {
+				this.source = source.slice(content.length)
+				return this.next()
+			}
+
 			const matched_token: RawToken = { type: token_definition, content, is_virtual: false }
 			output_tokens.push(matched_token)
 
@@ -169,7 +210,7 @@ function produce_deindents(count: number): VirtualToken[] {
 
 const empty_process = t([] as VirtualToken[], undefined as StateTransform)
 
-class IndentationLexer implements VirtualLexer {
+export class IndentationLexer implements VirtualLexer {
 	private current_indentation: number
 	// we start in this because an indent at this point is nonsensical
 	private state = IndentationLexerState.LastNewline() as IndentationLexerState
@@ -261,7 +302,7 @@ class IndentationLexer implements VirtualLexer {
 }
 
 
-class RawBlock implements VirtualLexer {
+export class RawBlock implements VirtualLexer {
 	private state = IndentationLexerState.LastNewline() as IndentationLexerState
 	readonly block_indentation: number
 	constructor(program_indentation_at_entry: number) {
@@ -338,39 +379,43 @@ z
 b
 	c`
 
-function def(name: string, regex: RegExp | string, state_transform?: StateTransform): TokenDefinition {
+function escape_reg_exp(string: string) {
+	return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+}
+
+export function def(name: string, regex: RegExp | string, state_transform?: StateTransform): TokenDefinition {
 	return {
 		name,
 		regex: typeof regex === 'string'
-			? new RegExp('^' + regex)
+			? new RegExp('^' + escape_reg_exp(regex))
 			: new RegExp('^' + regex.source),
 		state_transform,
 	}
 }
 
-const default_state_tokens = [
-	def('newline', /\n+/),
-	def('tab', /\t+/),
-	def('space', / +/),
-	def('ident', /[a-z]+/),
-	// def('raw_block_start', '|"'),
-]
+// const default_state_tokens = [
+// 	def('newline', /\n+/),
+// 	def('tab', /\t+/),
+// 	def('space', / +/),
+// 	def('ident', /[a-z]+/),
+// 	// def('raw_block_start', '|"'),
+// ]
 
-const default_state: State = {
-	tokens: default_state_tokens,
-	virtual_lexer: new IndentationLexer(),
-}
+// const default_state: State = {
+// 	tokens: default_state_tokens,
+// 	virtual_lexer: new IndentationLexer(),
+// }
 
-const lexer = new BaseLexer(default_state, source)
+// const lexer = new BaseLexer(default_state, source)
 
-let tok
-while (tok = lexer.next()) {
-	switch (tok.is_virtual) {
-		case true:
-			console.log(tok.type)
-			continue
-		case false:
-			console.log(tok.type.name, tok.content)
-			continue
-	}
-}
+// let tok
+// while (tok = lexer.next()) {
+// 	switch (tok.is_virtual) {
+// 		case true:
+// 			console.log(tok.type)
+// 			continue
+// 		case false:
+// 			console.log(tok.type.name, tok.content)
+// 			continue
+// 	}
+// }

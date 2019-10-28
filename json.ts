@@ -238,19 +238,3 @@ class Parser<L extends Lexer> {
 	}
 }
 
-
-
-
-
-
-
-
-
-
-class IndentationLexer {
-	private last_was_newline = false
-
-	next(tokens: TokenDefinition[]) {
-		//
-	}
-}
