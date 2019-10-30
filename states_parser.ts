@@ -98,15 +98,11 @@ function test_entity<F extends Func, E extends ParseEntity<F>>(entity: E): boole
 
 
 function consume(...token_definitions: TokenDefinition[]): Token[] {
-	console.log('entering consume with:')
-	console.log(token_definitions)
 	const next_tokens = lexer.advance(token_definitions.length)
 
 	if (match_tokens(next_tokens, token_definitions))
 		return next_tokens
 	else {
-		console.error('expected: ', token_definitions)
-		console.error('found: ', next_tokens)
 		throw new Error("next tokens didn't match")
 	}
 }
@@ -120,14 +116,9 @@ function consume(...token_definitions: TokenDefinition[]): Token[] {
 // }
 
 function maybe<E extends ParseFunction<Func>>(rule: E): EntityReturn<E> | undefined {
-	console.log('entering maybe with:')
-	console.log(rule)
-
 	if (rule.lookahead()) {
-		console.log('performing maybe rule')
 		return rule()
 	}
-	console.log('skipping maybe rule')
 	return undefined
 }
 
@@ -166,23 +157,14 @@ function many_separated<B extends ParseEntity<Func>, S extends ParseEntity<Func>
 	body_rule: B,
 	separator_rule: S,
 ): EntityReturn<B>[] {
-	console.log('entering many_separated with:')
-	console.log('body_rule:')
-	console.log(body_rule)
-	console.log('separator_rule:')
-	console.log(separator_rule)
 	const results = [] as EntityReturn<B>[]
 
 	// first body isn't optional
 	results.push(perform_entity(body_rule))
-	console.log('first mandatory results:')
-	console.log(results)
 
-	console.log('about to enter loop')
 	let should_proceed = test_entity(separator_rule)
 	while (should_proceed) {
-		console.log('proceeding')
-		console.log(perform_entity(separator_rule))
+		perform_entity(separator_rule)
 
 		results.push(perform_entity(body_rule))
 		should_proceed = test_entity(separator_rule)
@@ -201,15 +183,12 @@ function lists() {
 }
 
 const parenthesized_number_list = func(() => {
-	console.log('entering parenthesized_number_list')
 	consume(toks.LeftParen)
 	const list = maybe(number_list)
 	consume(toks.RightParen)
 	return list
 }, () => {
 	const tok = lexer.peek(1)[0]
-	console.log('testing parenthesized_number_list')
-	console.log(tok)
 	return match_token(tok, toks.LeftParen)
 })
 
@@ -222,8 +201,6 @@ function token_or(...toks: TokenDefinition[]) {
 
 const number_list_1_2 = () => {
 	const tok = lexer.peek(1)[0]
-	console.log('testing number_list_1_2')
-	console.log(tok)
 	return match_token(tok, toks.Num) || match_token(tok, toks.Nil)
 }
 
@@ -236,9 +213,12 @@ const number_list: ParseFunction<Func> = func(() => {
 		[toks.Comma],
 	)
 }, () => {
-	console.log('testing entry to number_list')
-	console.log(parenthesized_number_list.lookahead() || number_list_1_2())
 	return parenthesized_number_list.lookahead() || number_list_1_2()
 })
 
-console.log(lists())
+import * as util from 'util'
+function log(obj: any) {
+	console.log(util.inspect(obj, { depth: null, colors: true }))
+}
+
+log(lists())

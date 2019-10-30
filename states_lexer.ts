@@ -45,7 +45,6 @@ export type TokenDefinition = {
 }
 
 
-
 type State = {
 	tokens: TokenDefinition[],
 	virtual_lexer?: VirtualLexer,
@@ -56,16 +55,7 @@ interface VirtualLexer {
 	exit(): VirtualToken[]
 }
 
-// const BufferState = Enum({
-// 	Holding: variant<Token[]>(),
-// 	Ready: empty(),
-// 	Exhausted: empty(),
-// 	// Finished: empty(),
-// })
-// type BufferState = Enum<typeof BufferState>
-
 export class BaseLexer {
-	// private buffer = BufferState.Ready() as BufferState
 	private buffer = [] as Token[]
 	private state_stack: State[]
 	constructor(
@@ -86,41 +76,12 @@ export class BaseLexer {
 		const tokens = this.peek(count)
 		this.buffer.splice(0, count)
 		return tokens
-
-
-		// let tokens = [] as Token[]
-		// if (this.buffer.key === 'Holding') {
-		// 	const buffer_tokens = this.buffer.content
-		// 	const diff = buffer_tokens.length - count
-		// 	if (diff >= 0) {
-		// 		const new_buffer_tokens = buffer_tokens.slice(count)
-		// 		this.buffer = new_buffer_tokens.length > 0
-		// 			? BufferState.Holding(new_buffer_tokens)
-		// 			: BufferState.Ready()
-		// 		return buffer_tokens.slice(0, count)
-		// 	}
-
-		// 	tokens = buffer_tokens
-		// }
-
-		// while (tokens.length < count) {
-		// 	const tok = this.next()
-		// 	if (tok === undefined)
-		// 		break
-		// 	tokens.push(tok)
-		// }
-		// return tokens
 	}
 
 	peek(count: number): Token[] {
 		if (count <= 0) throw new Error(`you can't look a non positive whole number count: ${count}`)
 
 		while (this.buffer.length < count) {
-			// const tok = this.next()
-			// if (tok === undefined)
-			// 	break
-			// this.buffer.push(tok)
-
 			const tokens = this.next()
 			if (tokens.length === 0)
 				break
@@ -128,50 +89,11 @@ export class BaseLexer {
 		}
 
 		return this.buffer.slice(0, count)
-
-		// return this.buffer.match({
-		// 	Holding: buffer_tokens => {
-		// 		const diff = buffer_tokens.length - count
-
-		// 		if (diff >= 0) {
-		// 			return buffer_tokens.slice(0, count)
-		// 		}
-
-		// 		const tokens = buffer_tokens.concat(this.advance(diff))
-		// 		this.buffer = BufferState.Holding(tokens)
-		// 		return tokens
-		// 	},
-		// 	_: () => {
-		// 		const tokens = this.advance(count)
-		// 		this.buffer = BufferState.Holding(tokens)
-		// 		return tokens
-		// 	},
-		// })
 	}
 
-	// static make_buffer(toks: Token[], fallback_buffer: BufferState) {
-	// 	const [token, ...buffer_tokens] = toks
-	// 	return t(
-	// 		token,
-	// 		buffer_tokens.length > 0
-	// 			? BufferState.Holding(buffer_tokens)
-	// 			: fallback_buffer
-	// 	)
-	// }
-
-	// private next(): Token | undefined {
 	private next(): Token[] {
 		if (this.source.length === 0)
 			return []
-
-		// switch (this.buffer.key) {
-		// 	case 'Exhausted':
-		// 		return
-		// 	case 'Holding':
-		// 		const [token, new_buffer] = BaseLexer.make_buffer(this.buffer.content, BufferState.Ready())
-		// 		this.buffer = new_buffer
-		// 		return token
-		// }
 
 		const output_tokens = [] as Token[]
 
@@ -192,9 +114,6 @@ export class BaseLexer {
 					}
 				}
 
-				// const [token, new_buffer] = BaseLexer.make_buffer(output_tokens, BufferState.Exhausted())
-				// this.buffer = new_buffer
-				// return token
 				return output_tokens
 			}
 
@@ -240,9 +159,6 @@ export class BaseLexer {
 					},
 				})
 
-			// const [token, new_buffer] = BaseLexer.make_buffer(output_tokens, BufferState.Ready())
-			// this.buffer = new_buffer
-			// return token
 			return output_tokens
 		}
 
