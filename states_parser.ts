@@ -1,5 +1,6 @@
-import { Cast, tuple as t } from '@ts-std/types'
 import { Result, Ok, Err } from '@ts-std/monads'
+import { Cast, tuple as t } from '@ts-std/types'
+import { Enum, empty, variant } from '@ts-std/enum'
 
 import { def, TokenDefinition, BaseLexer, Token, RawToken, VirtualToken } from './states_lexer'
 
@@ -79,7 +80,7 @@ function func<F extends Func>(f: F, l: () => boolean): ParseFunction<F> {
 }
 
 type EntityReturn<E extends ParseEntity<Func>> =
-	E extends TokenDefinition[] ? Token[]
+	E extends TokenDefinition[] ? { [I in keyof E]: Token }
 	: E extends ParseFunction<infer F> ? ReturnType<F>
 	: never
 
@@ -97,11 +98,11 @@ function test_entity<F extends Func, E extends ParseEntity<F>>(entity: E): boole
 
 
 
-function consume(...token_definitions: TokenDefinition[]): Token[] {
+function consume<L extends TokenDefinition[]>(...token_definitions: L): { [I in keyof L]: Token } {
 	const next_tokens = lexer.advance(token_definitions.length)
 
 	if (match_tokens(next_tokens, token_definitions))
-		return next_tokens
+		return next_tokens as { [I in keyof L]: Token }
 	else {
 		throw new Error("next tokens didn't match")
 	}
@@ -115,10 +116,9 @@ function consume(...token_definitions: TokenDefinition[]): Token[] {
 // 	return undefined
 // }
 
-function maybe<E extends ParseFunction<Func>>(rule: E): EntityReturn<E> | undefined {
-	if (rule.lookahead()) {
-		return rule()
-	}
+function maybe<E extends ParseEntity<Func>>(rule: E): EntityReturn<E> | undefined {
+	if (test_entity(rule))
+		return perform_entity(rule)
 	return undefined
 }
 
@@ -149,7 +149,6 @@ function or<C extends ParseEntity<Func>[]>(
 		choice_result = Ok(perform_entity(choice))
 	}
 
-	// return is_optional ? choice_result.default_or(undefined) : choice_result.expect("")
 	return choice_result.expect("")
 }
 
@@ -222,3 +221,67 @@ function log(obj: any) {
 }
 
 log(lists())
+
+
+
+type Rule = {
+	name: string,
+	nodes: Node[],
+}
+
+const Node = Enum({
+	Subrule: variant<Rule>(),
+	Consume: variant<TokenDefinition[]>(),
+	Maybe: variant<Node[]>()
+	Many: variant<Node[]>(),
+	Or: variant<Node[]>(),
+})
+type Node = Enum<typeof Node>
+
+function check_lr_rules(rules: Rule[]) {
+	const lr_rules = [] as Rule[]
+	for (const rule of rules) {
+		const lr_name = check_lr_rule(rule)
+		if (lr_name !== undefined)
+			lr_rules.push(lr_name)
+	}
+
+	if (lr_rules.length > 0)
+		throw new Error(`There are rules which are left-recursive: ${lr_rules.join(', ')}`)
+}
+
+function check_lr_rule(rule: Rule): string | undefined {
+	const stack = rule.nodes.slice()
+	let node
+	while (node = stack.pop()) switch (node.key) {
+	case 'Subrule':
+		if (node.content.name === rule.name)
+			return rule.name
+		Array.prototype.push.apply(stack, node.content.nodes.slice().reverse())
+		continue
+
+	case 'Consume':
+		return undefined
+
+	default:
+		Array.prototype.push.apply(stack, node.content.slice().reverse())
+		continue
+	}
+
+	return undefined
+}
+
+
+
+function analyze_and_render(rules: Rule[]) {
+	for (const rule of rules) {
+		// go through all nodes
+		// find all the decision points
+		// only some node types and combinator functions actually need lookahead branches
+
+		// for 'Or' nodes, iterate through all of the branches, once there's only one left you can stop
+		// you're trying to find a lookahead for each branch,
+		// which means that you're looking for the first non-optional consume that's *different* from all other branches
+		// if you reach the end of the branches and there are more than one remaining, the grammar is redundant or undecidable
+	}
+}
