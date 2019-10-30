@@ -56,15 +56,17 @@ interface VirtualLexer {
 	exit(): VirtualToken[]
 }
 
-const BufferState = Enum({
-	Holding: variant<Token[]>(),
-	Ready: empty(),
-	Exhausted: empty(),
-})
-type BufferState = Enum<typeof BufferState>
+// const BufferState = Enum({
+// 	Holding: variant<Token[]>(),
+// 	Ready: empty(),
+// 	Exhausted: empty(),
+// 	// Finished: empty(),
+// })
+// type BufferState = Enum<typeof BufferState>
 
 export class BaseLexer {
-	private buffer = BufferState.Ready() as BufferState
+	// private buffer = BufferState.Ready() as BufferState
+	private buffer = [] as Token[]
 	private state_stack: State[]
 	constructor(
 		initial_state: State,
@@ -76,74 +78,137 @@ export class BaseLexer {
 	}
 
 	advance(count: number): Token[] {
-		const tokens = [] as Token[]
-		let tok
-		while (tok = this.next()) {
-			tokens.push(tok)
-		}
+		if (count <= 0) throw new Error(`advance can't be called with a non positive whole number: ${count}`)
+
+		// this.current_token_index += count
+		// you have to do something with this.buffer.length here
+
+		const tokens = this.peek(count)
+		this.buffer.splice(0, count)
 		return tokens
+
+
+		// let tokens = [] as Token[]
+		// if (this.buffer.key === 'Holding') {
+		// 	const buffer_tokens = this.buffer.content
+		// 	const diff = buffer_tokens.length - count
+		// 	if (diff >= 0) {
+		// 		const new_buffer_tokens = buffer_tokens.slice(count)
+		// 		this.buffer = new_buffer_tokens.length > 0
+		// 			? BufferState.Holding(new_buffer_tokens)
+		// 			: BufferState.Ready()
+		// 		return buffer_tokens.slice(0, count)
+		// 	}
+
+		// 	tokens = buffer_tokens
+		// }
+
+		// while (tokens.length < count) {
+		// 	const tok = this.next()
+		// 	if (tok === undefined)
+		// 		break
+		// 	tokens.push(tok)
+		// }
+		// return tokens
 	}
 
 	peek(count: number): Token[] {
-		const tokens = this.advance(count)
-		this.buffer = this.buffer.match({
-			Holding: buffer_tokens => BufferState.Holding(tokens.concat(buffer_tokens)),
-			_: () => BufferState.Holding(tokens),
-		})
-		return tokens
-	}
+		if (count <= 0) throw new Error(`you can't look a non positive whole number count: ${count}`)
 
-	static make_buffer(toks: Token[], fallback_buffer: BufferState) {
-		const [token, ...buffer_tokens] = toks
-		return t(
-			token,
-			buffer_tokens.length > 0
-				? BufferState.Holding(buffer_tokens)
-				: fallback_buffer
-		)
-	}
+		while (this.buffer.length < count) {
+			// const tok = this.next()
+			// if (tok === undefined)
+			// 	break
+			// this.buffer.push(tok)
 
-	next(): Token | undefined {
-		const { buffer, source, state_stack } = this
-		switch (buffer.key) {
-			case 'Exhausted':
-				return
-			case 'Holding':
-				const [token, new_buffer] = BaseLexer.make_buffer(buffer.content, BufferState.Ready())
-				this.buffer = new_buffer
-				return token
+			const tokens = this.next()
+			if (tokens.length === 0)
+				break
+			Array.prototype.push.apply(this.buffer, tokens)
 		}
+
+		return this.buffer.slice(0, count)
+
+		// return this.buffer.match({
+		// 	Holding: buffer_tokens => {
+		// 		const diff = buffer_tokens.length - count
+
+		// 		if (diff >= 0) {
+		// 			return buffer_tokens.slice(0, count)
+		// 		}
+
+		// 		const tokens = buffer_tokens.concat(this.advance(diff))
+		// 		this.buffer = BufferState.Holding(tokens)
+		// 		return tokens
+		// 	},
+		// 	_: () => {
+		// 		const tokens = this.advance(count)
+		// 		this.buffer = BufferState.Holding(tokens)
+		// 		return tokens
+		// 	},
+		// })
+	}
+
+	// static make_buffer(toks: Token[], fallback_buffer: BufferState) {
+	// 	const [token, ...buffer_tokens] = toks
+	// 	return t(
+	// 		token,
+	// 		buffer_tokens.length > 0
+	// 			? BufferState.Holding(buffer_tokens)
+	// 			: fallback_buffer
+	// 	)
+	// }
+
+	// private next(): Token | undefined {
+	private next(): Token[] {
+		if (this.source.length === 0)
+			return []
+
+		// switch (this.buffer.key) {
+		// 	case 'Exhausted':
+		// 		return
+		// 	case 'Holding':
+		// 		const [token, new_buffer] = BaseLexer.make_buffer(this.buffer.content, BufferState.Ready())
+		// 		this.buffer = new_buffer
+		// 		return token
+		// }
 
 		const output_tokens = [] as Token[]
-		if (this.source.length === 0) {
-			while (this.state_stack.length > 0) {
-				const { virtual_lexer } = this.state_stack.pop() as any as State
-				if (virtual_lexer) {
-					const virtual_tokens = virtual_lexer.exit()
-					Array.prototype.unshift.apply(output_tokens, virtual_tokens)
-				}
-			}
 
-			const [token, new_buffer] = BaseLexer.make_buffer(output_tokens, BufferState.Exhausted())
-			this.buffer = new_buffer
-			return token
-		}
-
-		const current_state = state_stack[state_stack.length - 1]
+		const current_state = this.state_stack[this.state_stack.length - 1]
 		if (!current_state)
 			throw new Error("popped too many times")
 
 		const { tokens: token_definitions, virtual_lexer } = current_state
 
-		for (const token_definition of token_definitions) {
-			const match = source.match(token_definition.regex)
+		let token_definitions_to_check = token_definitions.slice()
+		while (token_definitions_to_check.length > 0) {
+			if (this.source.length === 0) {
+				while (this.state_stack.length > 0) {
+					const { virtual_lexer } = this.state_stack.pop() as any as State
+					if (virtual_lexer) {
+						const virtual_tokens = virtual_lexer.exit()
+						Array.prototype.unshift.apply(output_tokens, virtual_tokens)
+					}
+				}
+
+				// const [token, new_buffer] = BaseLexer.make_buffer(output_tokens, BufferState.Exhausted())
+				// this.buffer = new_buffer
+				// return token
+				return output_tokens
+			}
+
+			const token_definition = token_definitions_to_check.pop() as any as TokenDefinition
+
+			const match = this.source.match(token_definition.regex)
 			if (match === null)
 				continue
 
 			const content = match[0]
+			this.source = this.source.slice(content.length)
 			if (token_definition.ignore) {
-				this.source = source.slice(content.length)
-				return this.next()
+				token_definitions_to_check = token_definitions.slice()
+				continue
 			}
 
 			const matched_token: RawToken = { type: token_definition, content, is_virtual: false }
@@ -175,11 +240,10 @@ export class BaseLexer {
 					},
 				})
 
-			// trim internal source
-			this.source = source.slice(content.length)
-			const [token, new_buffer] = BaseLexer.make_buffer(output_tokens, BufferState.Ready())
-			this.buffer = new_buffer
-			return token
+			// const [token, new_buffer] = BaseLexer.make_buffer(output_tokens, BufferState.Ready())
+			// this.buffer = new_buffer
+			// return token
+			return output_tokens
 		}
 
 		throw new Error("didn't match any tokens, unexpected")
@@ -194,11 +258,7 @@ const IndentationLexerState = Enum({
 })
 type IndentationLexerState = Enum<typeof IndentationLexerState>
 
-class SpacesError extends Error {
-	constructor() {
-		super("spaces are not allowed at the beginning of lines")
-	}
-}
+class SpacesError extends Error { constructor() { super("spaces are not allowed at the beginning of lines") } }
 
 function produce_deindents(count: number): VirtualToken[] {
 	if (count === 0)
@@ -363,35 +423,35 @@ export class RawBlock implements VirtualLexer {
 
 
 
-
-
-const source = `\
-a
-	b
-	c
-		d
-	e
-		f
-			g
-	a
-
-z
-b
-	c`
-
 function escape_reg_exp(string: string) {
 	return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 }
 
 export function def(name: string, regex: RegExp | string, state_transform?: StateTransform): TokenDefinition {
-	return {
+	const d: TokenDefinition = {
 		name,
 		regex: typeof regex === 'string'
 			? new RegExp('^' + escape_reg_exp(regex))
 			: new RegExp('^' + regex.source),
-		state_transform,
 	}
+	if (state_transform)
+		d.state_transform = state_transform
+	return d
 }
+
+// const source = `\
+// a
+// 	b
+// 	c
+// 		d
+// 	e
+// 		f
+// 			g
+// 	a
+
+// z
+// b
+// 	c`
 
 // const default_state_tokens = [
 // 	def('newline', /\n+/),

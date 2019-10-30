@@ -35,6 +35,11 @@ const source = `
 
 const lexer = new BaseLexer({ tokens: Object.values(toks) }, source)
 
+// let token
+// while (token = lexer.next()) {
+// 	console.log(token)
+// }
+
 
 function match_token(token: Token | undefined, token_definition: TokenDefinition): boolean {
 	if (token === undefined)
@@ -93,6 +98,8 @@ function test_entity<F extends Func, E extends ParseEntity<F>>(entity: E): boole
 
 
 function consume(...token_definitions: TokenDefinition[]): Token[] {
+	console.log('entering consume with:')
+	console.log(token_definitions)
 	const next_tokens = lexer.advance(token_definitions.length)
 
 	if (match_tokens(next_tokens, token_definitions))
@@ -104,17 +111,23 @@ function consume(...token_definitions: TokenDefinition[]): Token[] {
 	}
 }
 
-function maybe_consume(...token_definitions : TokenDefinition[]): Token[] | undefined {
-	const next_tokens = lexer.peek(token_definitions.length)
+// function maybe_consume(...token_definitions : TokenDefinition[]): Token[] | undefined {
+// 	const next_tokens = lexer.peek(token_definitions.length)
 
-	if (match_tokens(next_tokens, token_definitions))
-		return next_tokens
-	return undefined
-}
+// 	if (match_tokens(next_tokens, token_definitions))
+// 		return next_tokens
+// 	return undefined
+// }
 
 function maybe<E extends ParseFunction<Func>>(rule: E): EntityReturn<E> | undefined {
-	if (rule.lookahead())
+	console.log('entering maybe with:')
+	console.log(rule)
+
+	if (rule.lookahead()) {
+		console.log('performing maybe rule')
 		return rule()
+	}
+	console.log('skipping maybe rule')
 	return undefined
 }
 
@@ -145,24 +158,31 @@ function or<C extends ParseEntity<Func>[]>(
 		choice_result = Ok(perform_entity(choice))
 	}
 
-	if (choice_result.is_err())
-		throw new Error("no choice taken")
-
-	return choice_result.value
+	// return is_optional ? choice_result.default_or(undefined) : choice_result.expect("")
+	return choice_result.expect("")
 }
 
 function many_separated<B extends ParseEntity<Func>, S extends ParseEntity<Func>>(
 	body_rule: B,
 	separator_rule: S,
 ): EntityReturn<B>[] {
+	console.log('entering many_separated with:')
+	console.log('body_rule:')
+	console.log(body_rule)
+	console.log('separator_rule:')
+	console.log(separator_rule)
 	const results = [] as EntityReturn<B>[]
 
 	// first body isn't optional
 	results.push(perform_entity(body_rule))
+	console.log('first mandatory results:')
+	console.log(results)
 
-	let should_proceed = true
+	console.log('about to enter loop')
+	let should_proceed = test_entity(separator_rule)
 	while (should_proceed) {
-		perform_entity(separator_rule)
+		console.log('proceeding')
+		console.log(perform_entity(separator_rule))
 
 		results.push(perform_entity(body_rule))
 		should_proceed = test_entity(separator_rule)
@@ -181,12 +201,16 @@ function lists() {
 }
 
 const parenthesized_number_list = func(() => {
+	console.log('entering parenthesized_number_list')
 	consume(toks.LeftParen)
 	const list = maybe(number_list)
 	consume(toks.RightParen)
 	return list
 }, () => {
-	return match_token(lexer.peek(1)[0], toks.LeftParen)
+	const tok = lexer.peek(1)[0]
+	console.log('testing parenthesized_number_list')
+	console.log(tok)
+	return match_token(tok, toks.LeftParen)
 })
 
 
@@ -198,6 +222,8 @@ function token_or(...toks: TokenDefinition[]) {
 
 const number_list_1_2 = () => {
 	const tok = lexer.peek(1)[0]
+	console.log('testing number_list_1_2')
+	console.log(tok)
 	return match_token(tok, toks.Num) || match_token(tok, toks.Nil)
 }
 
@@ -210,6 +236,8 @@ const number_list: ParseFunction<Func> = func(() => {
 		[toks.Comma],
 	)
 }, () => {
+	console.log('testing entry to number_list')
+	console.log(parenthesized_number_list.lookahead() || number_list_1_2())
 	return parenthesized_number_list.lookahead() || number_list_1_2()
 })
 
