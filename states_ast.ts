@@ -75,7 +75,7 @@ function analyze_and_render_rules(rules: RuleDefinition[]) {
 
 
 
-import { TokenDefinition } from './states_lexer'
+import { TokenDefinition, regulate_regex } from './states_lexer'
 
 function Data<F extends (...args: any) => any>(
 	fn: F,
@@ -93,10 +93,6 @@ const Token = Data((name: string, regex: RegExp, ignore?: true, state_transform?
 	return t
 })
 type Token = ReturnType<typeof Token>
-
-const TokenUsage = Data((token_name: string) => {
-	return { type: 'TokenUsage' as const, token_name }
-})
 
 
 const Rule = Data((name: string, ...nodes: Node[]) => {
@@ -147,8 +143,8 @@ const MacroCall = Data((macro_name: string, ...args: Node[][]) => {
 })
 type MacroCall = ReturnType<typeof MacroCall>
 
-const Consume = Data((...token_definitions: TokenDefinition[]) => {
-	return { type: 'Consume' as const, token_definitions }
+const Consume = Data((...token_names: string[]) => {
+	return { type: 'Consume' as const, token_names }
 })
 type Consume = ReturnType<typeof Consume>
 
@@ -191,9 +187,9 @@ const Grammar = [
 		Many(Subrule('parenthesized_number_list')),
 	),
 	Rule('parenthesized_number_list',
-		Consume(tok.LeftParen),
+		Consume('LeftParen'),
 		Maybe(Subrule('number_list'))
-		Consume(tok.RightParen),
+		Consume('RightParen'),
 	),
 	Macro('token_or', [SpreadArg('tokens')],
 		Or(SpreadVar('tokens'))
@@ -202,9 +198,9 @@ const Grammar = [
 		MacroCall('many_separated',
 			[Or(
 				[Subrule('parenthesized_number_list')],
-				[MacroCall('token_or', [Consume(tok.Num)], [Consume(tok.Nil)]],
+				[MacroCall('token_or', [Consume('Num')], [Consume('Nil')]],
 			)],
-			[Consume(tok.Comma)],
+			[Consume('Comma')],
 		),
 	),
 ]

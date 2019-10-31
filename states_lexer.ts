@@ -338,6 +338,19 @@ export class RawBlock implements VirtualLexer {
 }
 
 
+function source_regex(def: RegExp | string) {
+	return typeof def === 'string'
+		? escape_reg_exp(def)
+		: regex.source
+}
+
+export function regulate_regex(def: RegExp | string | (RegExp | string)[]) {
+	const base_source = Array.isArray(def)
+		? def.map(r => `(?:${source_regex(r)})`).join('|')
+		: source_regex(def)
+
+	return new RegExp('^' + base_source)
+}
 
 function escape_reg_exp(string: string) {
 	return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
