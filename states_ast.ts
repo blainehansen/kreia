@@ -23,6 +23,9 @@ function check_lr_rule(rule: Rule): string | undefined {
 	case 'Consume':
 		return undefined
 
+	case 'Or':
+	case 'MacroCall':
+
 	default:
 		Array.prototype.push.apply(stack, node.content.slice().reverse())
 		continue
@@ -39,7 +42,17 @@ function check_lr_rule(rule: Rule): string | undefined {
 // this also happens with many, since you need to choose between entering *again* and whatever is immediately after the many
 
 function analyze_and_render_rules(rules: RuleDefinition[]) {
+	const rules = {} as { [rule_name: string]: Rule }
+	const macros = {} as { [macro_name: string]: Macro }
+
 	for (const rule of rules) {
+		switch (rule.type) {
+		case 'Rule':
+			rules[rule.name] = rule
+		case 'Macro':
+			macros[rule.name] = rule
+		}
+
 		// this function is trying to achieve a few things
 		// - checking that everything properly resolves, tokens, macros, rules
 		// - checking for left-recursive rules
@@ -55,24 +68,6 @@ function analyze_and_render_rules(rules: RuleDefinition[]) {
 		// if you reach the end of the branches and there are more than one remaining, the grammar is redundant or undecidable
 	}
 }
-
-
-// there's this concept of an arg-usage macro, where constructs that are known in the grammar aren't the input, but rather dynamic qualities
-// maybe this is simply another built-in macro, the dynamic delimiter
-// it takes an opening and a body, but there's some way of telling the grammar that both the opening and the closing have to have the same concrete token content
-
-// an example is html, where a non-self-closing tag must begin and end with the same tag name
-
-
-
-
-
-
-
-
-
-
-
 
 
 import { TokenDefinition, regulate_regex } from './states_lexer'
@@ -93,6 +88,23 @@ const Token = Data((name: string, regex: RegExp, ignore?: true, state_transform?
 	return t
 })
 type Token = ReturnType<typeof Token>
+
+
+const SpreadArg = Data((arg_name: string) => {
+	return { is_arg: true as const, arg_name, is_spread: true }
+})
+const Arg = Data((arg_name: string) => {
+	return { is_arg: true as const, arg_name, is_spread: false }
+})
+type Arg = ReturnType<typeof Arg> | ReturnType<typeof SpreadArg>
+
+const SpreadVar = Data((arg_name: string) => {
+	return { is_var: true as const, arg_name, is_spread: true }
+})
+const Var = Data((arg_name: string) => {
+	return { is_var: true as const, arg_name, is_spread: false }
+})
+type Var = ReturnType<typeof Var> | ReturnType<typeof SpreadVar>
 
 
 const Rule = Data((name: string, ...nodes: Node[]) => {
@@ -155,24 +167,6 @@ type Node =
 	| Or
 	| MacroCall
 	| Consume
-
-
-const SpreadArg = Data((arg_name: string) => {
-	return { is_arg: true as const, arg_name, is_spread: true }
-})
-const Arg = Data((arg_name: string) => {
-	return { is_arg: true as const, arg_name, is_spread: false }
-})
-type Arg = ReturnType<typeof Arg> | ReturnType<typeof SpreadArg>
-
-const SpreadVar = Data((arg_name: string) => {
-	return { is_var: true as const, arg_name, is_spread: true }
-})
-const Var = Data((arg_name: string) => {
-	return { is_var: true as const, arg_name, is_spread: false }
-})
-type Var = ReturnType<typeof Var> | ReturnType<typeof SpreadVar>
-
 
 
 
