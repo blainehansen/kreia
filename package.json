@@ -12,7 +12,7 @@
     "test:js": "mocha ./test/**/*.spec.js",
     "test:ts": "mocha -r ts-node/register test/**/*.spec.ts",
 
-    "ts:ast": "ts-creator lib/thing.ts --use-tabs true --trailing-comma 'all' -o lib/thing_gen.ts"
+    "ts:ast": "ts-creator lib/generate_from.ts --use-tabs true --trailing-comma 'all' -o lib/generate_to.ts"
   },
   "keywords": [
     "parser",
