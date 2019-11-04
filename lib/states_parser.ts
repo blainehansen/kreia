@@ -149,7 +149,7 @@ function or<C extends ParseEntity<Func>[]>(
 		choice_result = Ok(perform_entity(choice))
 	}
 
-	return choice_result.expect("")
+	return choice_result.expect('')
 }
 
 function many_separated<B extends ParseEntity<Func>, S extends ParseEntity<Func>>(
@@ -186,10 +186,12 @@ const parenthesized_number_list = func(() => {
 	const list = maybe(number_list)
 	consume(toks.RightParen)
 	return list
-}, () => {
-	const tok = lexer.peek(1)[0]
-	return match_token(tok, toks.LeftParen)
-})
+}, path(1, [toks.LeftParen]))
+
+// () => {
+// 	const tok = lexer.peek(1)[0]
+// 	return match_token(tok, toks.LeftParen)
+// }
 
 
 function token_or(...toks: TokenDefinition[]) {
@@ -198,10 +200,14 @@ function token_or(...toks: TokenDefinition[]) {
 	)
 }
 
-const number_list_1_2 = () => {
-	const tok = lexer.peek(1)[0]
-	return match_token(tok, toks.Num) || match_token(tok, toks.Nil)
-}
+// const number_list_1_2 = () => {
+// 	const tok = lexer.peek(1)[0]
+// 	return match_token(tok, toks.Num) || match_token(tok, toks.Nil)
+// }
+const number_list_1_2 = branch(
+	path(1, [toks.Num]),
+	path(1, [toks.Nil]),
+)
 
 const number_list: ParseFunction<Func> = func(() => {
 	return many_separated(
@@ -211,9 +217,11 @@ const number_list: ParseFunction<Func> = func(() => {
 		), parenthesized_number_list.lookahead),
 		[toks.Comma],
 	)
-}, () => {
-	return parenthesized_number_list.lookahead() || number_list_1_2()
-})
+}, branch(parenthesized_number_list.lookahead, number_list_1_2))
+// () => {
+// 	return parenthesized_number_list.lookahead() || number_list_1_2()
+// }
+
 
 import * as util from 'util'
 function log(obj: any) {

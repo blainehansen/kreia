@@ -1,3 +1,6 @@
+// https://github.com/Microsoft/TypeScript/wiki/Using-the-Compiler-API#user-content-creating-and-printing-a-typescript-ast
+// https://github.com/HearTao/ts-creator
+
 import ts = require('typescript')
 
 function f() {
