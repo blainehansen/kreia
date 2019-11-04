@@ -79,8 +79,17 @@ function Data<F extends (...args: any) => any>(
 }
 
 
-const Token = Data((name: string, regex: RegExp, ignore?: true, state_transform?: StateTransform) => {
-	const t = { name, regex } as TokenDefinition
+type TokenOptions = {
+	ignore?: true,
+	state_transform?: StateTransform,
+}
+
+const Token = Data((
+	name: string,
+	regex: RegExp | string | (RegExp | string)[],
+	{ ignore, state_transform }: TokenOptions | undefined,
+) => {
+	const t = { name, regex: regulate_regex(regex) } as TokenDefinition
 	if (ignore !== undefined)
 		t.ignore = ignore
 	if (state_transform !== undefined)
@@ -124,10 +133,6 @@ const Macro = Data((name: string, args: Arg[], ...nodes: (Node | Var)[]) => {
 })
 type Macro = ReturnType<typeof Macro>
 
-type RuleDefinition =
-	| Rule
-	| Macro
-
 
 
 const Subrule = Data((rule_name: string) => {
@@ -168,6 +173,12 @@ type Node =
 	| MacroCall
 	| Consume
 
+type GrammarItem =
+	| Token
+	| Rule
+	| Macro
+
+type Grammar = GrammarItem[]
 
 
 const ManySeparated = Macro(
@@ -177,6 +188,13 @@ const ManySeparated = Macro(
 )
 
 const Grammar = [
+	Token('LeftParen', '('),
+	Token('RightParen', ')'),
+	Token('Num', /[0-9]+/),
+	Token('Nil', 'nil'),
+	Token('Comma', ','),
+	Token('Whitespace', /\s+/, { ignore: true }),
+
 	Rule('lists',
 		Many(Subrule('parenthesized_number_list')),
 	),
