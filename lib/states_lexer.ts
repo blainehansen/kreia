@@ -1,3 +1,5 @@
+import { Data } from './utils'
+
 import { Dict, tuple as t } from '@ts-std/types'
 import { Enum, empty, variant } from '@ts-std/enum'
 
@@ -29,6 +31,7 @@ type StateTransform = Enum<typeof StateTransform> | undefined
 // 	name: string,
 // 	regex: RegExp,
 // 	state_transform?: StateTransform,
+// 	ignore?: true,
 // 	is_virtual: false,
 // }
 // export type VirtualTokenDefinition = {
@@ -40,8 +43,69 @@ type StateTransform = Enum<typeof StateTransform> | undefined
 export type TokenDefinition = {
 	name: string,
 	regex: RegExp,
+	state_transform?: StateTransform,
+	ignore?: true,
+}
+
+export type TokenOptions = {
 	ignore?: true,
 	state_transform?: StateTransform,
+}
+
+export const Token = Data((
+	name: string,
+	regex: RegExp | string | (RegExp | string)[],
+	{ ignore, state_transform } = {} as TokenOptions,
+) => {
+	const t = { name, regex: regulate_regex(regex) } as TokenDefinition
+	if (ignore !== undefined)
+		t.ignore = ignore
+	if (state_transform !== undefined)
+		t.state_transform = state_transform
+	return t
+})
+// type Token = ReturnType<typeof Token>
+
+type BaseTokenSpec = RegExp | string | (RegExp | string)[]
+type TokenSpec = BaseTokenSpec | { match: BaseTokenSpec } & TokenOptions
+
+
+// type LexerState<D extends { [key: string]: TokenSpec }> = { [K in keyof D]: ReturnType<typeof Token> }
+// export function create_lexer_state<D extends { [key: string]: TokenSpec }>(
+// 	token_definitions: D
+// ): LexerState<D> {
+// 	const give = {} as LexerState<D>
+// 	for (const key in token_definitions) {
+// 		const regex = token_definitions[key]
+// 		give[key] = Token(key, regex)
+// 	}
+
+// 	return give
+// }
+
+
+export function match_token(token: Token | undefined, token_definition: TokenDefinition): boolean {
+	if (token === undefined)
+		return false
+
+	switch (token.is_virtual) {
+		case true:
+			// return token_definition.is_virtual && token.type === token_definition.name
+			return token.type === token_definition.name
+		case false:
+			// return !token_definition.is_virtual && token.type.name === token_definition.name
+			return token.type.name === token_definition.name
+	}
+}
+
+export function match_tokens(tokens: Token[], token_definitions: TokenDefinition[]) {
+	for (const [index, token_definition] of token_definitions.entries()) {
+		const token = tokens[index]
+		if (!match_token(token, token_definition))
+			return false
+	}
+
+	return true
 }
 
 
@@ -341,7 +405,7 @@ export class RawBlock implements VirtualLexer {
 function source_regex(def: RegExp | string) {
 	return typeof def === 'string'
 		? escape_reg_exp(def)
-		: regex.source
+		: def.source
 }
 
 export function regulate_regex(def: RegExp | string | (RegExp | string)[]) {

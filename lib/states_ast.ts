@@ -1,31 +1,5 @@
 import { TokenDefinition, regulate_regex, match_token } from './states_lexer'
 
-function Data<F extends (...args: any) => any>(
-	fn: F,
-): (...args: Parameters<F>) => Readonly<ReturnType<F>> {
-	return fn
-}
-
-
-type TokenOptions = {
-	ignore?: true,
-	state_transform?: StateTransform,
-}
-
-const Token = Data((
-	name: string,
-	regex: RegExp | string | (RegExp | string)[],
-	{ ignore, state_transform }: TokenOptions | undefined,
-) => {
-	const t = { name, regex: regulate_regex(regex) } as TokenDefinition
-	if (ignore !== undefined)
-		t.ignore = ignore
-	if (state_transform !== undefined)
-		t.state_transform = state_transform
-	return t
-})
-type Token = ReturnType<typeof Token>
-
 
 namespace ast {
 	export const SpreadArg = Data((name: string) => {
@@ -232,11 +206,6 @@ const Grammar = [
 // - traverse all differentiatable paths at the same time. you keep all paths that have an identical sibling. so every time a path has a mandatory consume that's different than all the others, you can remove it from consideration and give it the lookahead branch you've calculated so far. a path requires a so-far-possibly-identical sibling to be kept, so by definition if there's only one left, we're done.
 // - if you reach the end of the branches and there are more than one remaining, the grammar is redundant or undecidable
 
-function compute_path(d: DecisionPath, against: DecisionPath[]): Decidable {
-	for (const item of d.path) {
-		//
-	}
-}
 
 function ts_for_rule(rule: Rule) {
 	const block_items = [] as ts.Statement[]
@@ -245,7 +214,7 @@ function ts_for_rule(rule: Rule) {
 	case 'Maybe':
 		// if (node.nodes.length === 1)
 		// 	block_items.push(optional_thing(node.nodes[0]))
-		const node_path = compute_path(node.nodes, ...gather_next_branches(index, rule.nodes))
+		const node_path = compute_path(node.nodes, gather_next_branches(index, rule.nodes))
 		block_items.push(maybe_call(node.nodes, node_path))
 		continue
 
@@ -273,79 +242,6 @@ function ts_for_rule(rule: Rule) {
 
 // # produce a *typescript* ast and code generate
 // this implies that in the lookahead computation process we figured out all the information needed to produce code
-
-function match_and_trim(tokens: RawToken[], token_definitions: TokenDefinition[]) {
-	for (const [index, token_definition] of token_definitions.entries()) {
-		const token = tokens[index]
-
-		if (!match_token(token, token_definition))
-			return undefined
-	}
-
-	return tokens.slice(token_definitions.length)
-}
-
-
-export abstract class Decidable {
-	abstract readonly test_length: number
-	test(tokens: RawToken[]): boolean {
-		const result = this._test(tokens)
-		return result !== undefined
-	}
-
-	abstract protected _test(tokens: RawToken[]): RawToken[] | undefined
-}
-
-export function path(test_length: number, ...path: (TokenDefinition[] | DecisionBranch)[]) {
-	return new DecisionPath(path, test_length)
-}
-class DecisionPath extends Decidable {
-	constructor(
-		readonly path: (TokenDefinition[] | DecisionBranch)[],
-		readonly test_length: number,
-	) { super() }
-
-	protected _test(input_tokens: RawToken[]): RawToken[] | undefined {
-		let tokens = input_tokens.slice()
-
-		for (const item of this.path) {
-			tokens = Array.isArray(item)
-				? match_and_trim(tokens, item)
-				: item._test(tokens)
-
-			if (tokens === undefined)
-				return undefined
-			if (tokens.length === 0)
-				return tokens
-		}
-
-		return tokens
-	}
-}
-
-export function branch(is_optional: boolean, ...paths: DecisionPath[]) {
-	return new DecisionBranch(paths)
-}
-class DecisionBranch extends Decidable {
-	readonly test_length: number
-	constructor(
-		readonly is_optional: boolean,
-		readonly paths: DecisionPath[],
-	) {
-		super()
-		test_length = Math.max(...paths.map(p => p.test_length))
-	}
-
-	protected _test(tokens: RawToken[]): RawToken[] | undefined {
-		for (const path of this.paths) {
-			const path_result = path._test(tokens)
-			if (path_result !== undefined)
-				return path_result
-		}
-
-		return this.is_optional ? [] : undefined
-	}
-}
 
 
 

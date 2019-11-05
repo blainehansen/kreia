@@ -8,10 +8,7 @@
     "main": "ts-node experiment.ts",
     "preversion": "npm test",
     "finalize-version": "git push origin master && git push origin master --tags && npm publish",
-    "test": "npm run test:js && npm run test:ts",
-    "test:js": "mocha ./test/**/*.spec.js",
-    "test:ts": "mocha -r ts-node/register test/**/*.spec.ts",
-
+    "test": "mocha -r ts-node/register lib/**/*.spec.ts",
     "ts:ast": "ts-creator lib/generate_from.ts --use-tabs true --trailing-comma 'all' -o lib/generate_to.ts"
   },
   "keywords": [

@@ -4,18 +4,7 @@ import { Enum, empty, variant } from '@ts-std/enum'
 
 import { def, TokenDefinition, BaseLexer, Token, RawToken, VirtualToken } from './states_lexer'
 
-type LexerState<D extends { [key: string]: RegExp | string }> = { [K in keyof D]: TokenDefinition }
-function lexer_state<D extends { [key: string]: RegExp | string }>(
-	token_definitions: D
-): LexerState<D> {
-	const give = {} as LexerState<D>
-	for (const key in token_definitions) {
-		const regex = token_definitions[key]
-		give[key] = def(key, regex)
-	}
 
-	return give
-}
 
 const toks = lexer_state({
 	LeftParen: '(',
@@ -41,28 +30,6 @@ const lexer = new BaseLexer({ tokens: Object.values(toks) }, source)
 // 	console.log(token)
 // }
 
-
-function match_token(token: Token | undefined, token_definition: TokenDefinition): boolean {
-	if (token === undefined)
-		return false
-
-	switch (token.is_virtual) {
-		case true:
-			return token.type === token_definition.name
-		case false:
-			return token.type.name === token_definition.name
-	}
-}
-
-function match_tokens(tokens: Token[], token_definitions: TokenDefinition[]) {
-	for (const [index, token_definition] of token_definitions.entries()) {
-		const token = tokens[index]
-		if (!match_token(token, token_definition))
-			return false
-	}
-
-	return true
-}
 
 
 type ParseEntity<F extends Func> =
@@ -222,10 +189,5 @@ const number_list: ParseFunction<Func> = func(() => {
 // 	return parenthesized_number_list.lookahead() || number_list_1_2()
 // }
 
-
-import * as util from 'util'
-function log(obj: any) {
-	console.log(util.inspect(obj, { depth: null, colors: true }))
-}
 
 log(lists())
