@@ -51,16 +51,25 @@ export class DecisionPath extends Decidable {
 	protected *_iter() {
 		for (const item of this.path) {
 			if (Array.isArray(item))
-				yield* item
-			else
-				yield item
+				yield* item.map(i => [i])
+			// this needs to change to yield from all the branches concurrently
+			else {
+				const iters = item.paths.map(i => i.iter())
+				let sub_array = iters.flat_map(i => i.next() || [])
+				while (sub_array.length > 0) {
+					yield sub_array
+					sub_array = iters.flat_map(i => i.next() || [])
+				}
+			}
 		}
 	}
 
 	iter() {
 		return {
 			internal: this._iter(),
-			next(): TokenDefinition | undefined {
+			next(): TokenDefinition[] | undefined {
+				// this has to change to always yield arrays of tokens
+				// which represents all of the *concurrent* paths currently being discovered
 				let result = this.internal.next()
 				if (result.done) return undefined
 				else return result.value
