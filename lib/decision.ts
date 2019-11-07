@@ -21,6 +21,21 @@ export abstract class Decidable {
 	abstract _test(tokens: RawToken[]): RawToken[] | undefined
 }
 
+class IterWrapper<T> {
+	constructor(protected internal: Generator<T, void, undefined>) {}
+	next(): T | undefined {
+		let result = this.internal.next()
+		if (result.done) return undefined
+		else return result.value
+	}
+
+	clone() {
+		const a = Array.from(this.internal)
+		this.internal = (function* () { yield* a.slice() })()
+		return new IterWrapper((function* () { yield* a.slice() })())
+	}
+}
+
 export function path(test_length: number, ...path: (TokenDefinition[] | DecisionBranch)[]) {
 	return new DecisionPath(path, test_length)
 }
@@ -48,33 +63,32 @@ export class DecisionPath extends Decidable {
 		return tokens
 	}
 
-	protected *_iter() {
-		for (const item of this.path) {
-			if (Array.isArray(item))
-				yield* item.map(i => [i])
-			// this needs to change to yield from all the branches concurrently
-			else {
-				const iters = item.paths.map(i => i.iter())
-				let sub_array = iters.flat_map(i => i.next() || [])
-				while (sub_array.length > 0) {
-					yield sub_array
-					sub_array = iters.flat_map(i => i.next() || [])
+	iter() {
+		return new IterWrapper((function* () {
+			for (const item of this.path) {
+				if (Array.isArray(item))
+					yield* item.map(i => [i])
+				else {
+					const iters = item.paths.map(i => i.iter())
+					let sub_array = iters.flat_map(i => i.next() || [])
+					while (sub_array.length > 0) {
+						yield sub_array
+						sub_array = iters.flat_map(i => i.next() || [])
+					}
 				}
 			}
-		}
+		})())
 	}
 
-	iter() {
-		return {
-			internal: this._iter(),
-			next(): TokenDefinition[] | undefined {
-				// this has to change to always yield arrays of tokens
-				// which represents all of the *concurrent* paths currently being discovered
-				let result = this.internal.next()
-				if (result.done) return undefined
-				else return result.value
-			},
-		}
+	branch_iter() {
+		return new IterWrapper((function* () {
+			for (const item of this.path) {
+				if (Array.isArray(item))
+					yield* item
+				else
+					yield item
+			}
+		})())
 	}
 }
 

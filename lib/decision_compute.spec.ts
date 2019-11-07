@@ -63,4 +63,15 @@ describe('compute_path', () => {
 			path(0, [A, B, E]),
 		])).eql(path(2, [A, B]))
 	})
+
+	it('complex branches', () => {
+		expect(compute_path(
+			path(0, [A, B, C]),
+			[
+			path(0, [A], branch(false,
+				path(2, [B, D]),
+				path(2, [B, C]),
+			)),
+		])).eql(path(3, [A, B, C]))
+	})
 })

@@ -3,14 +3,28 @@ import { TokenDefinition, Token } from './states_lexer'
 import { Decidable, path, DecisionPath, branch, DecisionBranch } from './decision'
 
 class LookaheadBuilder {
-	private items = [] as TokenDefinition[]
+	private items = [] as (TokenDefinition[] | DecisionBranch)[]
 
-	push(def: TokenDefinition) {
-		this.items.push(def)
+	push(def: TokenDefinition | DecisionBranch) {
+		if (is_branch(def)) {
+			this.items.push(def)
+			return
+		}
+
+		const last_index = this.items.length - 1
+		const last = this.items[last_index]
+		if (this.items.length === 0 || is_branch(last)) {
+			this.items.push([def])
+			return
+		}
+		last.push(def)
 	}
 
 	build(): Decidable {
-		// if the last item is an optional DecisionBranch, just trim it
+		const last_index = this.items.length - 1
+		const last = this.items[last_index]
+		if (is_branch(last) && last.is_optional)
+			this.items.splice(last_index, 1)
 		return new DecisionPath([this.items], this.items.length)
 	}
 }
@@ -20,8 +34,9 @@ function is_branch(item: TokenDefinition | DecisionBranch): item is DecisionBran
 }
 
 type DecisionPathIter = ReturnType<DecisionPath['iter']>
+type DecisionPathBranchIter = ReturnType<DecisionPath['branch_iter']>
 
-function _compute_path(main: DecisionPathIter, input_against: DecisionPathIter[], lookahead: LookaheadBuilder) {
+function _compute_path(main: DecisionPathBranchIter, input_against: DecisionPathIter[], lookahead: LookaheadBuilder) {
 	let against = input_against.slice()
 
 	let item: TokenDefinition | DecisionBranch
@@ -31,25 +46,28 @@ function _compute_path(main: DecisionPathIter, input_against: DecisionPathIter[]
 		// we're going to simplify things so that a DecisionPathIter always returns just arrays of concurrent tokens
 		// the iteration of the internal branches will be handled for us by that iterator
 
-		const new_against_iters = []
+		const new_against = []
 		for (const against_iter of against) {
 			const a = against_iter.next()
-			if (a === undefined) continue
+			if (a === undefined)
+				continue
 
 			Array.protoype.push.apply(against_items, a)
 			new_against.push(against_iter)
 		}
-		against = new_against_iters
+		against = new_against
 
-		// if it returns an array with more than one, then item has entered a branch
-		// if that's the case we recursively need to do stuff
-
-		// create a branch whose paths are made by recursively calling _compute_path with our current against iters
-		// then push that branch and continue
-
-		// if (is_branch(item)) {
-		// 	continue
-		// }
+		if (is_branch(item))
+			lookahead.push(
+				new DecisionBranch(
+					item.is_optional,
+					item.paths.map(path => _compute_path(
+						path.branch_iter(),
+						against.map(a => a.clone()),
+						lookahead,
+					)),
+				)
+			)
 
 		const same = against_items.filter(a => a.name === item.name)
 
@@ -67,52 +85,8 @@ function _compute_path(main: DecisionPathIter, input_against: DecisionPathIter[]
 
 export function compute_path(main: DecisionPath, against: DecisionPath[]) {
 	return _compute_path(
-		main.iter(),
+		main.branch_iter(),
 		against.map(a => a.iter()),
 		new LookaheadBuilder(),
 	)
 }
-
-// function pi(p: DecisionPath) {
-// 	return p.iter()
-// }
-
-// function compute_path(d: DecisionPath, against: DecisionPath[]): Decidable {
-// 	// as a someday optimization, it seems you should get mad about redundant prefixes (all the branches have identical beginnings)
-
-// 	const d_iter = d.iter()
-// 	const against_iters = against.map(pi)
-
-// 	const lookahead = new LookaheadBuilder()
-// 	let item
-// 	while (item = d_iter.next()) {
-// 		const against_items = increment_against(against_iters, i => {
-// 			const item = i.next()
-// 			// we'll assume that increment_against removes something from the source array if we return empty
-// 			// replaces it with some resumable branch iterator if we return an array larger than one
-// 			// and does nothing with array of size one
-// 			if (item === undefined) return undefined
-// 			if (item is branch) return item.paths
-// 			return item
-// 		})
-// 		if (item is branch) {
-// 			// we basically need to recursively compute the paths for each path of the branch,
-// 			// starting from the current lookahead we've produced
-// 			lookahead.push_branch(item, against_iters)
-// 			continue
-// 		}
-
-		// // now we're finally in the simple case where we can compare tokens against tokens
-		// // if any of the against_items are the same as item, then item needs to be pushed to the lookahead
-		// // TODO similarly, all the backing iters for the ones that *weren't* the same should be kicked out
-		// const same = against_items.filter(a => a.name === item.name)
-		// // we always push item since if we're done it's still needed as the final differentiator,
-		// // and if we aren't it's just part of the chain
-		// lookahead.push(item)
-		// if (same.length === 0)
-		// 	// in this case we're done
-			// break
-// 	}
-
-// 	return lookahead
-// }
