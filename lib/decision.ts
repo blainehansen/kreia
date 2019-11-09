@@ -1,3 +1,5 @@
+import '@ts-std/extensions/dist/array'
+
 import { TokenDefinition, RawToken, match_token } from './states_lexer'
 
 function match_and_trim(tokens: RawToken[], token_definitions: TokenDefinition[]) {
@@ -36,15 +38,22 @@ class IterWrapper<T> {
 	}
 }
 
-export function path(test_length: number, ...path: (TokenDefinition[] | DecisionBranch)[]) {
-	return new DecisionPath(path, test_length)
+export function path(...path: (TokenDefinition[] | DecisionBranch)[]) {
+	return new DecisionPath(path)
 }
 export class DecisionPath extends Decidable {
 	readonly type = 'DecisionPath'
+	readonly test_length: number
 	constructor(
-		readonly path: (TokenDefinition[] | DecisionBranch)[],
-		readonly test_length: number,
-	) { super() }
+		readonly path: readonly (TokenDefinition[] | DecisionBranch)[],
+	) {
+		super()
+		this.test_length = path.map(
+			item => Array.isArray(item)
+				? item.length
+				: item.test_length
+		).sum()
+	}
 
 	_test(input_tokens: RawToken[]): RawToken[] | undefined {
 		let tokens: RawToken[] | undefined = input_tokens.slice()
@@ -63,13 +72,13 @@ export class DecisionPath extends Decidable {
 		return tokens
 	}
 
-	iter() {
-		return new IterWrapper((function* () {
+	iter(): IterWrapper<TokenDefinition[]> {
+		const fn = function* (this: DecisionPath) {
 			for (const item of this.path) {
 				if (Array.isArray(item))
-					yield* item.map(i => [i])
+					yield* item.map(tok => [tok])
 				else {
-					const iters = item.paths.map(i => i.iter())
+					const iters = item.paths.map(path => path.iter())
 					let sub_array = iters.flat_map(i => i.next() || [])
 					while (sub_array.length > 0) {
 						yield sub_array
@@ -77,34 +86,41 @@ export class DecisionPath extends Decidable {
 					}
 				}
 			}
-		})())
+		}
+		return new IterWrapper(fn.call(this))
 	}
 
-	branch_iter() {
-		return new IterWrapper((function* () {
+	branch_iter(): IterWrapper<TokenDefinition | DecisionBranch> {
+		const fn = function* (this: DecisionPath) {
 			for (const item of this.path) {
 				if (Array.isArray(item))
 					yield* item
 				else
 					yield item
 			}
-		})())
+		}
+		return new IterWrapper(fn.call(this))
 	}
 }
 
 
 
+const EMPTY_PATH = new DecisionPath([])
 export function branch(is_optional: boolean, ...paths: DecisionPath[]) {
 	return new DecisionBranch(is_optional, paths)
 }
 export class DecisionBranch extends Decidable {
 	readonly type = 'DecisionBranch'
 	readonly test_length: number
+	readonly paths: readonly DecisionPath[],
 	constructor(
-		readonly is_optional: boolean,
-		readonly paths: DecisionPath[],
+		is_optional: boolean,
+		paths: DecisionPath[],
 	) {
 		super()
+		if (is_optional)
+			paths.push(EMPTY_PATH)
+		this.paths = paths.slice()
 		this.test_length = Math.max(...paths.map(p => p.test_length))
 	}
 

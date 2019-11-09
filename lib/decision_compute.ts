@@ -2,8 +2,16 @@ import { log } from './utils'
 import { TokenDefinition, Token } from './states_lexer'
 import { Decidable, path, DecisionPath, branch, DecisionBranch } from './decision'
 
+class BranchBuilder {
+	constructor()
+}
+
 class LookaheadBuilder {
 	private items = [] as (TokenDefinition[] | DecisionBranch)[]
+
+	push_branch(paths: DecisionPath[]) {
+		//
+	}
 
 	push(def: TokenDefinition | DecisionBranch) {
 		if (is_branch(def)) {
@@ -20,17 +28,21 @@ class LookaheadBuilder {
 		last.push(def)
 	}
 
-	build(): Decidable {
+	build(): DecisionPath {
 		const last_index = this.items.length - 1
 		const last = this.items[last_index]
-		if (is_branch(last) && last.is_optional)
+		if (is_branch(last) && (last as DecisionBranch).is_optional)
 			this.items.splice(last_index, 1)
-		return new DecisionPath([this.items], this.items.length)
+
+		if (this.items.length === 1 && is_branch(this.items[0]))
+			return this.items[0].try_build().default(new DecisionPath([]))
+
+		return new DecisionPath(this.items)
 	}
 }
 
-function is_branch(item: TokenDefinition | DecisionBranch): item is DecisionBranch {
-	return 'type' in item && item.type === 'DecisionBranch'
+function is_branch(item: TokenDefinition[] | TokenDefinition | DecisionBranch): item is DecisionBranch {
+	return !Array.isArray(item) && 'type' in item && item.type === 'DecisionBranch'
 }
 
 type DecisionPathIter = ReturnType<DecisionPath['iter']>
@@ -41,35 +53,50 @@ function _compute_path(main: DecisionPathBranchIter, input_against: DecisionPath
 
 	let item: TokenDefinition | DecisionBranch
 	while (item = main.next()!) {
+
+		if (is_branch(item)) {
+			// it it isn't optional, we need to pick up after the branch with against iterators
+			// in the "exhausted" state they will be in after the branch
+
+			const new_against = [] as DecisionPathIter[]
+
+			lookahead.push(
+				new DecisionBranch(
+					item.is_optional,
+					item.paths.map(path => {
+						const branch_against = against.map(a => a.clone())
+						Array.prototype.push.apply(new_against, branch_against)
+						return _compute_path(
+							path.branch_iter(),
+							branch_against,
+							new LookaheadBuilder(),
+						)
+					}),
+				)
+			)
+
+			// against = against.concat(new_against)
+
+			against = item.is_optional
+				? against.concat(new_against)
+				: new_against
+
+			continue
+		}
+
 		const against_items = [] as TokenDefinition[]
-
-		// we're going to simplify things so that a DecisionPathIter always returns just arrays of concurrent tokens
-		// the iteration of the internal branches will be handled for us by that iterator
-
 		const new_against = []
 		for (const against_iter of against) {
 			const a = against_iter.next()
 			if (a === undefined)
 				continue
 
-			Array.protoype.push.apply(against_items, a)
+			Array.prototype.push.apply(against_items, a)
 			new_against.push(against_iter)
 		}
 		against = new_against
 
-		if (is_branch(item))
-			lookahead.push(
-				new DecisionBranch(
-					item.is_optional,
-					item.paths.map(path => _compute_path(
-						path.branch_iter(),
-						against.map(a => a.clone()),
-						lookahead,
-					)),
-				)
-			)
-
-		const same = against_items.filter(a => a.name === item.name)
+		const same = against_items.filter(a => a.name === (item as TokenDefinition).name)
 
 		// if (same.length >= against.length)
 		// 	throw new Error("all branches have the same stem")

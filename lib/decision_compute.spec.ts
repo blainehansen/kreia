@@ -18,60 +18,174 @@ const H = Token('H', 'H')
 describe('compute_path', () => {
 	it('simple linear tokens', () => {
 		expect(compute_path(
-			path(0, [A]),
+			path([A]),
 			[
-			path(0, [B]),
-			path(0, [C]),
-		])).eql(path(1, [A]))
+			path([B]),
+			path([C]),
+		])).eql(path([A]))
 
 		expect(compute_path(
-			path(0, [A, B, C]),
+			path([A, B, C]),
 			[
-			path(0, [A, B, C, D, E]),
-		])).eql(path(3, [A, B, C]))
+			path([A, B, C, D, E]),
+		])).eql(path([A, B, C]))
 
 		expect(compute_path(
-			path(0, [A, B, A]),
+			path([A, B, A]),
 			[
-			path(0, [A, C, A]),
-		])).eql(path(2, [A, B]))
+			path([A, C, A]),
+		])).eql(path([A, B]))
 
 		expect(compute_path(
-			path(0, [A, C, B, A, C]),
+			path([A, C, B, A, C]),
 			[
-			path(0, [A, C, D, A]),
-			path(0, [A, C, B, A, E, A]),
-		])).eql(path(5, [A, C, B, A, C]))
+			path([A, C, D, A]),
+			path([A, C, B, A, E, A]),
+		])).eql(path([A, C, B, A, C]))
+
+		expect(compute_path(
+			path([A, C, B, A, C, E]),
+			[
+			path([A, C, D, A]),
+			path([A, C, B, A, E, A]),
+		])).eql(path([A, C, B, A, C]))
 	})
 
 	it('simple branches', () => {
 		expect(compute_path(
-			path(0, [A, B, C]),
+			path([A, B, C]),
 			[
-			path(0, [A], branch(true, path(2, [D, F]))),
-		])).eql(path(2, [A, B]))
+			path([A], branch(true, path([D, F]))),
+		])).eql(path([A, B]))
 
 		expect(compute_path(
-			path(0, [A, B, C]),
+			path([A, B, C]),
 			[
-			path(0, [A], branch(true, path(2, [B, F]))),
-		])).eql(path(3, [A, B, C]))
+			path([A], branch(true, path([B, F]))),
+		])).eql(path([A, B, C]))
 
 		expect(compute_path(
-			path(0, [A, B], branch(true, path(2, [F, G]))),
+			path([A, B], branch(true, path([F, G]))),
 			[
-			path(0, [A, B, E]),
-		])).eql(path(2, [A, B]))
+			path([A, B, E]),
+		])).eql(path([A, B]))
+
+		expect(compute_path(
+			path([A, B], branch(false, path([F, G]))),
+			[
+			path([A, B, E]),
+		])).eql(path([A, B], branch(false, path([F]))))
+
+		expect(compute_path(
+			path([A, B], branch(true, path([C, D])), [E, F, A, B, C]),
+			[
+			path([A, B, E, G]),
+			path([A, B, C, D, E, H]),
+		])).eql(
+			path([A, B], branch(true, path([C, D])), [E, F])
+		)
 	})
 
 	it('complex branches', () => {
 		expect(compute_path(
-			path(0, [A, B, C]),
+			path(
+				[A, B],
+				branch(false,
+					path([C, D, E]),
+					path([D]),
+				),
+				[A, C, A],
+			),
 			[
-			path(0, [A], branch(false,
-				path(2, [B, D]),
-				path(2, [B, C]),
-			)),
-		])).eql(path(3, [A, B, C]))
+			path(
+				[A],
+				branch(false,
+					path([B, D]),
+					path([B, C]),
+				),
+			),
+			path(
+				branch(false,
+					path([A, B], branch(false, path([C, A]), path([C, D, E]))),
+					path([A, B], branch(false, path([A, C, A]))),
+				),
+			),
+		])).eql(
+			path(
+				[A, B],
+				branch(false,
+					path([C, D, E]),
+					path([D]),
+				),
+				[A],
+			)
+		)
+
+		expect(compute_path(
+			path(
+				[A, B],
+				branch(false,
+					path([C, D, E]),
+					path([D]),
+				),
+				[A, C, A],
+			),
+			[
+			path(
+				[A],
+				branch(false,
+					path([B, D]),
+					path([B, C]),
+				),
+			),
+			path(
+				branch(false,
+					path([A, B], branch(false, path([C, D, E]))),
+					path([A, B], branch(false, path([A, C, A]))),
+				),
+			),
+		])).eql(
+			path(
+				[A, B],
+				branch(false,
+					path([C, D, E]),
+					path([D]),
+				),
+				[A],
+			)
+		)
+
+		expect(compute_path(
+			path(
+				[A, B],
+				branch(true,
+					path([C, D, E]),
+					path([D]),
+				),
+				[A, C, A],
+			),
+			[
+			path(
+				[A],
+				branch(false,
+					path([B, D]),
+					path([B, C]),
+				),
+			),
+			path(
+				branch(false,
+					path([A, B], branch(false, path([C, A]), path([C, D, E]))),
+					path([A, B], branch(false, path([A, C, A]))),
+				),
+			),
+		])).eql(
+			path(
+				[A, B],
+				branch(true,
+					path([C, D, E]),
+					path([D]),
+				),
+			)
+		)
 	})
 })

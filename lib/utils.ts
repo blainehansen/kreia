@@ -1,4 +1,6 @@
 import * as util from 'util'
+import { Result, Ok, Err } from '@ts-std/monads'
+
 export function to_string(obj: any) {
 	return util.inspect(obj, { depth: null, colors: true })
 }
@@ -13,3 +15,7 @@ export function Data<F extends (...args: any) => any>(
 	return fn
 }
 export type Data<F extends (...args: any) => any> = ReturnType<F>
+
+export function result_get<T>(dict: Dict<T>, key: string): Result<T> {
+	return Result.from_nillable(dict[key], key)
+}
