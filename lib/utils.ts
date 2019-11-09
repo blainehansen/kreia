@@ -19,3 +19,8 @@ export type Data<F extends (...args: any) => any> = ReturnType<F>
 export function result_get<T>(dict: Dict<T>, key: string): Result<T> {
 	return Result.from_nillable(dict[key], key)
 }
+
+
+export function exhaustive(): never {
+	throw new Error()
+}

@@ -1,170 +1,257 @@
 import { Result, Ok, Err } from '@ts-std/monads'
+import { DefaultDict } from '@ts-std/collections'
 
-import { Data } from './utils'
-import * as gen from './ast_gen'
-// import { TokenDefinition, regulate_regex, match_token } from './states_lexer'
+import { TokenDefinition } from './lexer'
+import { Data, exhaustive } from './utils'
 
-export namespace ast {
-	export const Arg = Data((name: string) => {
-		return { type: 'Arg' as const, name }
-	})
-	export type Arg = ReturnType<typeof Arg>
+export const Arg = Data((name: string) => {
+	return { type: 'Arg' as const, name }
+})
+export type Arg = ReturnType<typeof Arg>
 
-	export const Var = Data((arg_name: string) => {
-		return { type: 'Var' as const, arg_name }
-	})
-	export type Var = ReturnType<typeof Var>
-
-
-	export const Rule = Data((name: string, definition: Definition) => {
-		return { type: 'Rule' as const, name, definition, is_locking: false as const }
-	})
-
-	export const LockingArg = Data((name: string, definition: Definition) => {
-		return { type: 'LockingArg' as const, name, definition }
-	})
-	export type LockingArg = ReturnType<typeof LockingArg>
-
-	export const LockingVar = Data((name: string) => {
-		return { type: 'LockingVar' as const, name }
-	})
-	export type LockingVar = ReturnType<typeof LockingVar>
-
-	export const LockingRule = Data((name: string, lockers: LockingArg[], definition: (Node | LockingVar)[]) => {
-		return { type: 'Rule' as const, name, definition, is_locking: true as const, lockers }
-	})
-	export type Rule = ReturnType<typeof Rule> | ReturnType<typeof LockingRule>
-
-	export const Macro = Data((name: string, args: Arg[], definition: (Node | Var)[]) => {
-		return { type: 'Macro' as const, name, args, definition }
-	})
-	export type Macro = ReturnType<typeof Macro>
+export const Var = Data((arg_name: string) => {
+	return { type: 'Var' as const, arg_name }
+})
+export type Var = ReturnType<typeof Var>
 
 
-	export const Subrule = Data((rule_name: string) => {
-		return { type: 'Subrule' as const, rule_name }
-	})
-	export type Subrule = ReturnType<typeof Subrule>
+export const Rule = Data((name: string, definition: Definition) => {
+	return { type: 'Rule' as const, name, definition, is_locking: false as const }
+})
 
-	export const Maybe = Data((definition: Definition) => {
-		return { type: 'Maybe' as const, definition }
-	})
-	export type Maybe = ReturnType<typeof Maybe>
+export const LockingArg = Data((name: string, definition: Definition) => {
+	return { type: 'LockingArg' as const, name, definition }
+})
+export type LockingArg = ReturnType<typeof LockingArg>
 
-	export const Many = Data((definition: Definition) => {
-		return { type: 'Many' as const, definition }
-	})
-	export type Many = ReturnType<typeof Many>
+export const LockingVar = Data((name: string) => {
+	return { type: 'LockingVar' as const, name }
+})
+export type LockingVar = ReturnType<typeof LockingVar>
 
-	export const Or = Data((choices: Definition[]) => {
-		return { type: 'Or' as const, choices }
-	})
-	export type Or = ReturnType<typeof Or>
+export const LockingRule = Data((name: string, lockers: LockingArg[], definition: (Node | LockingVar)[]) => {
+	return { type: 'Rule' as const, name, definition, is_locking: true as const, lockers }
+})
+export type Rule = ReturnType<typeof Rule> | ReturnType<typeof LockingRule>
 
-	export const MacroCall = Data((macro_name: string, args: Definition[]) => {
-		return { type: 'MacroCall' as const, macro_name, args }
-	})
-	export type MacroCall = ReturnType<typeof MacroCall>
+export const Macro = Data((name: string, args: Arg[], definition: (Node | Var)[]) => {
+	return { type: 'Macro' as const, name, args, definition }
+})
+export type Macro = ReturnType<typeof Macro>
 
-	export const Consume = Data((token_names: string[]) => {
-		return { type: 'Consume' as const, token_names }
-	})
-	export type Consume = ReturnType<typeof Consume>
 
-	export type Node =
-		| Subrule
-		| Maybe
-		| Many
-		| Or
-		| MacroCall
-		| Consume
+export const Subrule = Data((rule_name: string) => {
+	return { type: 'Subrule' as const, rule_name }
+})
+export type Subrule = ReturnType<typeof Subrule>
 
-	export type Definition = Node[]
+export const Maybe = Data((definition: Definition) => {
+	return { type: 'Maybe' as const, definition }
+})
+export type Maybe = ReturnType<typeof Maybe>
 
-	export type GrammarItem =
-		| TokenDefinition
-		| Rule
-		| Macro
+export const Many = Data((definition: Definition) => {
+	return { type: 'Many' as const, definition }
+})
+export type Many = ReturnType<typeof Many>
 
-	export type Grammar = GrammarItem[]
+export const Or = Data((choices: Definition[]) => {
+	return { type: 'Or' as const, choices }
+})
+export type Or = ReturnType<typeof Or>
+
+export const MacroCall = Data((macro_name: string, args: Definition[]) => {
+	return { type: 'MacroCall' as const, macro_name, args }
+})
+export type MacroCall = ReturnType<typeof MacroCall>
+
+export const Consume = Data((token_names: string[]) => {
+	return { type: 'Consume' as const, token_names }
+})
+export type Consume = ReturnType<typeof Consume>
+
+export type Node =
+	| Subrule
+	| Maybe
+	| Many
+	| Or
+	| MacroCall
+	| Consume
+
+export type Definition = Node[]
+
+export type GrammarItem =
+	| TokenDefinition
+	| Rule
+	| Macro
+
+export type Grammar = GrammarItem[]
+
+
+import ts = require('typescript')
+
+function render(definition: Definition) {
+	// if it's a consume you
+	if (definition.length === 1 && definition[0].type)
 }
 
-function finalize_grammar(grammar: ast.Grammar): gen.Grammar {
-	const token_definitions = {} as Dict<TokenDefinition>
-	const macros = {} as Dict<Macro>
-	const rules = {} as Dict<Rule>
+function render_with_lookahead(current: Node[][], next: Node[]) {
+	const builder = new BranchBuilder()
+	builder.push_all(current)
+
+	let node
+	while (node = nodes.shift()) {
+		// if the node is also branching, push it
+		if (node.type === 'Or')
+			builder.push_all(found_branch.choices)
+		else if (node.type === 'Maybe')
+			builder.push(found_branch.definition)
+		else if (node.type === 'Many')
+			builder.push(found_branch.definition)
+		else {
+			builder.push_required(node)
+			break
+		}
+	}
+
+	const branch = builder.try_build()
+	const [lookahead_ident, lookahead_definition] = branch
+		? compute_path(branch[0]!, branch.slice(1))
+		: t(undefined, undefined)
+
+	// ts.createVariableStatement(
+	// 	undefined,
+	// 	ts.createVariableDeclarationList(
+	// 		[
+	// 			ts.createVariableDeclaration(
+	// 				ts.createIdentifier('a'),
+	// 				undefined,
+	// 				ts.createNew(ts.createIdentifier('DecisionPath'), undefined, [
+	// 					ts.createArrayLiteral([ts.createIdentifier('Whitespace')], false),
+	// 				]),
+	// 			),
+	// 		],
+	// 		ts.NodeFlags.Const,
+	// 	),
+	// )
+
+	global_lookaheads.push(lookahead_definition)
+
+	return ts.createExpressionStatement(ts.createCall(
+		ts.createIdentifier('func'), undefined,
+		[render(current[0]!), ts.createIdentifier(lookahead_ident)],
+	))
+}
+
+function render_node(
+	node: Node,
+	next: Node[],
+) {
+	switch (node.type) {
+	case 'Or':
+		const choices = []
+		for (let choice_index = 0; choice_index < node.choices.length; choice_index++) {
+			const choice = node.choices[choice_index]
+			const rendered = render_with_lookahead([choice].concat(node.choices.slice(choice_index + 1)), next)
+			choices.push(rendered)
+		}
+		return ts.createExpressionStatement(ts.createCall(
+			ts.createIdentifier('or'), undefined, choices,
+		))
+
+	case 'Maybe':
+		// TODO all of these could have little optimizations to have maybe versions of all nodes and flatten things
+		return render_with_lookahead([node.definition], next)
+
+	case 'Many':
+		return render_with_lookahead([node.definition], next)
+
+	case 'Subrule':
+		return ts.createExpressionStatement(ts.createCall(
+			ts.createIdentifier(node.rule_name), undefined, [],
+		))
+
+	case 'MacroCall':
+		return ts.createExpressionStatement(ts.createCall(
+			ts.createIdentifier(node.macro_name), undefined,
+			node.args.map(render),
+		))
+
+	case 'Consume':
+		return ts.createExpressionStatement(ts.createCall(
+			ts.createIdentifier('consume'), undefined,
+			node.token_names.map(token_name => ts.createIdentifier(token_name))
+		))
+	}
+}
+
+
+function render_grammar(grammar: Grammar) {
+	// index, then recursively lookup, pushing to a list of errors
+	// once you've done that, just ! assert all lookups at the codegen stage
+
+	// check for left recursion or anything else
+
+	// do codegen
+
+	const token_definitions = new DefaultDict<TokenDefinition>()
+	const macros = new DefaultDict<Macro>()
+	const rules = new DefaultDict<Rule>()
+
+	const conflict_errors = [] as string[]
+
+	const matcher = {
+		ok: () => {},
+		err: (e: [string, unknown, unknown]) => {
+			conflict_errors.push(`there are conflicting definitions for: ${e[0]}`)
+		},
+	}
 
 	for (const grammar_item of Grammar) {
 		switch (grammar_item.type) {
 		case 'Token':
-			token_definitions[grammar_item.name] = grammar_item
+			token_definitions.set(grammar_item.name, grammar_item).match(matcher)
 		case 'Rule':
-			rules[grammar_item.name] = grammar_item
+			rules.set(grammar_item.name, grammar_item).match(matcher)
 		case 'Macro':
-			rules[grammar_item.name] = grammar_item
+			rules.set(grammar_item.name, grammar_item).match(matcher)
 		}
 	}
 
-	for (const rule of Object.values(rules)) {
-		// rule.definition
-		// we go along each node, computing its lookahead path
-		// if the node is a maybe, bundle its definition as well as all the next definitions we can find that are optional
-		// basically we lump together branches
-		// encountering a Maybe means we lump it together with all next Maybes, stopping when we include either a non-Maybe or an Or
+	if (conflict_errors.length > 0)
+		throw new Error()
 
-		// we do something similar for an Or, we grab and lump together all the Maybes
+	// const rendered_tokens = token_definitions.values.map(token_definition => {
+	// 	return ts.createExpressionStatement(
+	// 		ts.createCall(ts.createIdentifier('Token'), undefined, [
+	// 			ts.createStringLiteral(token_definition.name),
+	// 			ts.createRegularExpressionLiteral('/\\s+/'),
+	// 			ts.createObjectLiteral(
+	// 				[
+	// 					ts.createPropertyAssignment(
+	// 						ts.createIdentifier('ignore'),
+	// 						ts.createTrue(),
+	// 					),
+	// 				],
+	// 				false,
+	// 			),
+	// 		]),
+	// 	)
+	// })
 
-		// we also do something similar for a Many, but it's a little more complicated
-		// the first iteration isn't optional by definition, but we need to compute it's lookahead based on it's definition and the next things
+	const rendered_macros = macros.values.map(macro => {
+		//
+	})
 
-		// for (const node of rule.definition)
-	}
+	const rendered_rules = rules.values.map(rule => {
+		//
+	})
+
+
+	// basically at the end we have a list of lookaheads with sequential index based identifiers
+	// then some statements for creating all the lexer definition stuff
+	// then all the function declarations for subrules and macros
 }
-
-function finalize_node(
-	node: ast.Node,
-	token_definitions: Dict<TokenDefinition>,
-	rules: Dict<gen.Rule>,
-	macros: Dict<gen.Macro>,
-): Result<gen.Node> {
-	switch (node.type) {
-	case 'Subrule':
-		return result_get(rules, node.rule_name)
-			.change(gen.Subrule)
-	case 'Or':
-		return node.choices
-			.map(choice => choice.try_map(node => finalize_node(node, token_definitions, rules, macros)))
-	case 'MacroCall':
-		return result_get(macros, node.macro_name)
-			.change(gen.MacroCall)
-	case 'Consume':
-		return node.token_names
-			.try_map(token_name => result_get(token_definitions, token_name))
-			.change(gen.Consume)
-	case 'Maybe':
-		return node.definition.try_map(node => finalize_node(node, token_definitions, rules, macros))
-	case 'Many':
-		return node.definition.try_map(node => finalize_node(node, token_definitions, rules, macros))
-	}
-}
-
-function finalize_rule(rule: ast.Rule) {
-	if (rule.is_locking)
-		return definition
-			.try_map(
-				node => node.type === 'LockingVar'
-					?
-					: finalize_node(node, token_definitions, rules, macros)
-			)
-			.change()
-
-		return gen.LockingRule(name, rule.lockers, )
-	else
-		return rule.definition
-			.try_map(node => finalize_node(node, token_definitions, rules, macros))
-			.change(definition => gen.Rule(rule.name, definition))
-}
-
 
 
 // const Padded = Macro(
@@ -208,42 +295,74 @@ const Grammar: Grammar = [
 ]
 
 
-function exhaustive(): never {
-	throw new Error()
-}
 
-function lump_branches(found_branch: Or | Maybe | Many, next: Node[]): DecisionBranch | undefined {
-	const branch = new BranchBuilder()
 
-	// the type of the found_branch only determines how we push to the builder
-	switch (found_branch.type) {
-	case 'Or':
-		branch.push_all(found_branch.choices)
-		break
-	case 'Maybe':
-		branch.push(found_branch.definition)
-		break
-	case 'Many':
-		branch.push(found_branch.definition)
-		break
-	default:
-		return exhaustive()
-	}
 
-	let node
-	while (node = nodes.shift()) {
-		// if the node is also branching, push it
-		if (node.type === 'Or')
-			branch.push_all(found_branch.choices)
-		else if (node.type === 'Maybe')
-			branch.push(found_branch.definition)
-		else if (node.type === 'Many')
-			branch.push(found_branch.definition)
-		else {
-			branch.push_required(node)
-			break
-		}
-	}
+// a few things have to happen
 
-	return branch.try_build().to_undef()
-}
+// # validate the ast
+// go through every item in the grammar, and check that it is valid
+// there are a few requirements
+// - all references to tokens (consume), macros (macrocall), and rules (subrule) must actually exist (create a lookup map for each variety, and recursively check all grammar nodes. there will also be a step of some sort to convert abstract ast subrules into resolved ones) actually this whole step might be unwise. it might be a good idea to simply look things up as you go through the validation and generation steps, using a monad.Maybe to unwrap things.
+// - rules must not be left-recursive (every rule must descend to a non-optional consume before it can call itself in a subrule. when recursing into a maybe, consumes within the non-optional path of the maybe only terminate the maybe, not the whole rule)
+
+// # figure out unambiguous lookaheads
+// traverse the tree, and at every decision point (a Maybe, Or, Many), follow this algorithm:
+// - gather all differentiatable paths
+// -- (for a Maybe, it's the Maybe path as well as all next paths including the first mandatory path)
+// -- (for an Or, it's all the branches of the Or)
+// -- (for a Many, the branch is the continuation point after the body_rule, including all next paths like Maybe)
+// - traverse all differentiatable paths at the same time. you keep all paths that have an identical sibling. so every time a path has a mandatory consume that's different than all the others, you can remove it from consideration and give it the lookahead branch you've calculated so far. a path requires a so-far-possibly-identical sibling to be kept, so by definition if there's only one left, we're done.
+// - if you reach the end of the branches and there are more than one remaining, the grammar is redundant or undecidable
+
+// function check_lr_rules(rules: Rule[]) {
+// 	const lr_rules = [] as Rule[]
+// 	for (const rule of rules) {
+// 		const lr_name = check_lr_rule(rule)
+// 		if (lr_name !== undefined)
+// 			lr_rules.push(lr_name)
+// 	}
+
+// 	if (lr_rules.length > 0)
+// 		throw new Error(`There are rules which are left-recursive: ${lr_rules.join(', ')}`)
+// }
+
+// function check_lr_rule(rule: Rule): string | undefined {
+// 	const stack = rule.nodes.slice()
+// 	let node
+// 	while (node = stack.pop()) switch (node.key) {
+// 	case 'Subrule':
+// 		if (node.content.name === rule.name)
+// 			return rule.name
+// 		Array.prototype.push.apply(stack, node.content.nodes.slice().reverse())
+// 		continue
+
+// 	case 'Consume':
+// 		return undefined
+
+// 	case 'Or':
+// 	case 'MacroCall':
+
+// 	// here in the case of a Maybe, it can't prevent the top-level rule from being left-recursive, but it can still produce a left-recursive call
+
+// 	default:
+// 		Array.prototype.push.apply(stack, node.content.slice().reverse())
+// 		continue
+// 	}
+
+// 	return undefined
+// }
+
+// function analyze_and_render_rules(rules: RuleDefinition[]) {
+// 	const rules = {} as { [rule_name: string]: Rule }
+// 	const macros = {} as { [macro_name: string]: Macro }
+
+// 	for (const rule of rules) {
+// 		switch (rule.type) {
+// 		case 'Rule':
+// 			rules[rule.name] = rule
+// 		case 'Macro':
+// 			macros[rule.name] = rule
+// 		}
+// 	}
+// }

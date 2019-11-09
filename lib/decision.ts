@@ -134,3 +134,7 @@ export class DecisionBranch extends Decidable {
 		return this.is_optional ? [] : undefined
 	}
 }
+
+export class DecisionWhile() {
+	//
+}

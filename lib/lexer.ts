@@ -51,26 +51,36 @@ export type TokenOptions = {
 	ignore?: true,
 	state_transform?: StateTransform,
 }
+export type BaseTokenSpec = RegExp | string | (RegExp | string)[]
+export type TokenSpec = BaseTokenSpec | { match: BaseTokenSpec } & TokenOptions
+
+function source_regex(def: RegExp | string) {
+	return typeof def === 'string'
+		? def.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // $& means the whole matched string
+		: def.source
+}
 
 export const Token = Data((
 	name: string,
 	regex: RegExp | string | (RegExp | string)[],
 	{ ignore, state_transform } = {} as TokenOptions,
 ) => {
-	const t = { name, regex: regulate_regex(regex) } as TokenDefinition
+	const base_source = Array.isArray(def)
+		? def.map(r => `(?:${source_regex(r)})`).join('|')
+		: source_regex(def)
+	const token_definition = { name, regex: new RegExp('^' + base_source) } as TokenDefinition
+
 	if (ignore !== undefined)
-		t.ignore = ignore
+		token_definition.ignore = ignore
 	if (state_transform !== undefined)
-		t.state_transform = state_transform
+		token_definition.state_transform = state_transform
 	return t
 })
 // type Token = ReturnType<typeof Token>
 
-type BaseTokenSpec = RegExp | string | (RegExp | string)[]
-type TokenSpec = BaseTokenSpec | { match: BaseTokenSpec } & TokenOptions
 
 
-// type LexerState<D extends { [key: string]: TokenSpec }> = { [K in keyof D]: ReturnType<typeof Token> }
+// type LexerState<D extends { [key: string]: TokenSpec }> = { [K in keyof D]: TokenDefinition }
 // export function create_lexer_state<D extends { [key: string]: TokenSpec }>(
 // 	token_definitions: D
 // ): LexerState<D> {
@@ -401,36 +411,6 @@ export class RawBlock implements VirtualLexer {
 	}
 }
 
-
-function source_regex(def: RegExp | string) {
-	return typeof def === 'string'
-		? escape_reg_exp(def)
-		: def.source
-}
-
-export function regulate_regex(def: RegExp | string | (RegExp | string)[]) {
-	const base_source = Array.isArray(def)
-		? def.map(r => `(?:${source_regex(r)})`).join('|')
-		: source_regex(def)
-
-	return new RegExp('^' + base_source)
-}
-
-function escape_reg_exp(string: string) {
-	return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
-}
-
-export function def(name: string, regex: RegExp | string, state_transform?: StateTransform): TokenDefinition {
-	const d: TokenDefinition = {
-		name,
-		regex: typeof regex === 'string'
-			? new RegExp('^' + escape_reg_exp(regex))
-			: new RegExp('^' + regex.source),
-	}
-	if (state_transform)
-		d.state_transform = state_transform
-	return d
-}
 
 // const source = `\
 // a
