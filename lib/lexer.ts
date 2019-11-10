@@ -118,6 +118,16 @@ export function match_tokens(tokens: Token[], token_definitions: TokenDefinition
 	return true
 }
 
+export function match_and_trim(tokens: RawToken[], token_definitions: TokenDefinition[]) {
+	for (const [index, token_definition] of token_definitions.entries()) {
+		const token = tokens[index]
+
+		if (!match_token(token, token_definition))
+			return undefined
+	}
+
+	return tokens.slice(token_definitions.length)
+}
 
 type State = {
 	tokens: TokenDefinition[],

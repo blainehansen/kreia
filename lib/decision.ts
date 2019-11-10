@@ -1,17 +1,6 @@
 import '@ts-std/extensions/dist/array'
 
-import { TokenDefinition, RawToken, match_token } from './states_lexer'
-
-function match_and_trim(tokens: RawToken[], token_definitions: TokenDefinition[]) {
-	for (const [index, token_definition] of token_definitions.entries()) {
-		const token = tokens[index]
-
-		if (!match_token(token, token_definition))
-			return undefined
-	}
-
-	return tokens.slice(token_definitions.length)
-}
+import { TokenDefinition, RawToken, match_and_trim } from './states_lexer'
 
 export abstract class Decidable {
 	abstract readonly test_length: number
