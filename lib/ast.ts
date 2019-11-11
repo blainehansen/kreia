@@ -194,9 +194,9 @@ function render_grammar(grammar: Grammar) {
 
 	// do codegen
 
-	const token_definitions = new DefaultDict<TokenDefinition>()
-	const macros = new DefaultDict<Macro>()
-	const rules = new DefaultDict<Rule>()
+	const token_definitions = new UniqueDict<TokenDefinition>()
+	const macros = new UniqueDict<Macro>()
+	const rules = new UniqueDict<Rule>()
 
 	const conflict_errors = [] as string[]
 
@@ -214,6 +214,8 @@ function render_grammar(grammar: Grammar) {
 		case 'Rule':
 			rules.set(grammar_item.name, grammar_item).match(matcher)
 		case 'Macro':
+			// TODO add a condition here to treat many_separated specially
+			// maybe seed the macros UniqueDict with it's base definition
 			rules.set(grammar_item.name, grammar_item).match(matcher)
 		}
 	}

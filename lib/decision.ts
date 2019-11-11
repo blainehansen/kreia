@@ -12,21 +12,6 @@ export abstract class Decidable {
 	abstract _test(tokens: RawToken[]): RawToken[] | undefined
 }
 
-class IterWrapper<T> {
-	constructor(protected internal: Generator<T, void, undefined>) {}
-	next(): T | undefined {
-		let result = this.internal.next()
-		if (result.done) return undefined
-		else return result.value
-	}
-
-	clone() {
-		const a = Array.from(this.internal)
-		this.internal = (function* () { yield* a.slice() })()
-		return new IterWrapper((function* () { yield* a.slice() })())
-	}
-}
-
 export function path(...path: (TokenDefinition[] | DecisionBranch)[]) {
 	return new DecisionPath(path)
 }

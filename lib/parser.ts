@@ -1,193 +1,226 @@
-import { Result, Ok, Err } from '@ts-std/monads'
 import { Cast, tuple as t } from '@ts-std/types'
-import { Enum, empty, variant } from '@ts-std/enum'
+import { Maybe, Some, None } from '@ts-std/monads'
 
-import { def, TokenDefinition, BaseLexer, Token, RawToken, VirtualToken } from './states_lexer'
-
-
-
-const toks = lexer_state({
-	LeftParen: '(',
-	RightParen: ')',
-	Num: /[0-9]+/,
-	Nil: 'nil',
-	Comma: ',',
-	Whitespace: /\s+/, // { match: , ignore: true, lineBreaks: true },
-})
-
-toks.Whitespace.ignore = true
-
-const source = `
-	(1, 2, 3, nil) ()
-	(nil, nil)
-	(1, (2, 3, 4), (((), nil)))
-`
-
-const lexer = new BaseLexer({ tokens: Object.values(toks) }, source)
-
-// let token
-// while (token = lexer.next()) {
-// 	console.log(token)
-// }
+import { Decidable } from './decision'
+import { match_tokens, TokenDefinition, BaseLexer, Token, RawToken, VirtualToken } from './lexer'
 
 
-
-type ParseEntity<F extends Func> =
-	| ParseFunction<F>
-	| TokenDefinition[]
-
-type Func = () => any
-type ParseFunction<F extends Func> = F & { lookahead: () => boolean }
-
-
-function func<F extends Func>(f: F, l: () => boolean): ParseFunction<F> {
-	const new_f = f as ParseFunction<F>
-	new_f.lookahead = l
-	return new_f
+function Parser(...lexer_args: Parameters<BaseLexer['reset']>) {
+	const lexer = new BaseLexer(...lexer_args)
+	return {
+		reset: lexer.reset.bind(lexer),
+		consume: consume.bind(lexer),
+		maybe: maybe.bind(lexer),
+		or: or.bind(lexer),
+		maybe_or: maybe_or.bind(lexer),
+		many: many.bind(lexer),
+		maybe_many: maybe_many.bind(lexer),
+		many_separated: many_separated.bind(lexer),
+		maybe_many_separated: maybe_many_separated.bind(lexer),
+	}
 }
 
-type EntityReturn<E extends ParseEntity<Func>> =
-	E extends TokenDefinition[] ? { [I in keyof E]: Token }
-	: E extends ParseFunction<infer F> ? ReturnType<F>
+type Func = (...args: any[]) => any
+
+type DecidableFunc<F extends Func> =
+	((fn: F, d: Decidable, ...args: Parameters<F>) => any) extends ((...args: infer R) => any)
+	? R
 	: never
 
-function perform_entity<F extends Func, E extends ParseEntity<F>>(entity: E): EntityReturn<E> {
-	if (typeof entity === 'function')
-		return (entity as ParseFunction<F>)()
-	return consume(...(entity as TokenDefinition[])) as EntityReturn<E>
+function is_decidable_func<F extends Func>(
+	fl: DecidableFunc<F> | TokenDefinition[],
+): fl is DecidableFunc<F> {
+	return typeof fl[0] === 'function'
 }
-function test_entity<F extends Func, E extends ParseEntity<F>>(entity: E): boolean {
-	if (typeof entity === 'function')
-		return (entity as ParseFunction<F>).lookahead()
-	const toks = lexer.peek((entity as TokenDefinition[]).length)
+
+function f<F extends Func>(
+	fn: F, d: Decidable,
+	...args: Parameters<F>
+): DecidableFunc<F> {
+	return [fn, d, ...args] as DecidableFunc<F>
+}
+
+type ParseEntity = DecidableFunc<Func> | TokenDefinition[]
+
+type EntityReturn<I extends ParseEntity> =
+	I extends TokenDefinition[] ? TokensForDefinitions<I>
+	: ((...args: I) => any) extends ((fn: infer F, d: Decidable, ...args: infer A) => any)
+	? F extends Func
+	? A extends Parameters<F>
+	? ReturnType<F>
+	: never : never : never
+
+
+type TokensForDefinitions<L extends TokenDefinition[]> = { [I in keyof L]: Token }
+
+function perform_entity<F extends Func, I extends DecidableFunc<F> | TokenDefinition[]>(
+	lexer: BaseLexer,
+	entity: I,
+): EntityReturn<I> {
+	if (is_decidable_func(entity)) {
+		const [fn, _, ...args] = entity
+		return fn(...args)
+	}
+	return _consume(lexer, entity as TokenDefinition[]) as EntityReturn<I>
+}
+
+function test_entity<F extends Func, I extends DecidableFunc<F> | TokenDefinition[]>(
+	lexer: BaseLexer,
+	entity: I,
+): boolean {
+	if (is_decidable_func(entity)) {
+		const [, tester, ] = entity
+		const toks = lexer.peek(tester.test_length)
+		return tester.test(toks)
+	}
+	const toks = lexer.peek(entity.length)
 	return match_tokens(toks, entity as TokenDefinition[])
 }
 
 
-
-function consume<L extends TokenDefinition[]>(...token_definitions: L): { [I in keyof L]: Token } {
+function _consume<L extends TokenDefinition[]>(
+	lexer: BaseLexer,
+	token_definitions: L
+): TokensForDefinitions<L> {
 	const next_tokens = lexer.advance(token_definitions.length)
 
 	if (match_tokens(next_tokens, token_definitions))
-		return next_tokens as { [I in keyof L]: Token }
-	else {
+		return next_tokens as TokensForDefinitions<L>
+	else
 		throw new Error("next tokens didn't match")
-	}
 }
 
-// function maybe_consume(...token_definitions : TokenDefinition[]): Token[] | undefined {
-// 	const next_tokens = lexer.peek(token_definitions.length)
+function consume<L extends TokenDefinition[]>(
+	this: BaseLexer,
+	...token_definitions: L
+): TokensForDefinitions<L> {
+	return _consume(this, token_definitions)
+}
 
-// 	if (match_tokens(next_tokens, token_definitions))
-// 		return next_tokens
-// 	return undefined
-// }
+type Optional<T, B extends boolean> = B extends true ? T | undefined : T
 
-function maybe<E extends ParseEntity<Func>>(rule: E): EntityReturn<E> | undefined {
-	if (test_entity(rule))
-		return perform_entity(rule)
+
+function maybe<I extends ParseEntity>(
+	this: BaseLexer,
+	...entity: I
+): EntityReturn<I> | undefined {
+	if (test_entity(this, entity))
+		return perform_entity(this, entity)
+
 	return undefined
 }
 
-function many<E extends ParseEntity<Func>>(rule: E): EntityReturn<E>[] {
-	// this isn't optional, so we have to do one loop
-	let should_proceed = true
-	const results = [] as EntityReturn<E>[]
+
+function many<I extends ParseEntity>(
+	this: BaseLexer,
+	...entity: I
+): EntityReturn<I>[] {
+	return _many(this, false, entity)
+}
+
+function maybe_many<I extends ParseEntity>(
+	this: BaseLexer,
+	...entity: I
+): EntityReturn<I>[] | undefined {
+	return _many(this, true, entity)
+}
+
+function _many<I extends ParseEntity, B extends boolean>(
+	lexer: BaseLexer,
+	is_optional: B,
+	entity: I,
+): Optional<EntityReturn<I>[], B> {
+	let should_proceed = !is_optional || test_entity(lexer, entity)
+	if (is_optional)
+		if (!should_proceed)
+			return undefined as Optional<EntityReturn<I>[], B>
+
+	const results = [] as EntityReturn<I>[]
 
 	while (should_proceed) {
-		results.push(perform_entity(rule))
-		should_proceed = test_entity(rule)
+		results.push(perform_entity(lexer, entity))
+		should_proceed = test_entity(lexer, entity)
 	}
 
-	return results
+	return results as Optional<EntityReturn<I>[], B>
 }
 
-function or<C extends ParseEntity<Func>[]>(
+
+
+type ChoicesReturn<C extends ParseEntity[]> = {
+	[K in keyof C]: EntityReturn<Cast<C[K], ParseEntity>>
+}[number]
+
+function or<C extends ParseEntity[]>(
+	this: BaseLexer,
 	...choices: C
-): Result<{ [K in keyof C]: EntityReturn<Cast<C[K], ParseEntity<Func>>> }[number]> {
-	// let choice_result = optional ? Ok(undefined) : Err('no choice taken')
-	let choice_result = Err('no choice taken')
+): ChoicesReturn<C> {
+	return _or(this, false, choices)
+}
+
+function maybe_or<C extends ParseEntity[]>(
+	this: BaseLexer,
+	...choices: C
+): ChoicesReturn<C> | undefined {
+	return _or(this, true, choices)
+}
+
+function _or<C extends ParseEntity[], B extends boolean>(
+	lexer: BaseLexer,
+	is_optional: B,
+	choices: C,
+): Optional<ChoicesReturn<C>, B> {
+	let choice_result = None
 
 	for (const choice of choices) {
-		// use the lookahead to test, if can't proceed then continue
-		if (!test_entity(choice))
+		if (!test_entity(lexer, choice))
 			continue
 
-		choice_result = Ok(perform_entity(choice))
+		choice_result = Some(perform_entity(lexer, choice))
 	}
 
-	return choice_result.expect('')
+	return is_optional
+		? choice_result.to_undef()
+		: choice_result.expect("no choice taken")
 }
 
-function many_separated<B extends ParseEntity<Func>, S extends ParseEntity<Func>>(
+
+function many_separated<B extends ParseEntity, S extends ParseEntity>(
+	this: BaseLexer,
 	body_rule: B,
 	separator_rule: S,
 ): EntityReturn<B>[] {
+	return _many_separated(this, false, body_rule, separator_rule)
+}
+
+function maybe_many_separated<B extends ParseEntity, S extends ParseEntity>(
+	this: BaseLexer,
+	body_rule: B,
+	separator_rule: S,
+): EntityReturn<B>[] | undefined {
+	return _many_separated(this, true, body_rule, separator_rule)
+}
+
+function _many_separated<B extends ParseEntity, S extends ParseEntity, O extends boolean>(
+	lexer: BaseLexer,
+	is_optional: O,
+	body_rule: B,
+	separator_rule: S,
+): Optional<EntityReturn<B>[], O> {
 	const results = [] as EntityReturn<B>[]
 
-	// first body isn't optional
-	results.push(perform_entity(body_rule))
+	if (is_optional && !test_entity(lexer, body_rule))
+		return undefined as Optional<EntityReturn<B>[], O>
 
-	let should_proceed = test_entity(separator_rule)
+	results.push(perform_entity(lexer, body_rule))
+
+	let should_proceed = test_entity(lexer, separator_rule)
 	while (should_proceed) {
-		perform_entity(separator_rule)
+		perform_entity(lexer, separator_rule)
 
-		results.push(perform_entity(body_rule))
-		should_proceed = test_entity(separator_rule)
+		results.push(perform_entity(lexer, body_rule))
+		should_proceed = test_entity(lexer, separator_rule)
 	}
 
-	return results
+	return results as Optional<EntityReturn<B>[], O>
 }
-
-
-
-
-// ### Grammar
-
-function lists() {
-	return many(parenthesized_number_list)
-}
-
-const parenthesized_number_list = func(() => {
-	consume(toks.LeftParen)
-	const list = maybe(number_list)
-	consume(toks.RightParen)
-	return list
-}, path(1, [toks.LeftParen]))
-
-// () => {
-// 	const tok = lexer.peek(1)[0]
-// 	return match_token(tok, toks.LeftParen)
-// }
-
-
-function token_or(...toks: TokenDefinition[]) {
-	return or(
-		...toks.map(token_type => [token_type]),
-	)
-}
-
-// const number_list_1_2 = () => {
-// 	const tok = lexer.peek(1)[0]
-// 	return match_token(tok, toks.Num) || match_token(tok, toks.Nil)
-// }
-const number_list_1_2 = branch(
-	path(1, [toks.Num]),
-	path(1, [toks.Nil]),
-)
-
-const number_list: ParseFunction<Func> = func(() => {
-	return many_separated(
-		func(() => or(
-			parenthesized_number_list,
-			func(() => token_or(toks.Num, toks.Nil), number_list_1_2),
-		), parenthesized_number_list.lookahead),
-		[toks.Comma],
-	)
-}, branch(parenthesized_number_list.lookahead, number_list_1_2))
-// () => {
-// 	return parenthesized_number_list.lookahead() || number_list_1_2()
-// }
-
-
-log(lists())

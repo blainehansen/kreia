@@ -65,9 +65,9 @@ export const Token = Data((
 	regex: RegExp | string | (RegExp | string)[],
 	{ ignore, state_transform } = {} as TokenOptions,
 ) => {
-	const base_source = Array.isArray(def)
-		? def.map(r => `(?:${source_regex(r)})`).join('|')
-		: source_regex(def)
+	const base_source = Array.isArray(regex)
+		? regex.map(r => `(?:${source_regex(r)})`).join('|')
+		: source_regex(regex)
 	const token_definition = { name, regex: new RegExp('^' + base_source) } as TokenDefinition
 
 	if (ignore !== undefined)
@@ -140,15 +140,19 @@ interface VirtualLexer {
 }
 
 export class BaseLexer {
-	private buffer = [] as Token[]
-	private state_stack: State[]
-	constructor(
-		initial_state: State,
-		private source: string,
-	) {
+	private buffer!: Token[]
+	private state_stack!: State[]
+	private source!: string
+	constructor(initial_state: State, source: string) {
+		this.reset(initial_state, source)
+	}
+
+	reset(initial_state: State, source: string) {
 		if (source.length === 0)
 			throw new Error("created lexer with empty source")
+		this.buffer = []
 		this.state_stack = [initial_state]
+		this.source = source
 	}
 
 	advance(count: number): Token[] {
@@ -251,175 +255,175 @@ export class BaseLexer {
 }
 
 
-const IndentationLexerState = Enum({
-	Normal: empty(),
-	LastNewline: empty(),
-	LastTab: variant<number>(),
-})
-type IndentationLexerState = Enum<typeof IndentationLexerState>
+// const IndentationLexerState = Enum({
+// 	Normal: empty(),
+// 	LastNewline: empty(),
+// 	LastTab: variant<number>(),
+// })
+// type IndentationLexerState = Enum<typeof IndentationLexerState>
 
-class SpacesError extends Error { constructor() { super("spaces are not allowed at the beginning of lines") } }
+// class SpacesError extends Error { constructor() { super("spaces are not allowed at the beginning of lines") } }
 
-function produce_deindents(count: number): VirtualToken[] {
-	if (count === 0)
-		return [{ is_virtual: true, type: 'indent_continue' }]
-	return Array
-		.from({ length: count })
-		.map(() => ({ is_virtual: true, type: 'deindent' }))
-}
+// function produce_deindents(count: number): VirtualToken[] {
+// 	if (count === 0)
+// 		return [{ is_virtual: true, type: 'indent_continue' }]
+// 	return Array
+// 		.from({ length: count })
+// 		.map(() => ({ is_virtual: true, type: 'deindent' }))
+// }
 
-const empty_process = t([] as VirtualToken[], undefined as StateTransform)
+// const empty_process = t([] as VirtualToken[], undefined as StateTransform)
 
-export class IndentationLexer implements VirtualLexer {
-	private current_indentation: number
-	// we start in this because an indent at this point is nonsensical
-	private state = IndentationLexerState.LastNewline() as IndentationLexerState
+// export class IndentationLexer implements VirtualLexer {
+// 	private current_indentation: number
+// 	// we start in this because an indent at this point is nonsensical
+// 	private state = IndentationLexerState.LastNewline() as IndentationLexerState
 
-	constructor(starting_indentation?: number) {
-		this.current_indentation = starting_indentation || 0
-	}
+// 	constructor(starting_indentation?: number) {
+// 		this.current_indentation = starting_indentation || 0
+// 	}
 
-	readonly raw_block_transform = StateTransform.Push(() => ({
-		tokens: [
-			def('newline', /\n+/),
-			def('tab', /\t/),
-			def('space', / +/),
-			def('str', /.+/),
-			// def('interpolation_start', '${', StateTransform.Push(() => ({
-			// 	// except you need to remove a lot of the whitespace ones
-			// 	tokens: default_state_tokens.concat(),
-			// 	// newlines aren't allowed in interpolation
-			// }))),
-		],
-		virtual_lexer: new RawBlock(this.current_indentation),
-	}))
-
-
-	process(tok: RawToken): [VirtualToken[], StateTransform] {
-		const type = tok.type.name
-
-		if (type === 'newline') {
-			this.state = IndentationLexerState.LastNewline()
-			return empty_process
-		}
-		if (type === 'tab' && !this.state.matches('LastTab')) {
-			this.state = IndentationLexerState.LastTab(tok.content.length)
-			return empty_process
-		}
-
-		const [must_new_state, state_transform] = type === 'raw_block_start'
-			? t(IndentationLexerState.LastNewline(), this.raw_block_transform)
-			: t(undefined, undefined)
-
-		return this.state.match({
-			Normal: () => {
-				this.state = must_new_state || IndentationLexerState.LastNewline()
-				return t([], this.raw_block_transform)
-			},
-
-			LastNewline: () => {
-				if (type === 'space')
-					throw new SpacesError()
-
-				// if it's just a normal token, then deindent
-				const virtual_tokens = produce_deindents(this.current_indentation)
-				this.current_indentation = 0
-				this.state = must_new_state || IndentationLexerState.Normal()
-				return t(virtual_tokens, state_transform)
-			},
-
-			LastTab: tab_size => {
-				if (type === 'space')
-					throw new SpacesError()
-				if (type === 'tab')
-					throw new Error("zuh??")
-
-				const new_indentation = tab_size
-				const current_indentation = this.current_indentation
-				if (new_indentation > current_indentation + 1)
-					throw new Error("indentation can only increase by one")
-
-				this.state = must_new_state || IndentationLexerState.Normal()
-				this.current_indentation = new_indentation
-
-				if (new_indentation === current_indentation + 1)
-					return t([{ is_virtual: true, type: 'indent' }], state_transform)
-
-				if (new_indentation === current_indentation)
-					return t([{ is_virtual: true, type: 'indent_continue' }], state_transform)
-
-				const virtual_tokens = produce_deindents(current_indentation - new_indentation)
-				return t(virtual_tokens, state_transform)
-			},
-		})
-	}
-
-	exit(): VirtualToken[] {
-		const virtual_tokens = produce_deindents(this.current_indentation)
-		this.current_indentation = 0
-		return virtual_tokens
-	}
-}
+// 	readonly raw_block_transform = StateTransform.Push(() => ({
+// 		tokens: [
+// 			def('newline', /\n+/),
+// 			def('tab', /\t/),
+// 			def('space', / +/),
+// 			def('str', /.+/),
+// 			// def('interpolation_start', '${', StateTransform.Push(() => ({
+// 			// 	// except you need to remove a lot of the whitespace ones
+// 			// 	tokens: default_state_tokens.concat(),
+// 			// 	// newlines aren't allowed in interpolation
+// 			// }))),
+// 		],
+// 		virtual_lexer: new RawBlock(this.current_indentation),
+// 	}))
 
 
-export class RawBlock implements VirtualLexer {
-	private state = IndentationLexerState.LastNewline() as IndentationLexerState
-	readonly block_indentation: number
-	constructor(program_indentation_at_entry: number) {
-		this.block_indentation = program_indentation_at_entry + 1
-	}
+// 	process(tok: RawToken): [VirtualToken[], StateTransform] {
+// 		const type = tok.type.name
 
-	process(tok: RawToken): [VirtualToken[], StateTransform] {
-		const type = tok.type.name
+// 		if (type === 'newline') {
+// 			this.state = IndentationLexerState.LastNewline()
+// 			return empty_process
+// 		}
+// 		if (type === 'tab' && !this.state.matches('LastTab')) {
+// 			this.state = IndentationLexerState.LastTab(tok.content.length)
+// 			return empty_process
+// 		}
 
-		if (type === 'newline') {
-			this.state = IndentationLexerState.LastNewline()
-			return empty_process
-		}
-		if (type === 'tab' && !this.state.matches('LastTab')) {
-			this.state = IndentationLexerState.LastTab(1)
-			return empty_process
-		}
+// 		const [must_new_state, state_transform] = type === 'raw_block_start'
+// 			? t(IndentationLexerState.LastNewline(), this.raw_block_transform)
+// 			: t(undefined, undefined)
 
-		return this.state.match({
-			Normal: () => {
-				return empty_process
-			},
-			LastNewline: () => {
-				if (type === 'space')
-					throw new SpacesError()
+// 		return this.state.match({
+// 			Normal: () => {
+// 				this.state = must_new_state || IndentationLexerState.LastNewline()
+// 				return t([], this.raw_block_transform)
+// 			},
 
-				// by definition the indentation reset to 0, so the raw_block must be over
-				this.state = IndentationLexerState.Normal()
-				return t([{ is_virtual: true, type: 'raw_block_end' } as VirtualToken], StateTransform.Pop())
-			},
-			LastTab: tab_count => {
-				const fulfilled_indentation = tab_count >= this.block_indentation
-				if (fulfilled_indentation) {
-					// we got to the minimum, so now anything goes
-					this.state = IndentationLexerState.Normal()
-					return empty_process
-				}
+// 			LastNewline: () => {
+// 				if (type === 'space')
+// 					throw new SpacesError()
 
-				if (type === 'tab') {
-					this.state = IndentationLexerState.LastTab(tab_count + 1)
-					return empty_process
-				}
+// 				// if it's just a normal token, then deindent
+// 				const virtual_tokens = produce_deindents(this.current_indentation)
+// 				this.current_indentation = 0
+// 				this.state = must_new_state || IndentationLexerState.Normal()
+// 				return t(virtual_tokens, state_transform)
+// 			},
 
-				const exiting_raw_block = !fulfilled_indentation
-				if (type === 'space' && exiting_raw_block)
-					throw new SpacesError()
+// 			LastTab: tab_size => {
+// 				if (type === 'space')
+// 					throw new SpacesError()
+// 				if (type === 'tab')
+// 					throw new Error("zuh??")
 
-				this.state = IndentationLexerState.Normal()
-				return t([], exiting_raw_block ? StateTransform.Pop() : undefined)
-			},
-		})
-	}
+// 				const new_indentation = tab_size
+// 				const current_indentation = this.current_indentation
+// 				if (new_indentation > current_indentation + 1)
+// 					throw new Error("indentation can only increase by one")
 
-	exit(): VirtualToken[] {
-		return []
-	}
-}
+// 				this.state = must_new_state || IndentationLexerState.Normal()
+// 				this.current_indentation = new_indentation
+
+// 				if (new_indentation === current_indentation + 1)
+// 					return t([{ is_virtual: true, type: 'indent' }], state_transform)
+
+// 				if (new_indentation === current_indentation)
+// 					return t([{ is_virtual: true, type: 'indent_continue' }], state_transform)
+
+// 				const virtual_tokens = produce_deindents(current_indentation - new_indentation)
+// 				return t(virtual_tokens, state_transform)
+// 			},
+// 		})
+// 	}
+
+// 	exit(): VirtualToken[] {
+// 		const virtual_tokens = produce_deindents(this.current_indentation)
+// 		this.current_indentation = 0
+// 		return virtual_tokens
+// 	}
+// }
+
+
+// export class RawBlock implements VirtualLexer {
+// 	private state = IndentationLexerState.LastNewline() as IndentationLexerState
+// 	readonly block_indentation: number
+// 	constructor(program_indentation_at_entry: number) {
+// 		this.block_indentation = program_indentation_at_entry + 1
+// 	}
+
+// 	process(tok: RawToken): [VirtualToken[], StateTransform] {
+// 		const type = tok.type.name
+
+// 		if (type === 'newline') {
+// 			this.state = IndentationLexerState.LastNewline()
+// 			return empty_process
+// 		}
+// 		if (type === 'tab' && !this.state.matches('LastTab')) {
+// 			this.state = IndentationLexerState.LastTab(1)
+// 			return empty_process
+// 		}
+
+// 		return this.state.match({
+// 			Normal: () => {
+// 				return empty_process
+// 			},
+// 			LastNewline: () => {
+// 				if (type === 'space')
+// 					throw new SpacesError()
+
+// 				// by definition the indentation reset to 0, so the raw_block must be over
+// 				this.state = IndentationLexerState.Normal()
+// 				return t([{ is_virtual: true, type: 'raw_block_end' } as VirtualToken], StateTransform.Pop())
+// 			},
+// 			LastTab: tab_count => {
+// 				const fulfilled_indentation = tab_count >= this.block_indentation
+// 				if (fulfilled_indentation) {
+// 					// we got to the minimum, so now anything goes
+// 					this.state = IndentationLexerState.Normal()
+// 					return empty_process
+// 				}
+
+// 				if (type === 'tab') {
+// 					this.state = IndentationLexerState.LastTab(tab_count + 1)
+// 					return empty_process
+// 				}
+
+// 				const exiting_raw_block = !fulfilled_indentation
+// 				if (type === 'space' && exiting_raw_block)
+// 					throw new SpacesError()
+
+// 				this.state = IndentationLexerState.Normal()
+// 				return t([], exiting_raw_block ? StateTransform.Pop() : undefined)
+// 			},
+// 		})
+// 	}
+
+// 	exit(): VirtualToken[] {
+// 		return []
+// 	}
+// }
 
 
 // const source = `\
