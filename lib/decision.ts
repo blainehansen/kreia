@@ -1,15 +1,16 @@
 import '@ts-std/extensions/dist/array'
 
-import { TokenDefinition, RawToken, match_and_trim } from './states_lexer'
+import { IterWrapper } from './utils'
+import { TokenDefinition, Token, match_and_trim } from './lexer'
 
 export abstract class Decidable {
 	abstract readonly test_length: number
-	test(tokens: RawToken[]): boolean {
+	test(tokens: Token[]): boolean {
 		const result = this._test(tokens)
 		return result !== undefined
 	}
 
-	abstract _test(tokens: RawToken[]): RawToken[] | undefined
+	abstract _test(tokens: Token[]): Token[] | undefined
 }
 
 export function path(...path: (TokenDefinition[] | DecisionBranch)[]) {
@@ -29,8 +30,8 @@ export class DecisionPath extends Decidable {
 		).sum()
 	}
 
-	_test(input_tokens: RawToken[]): RawToken[] | undefined {
-		let tokens: RawToken[] | undefined = input_tokens.slice()
+	_test(input_tokens: Token[]): Token[] | undefined {
+		let tokens: Token[] | undefined = input_tokens.slice()
 
 		for (const item of this.path) {
 			tokens = Array.isArray(item)
@@ -86,7 +87,7 @@ export function branch(is_optional: boolean, ...paths: DecisionPath[]) {
 export class DecisionBranch extends Decidable {
 	readonly type = 'DecisionBranch'
 	readonly test_length: number
-	readonly paths: readonly DecisionPath[],
+	readonly paths: readonly DecisionPath[]
 	constructor(
 		is_optional: boolean,
 		paths: DecisionPath[],
@@ -98,17 +99,17 @@ export class DecisionBranch extends Decidable {
 		this.test_length = Math.max(...paths.map(p => p.test_length))
 	}
 
-	_test(tokens: RawToken[]): RawToken[] | undefined {
+	_test(tokens: Token[]): Token[] | undefined {
 		for (const path of this.paths) {
 			const path_result = path._test(tokens)
 			if (path_result !== undefined)
 				return path_result
 		}
 
-		return this.is_optional ? [] : undefined
+		return undefined
 	}
 }
 
-export class DecisionWhile() {
-	//
-}
+// export class DecisionWhile() {
+// 	//
+// }

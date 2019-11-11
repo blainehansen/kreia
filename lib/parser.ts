@@ -5,7 +5,7 @@ import { Decidable } from './decision'
 import { match_tokens, TokenDefinition, BaseLexer, Token, RawToken, VirtualToken } from './lexer'
 
 
-function Parser(...lexer_args: Parameters<BaseLexer['reset']>) {
+export function Parser(...lexer_args: Parameters<BaseLexer['reset']>) {
 	const lexer = new BaseLexer(...lexer_args)
 	return {
 		reset: lexer.reset.bind(lexer),
@@ -33,7 +33,7 @@ function is_decidable_func<F extends Func>(
 	return typeof fl[0] === 'function'
 }
 
-function f<F extends Func>(
+export function f<F extends Func>(
 	fn: F, d: Decidable,
 	...args: Parameters<F>
 ): DecidableFunc<F> {
@@ -146,6 +146,8 @@ function _many<I extends ParseEntity, B extends boolean>(
 }
 
 
+
+// type ParseEntityTuple<L extends any[]> = { [K in keyof L]: ParseEntity }
 
 type ChoicesReturn<C extends ParseEntity[]> = {
 	[K in keyof C]: EntityReturn<Cast<C[K], ParseEntity>>

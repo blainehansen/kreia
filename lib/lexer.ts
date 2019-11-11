@@ -24,28 +24,21 @@ const StateTransform = Enum({
 })
 type StateTransform = Enum<typeof StateTransform> | undefined
 
-// export type TokenDefinition =
-// 	| RawTokenDefinition
-// 	| VirtualTokenDefinition
-// export type RawTokenDefinition = {
-// 	name: string,
-// 	regex: RegExp,
-// 	state_transform?: StateTransform,
-// 	ignore?: true,
-// 	is_virtual: false,
-// }
-// export type VirtualTokenDefinition = {
-// 	name: string,
-// 	state_transform?: StateTransform,
-// 	is_virtual: true,
-// }
-
-export type TokenDefinition = {
+export type TokenDefinition =
+	| RawTokenDefinition
+	| VirtualTokenDefinition
+export type RawTokenDefinition = Readonly<{
 	name: string,
 	regex: RegExp,
 	state_transform?: StateTransform,
 	ignore?: true,
-}
+	is_virtual: false,
+}>
+export type VirtualTokenDefinition = Readonly<{
+	name: string,
+	state_transform?: StateTransform,
+	is_virtual: true,
+}>
 
 export type TokenOptions = {
 	ignore?: true,
@@ -60,38 +53,44 @@ function source_regex(def: RegExp | string) {
 		: def.source
 }
 
-export const Token = Data((
+export function Token(
 	name: string,
 	regex: RegExp | string | (RegExp | string)[],
 	{ ignore, state_transform } = {} as TokenOptions,
-) => {
+): RawTokenDefinition {
 	const base_source = Array.isArray(regex)
 		? regex.map(r => `(?:${source_regex(r)})`).join('|')
 		: source_regex(regex)
-	const token_definition = { name, regex: new RegExp('^' + base_source) } as TokenDefinition
+	const token_definition = { name, regex: new RegExp('^' + base_source), is_virtual: false } as RawTokenDefinition
 
 	if (ignore !== undefined)
-		token_definition.ignore = ignore
+		(token_definition as any).ignore = ignore
 	if (state_transform !== undefined)
-		token_definition.state_transform = state_transform
-	return t
-})
+		(token_definition as any).state_transform = state_transform
+	return token_definition
+}
 // type Token = ReturnType<typeof Token>
 
+function denature_spec(spec: TokenSpec): [BaseTokenSpec, TokenOptions] {
+	if (typeof spec === 'object' && 'match' in spec) {
+		const { match: regex, ...options } = spec
+		return [regex, options]
+	}
+	return [spec, {}]
+}
 
+type LexerState<D extends { [key: string]: TokenSpec }> = { [K in keyof D]: RawTokenDefinition }
+export function create_lexer_state<D extends { [key: string]: TokenSpec }>(
+	token_definitions: D
+): LexerState<D> {
+	const give = {} as LexerState<D>
+	for (const key in token_definitions) {
+		const [regex, options] = denature_spec(token_definitions[key])
+		give[key] = Token(key, regex, options)
+	}
 
-// type LexerState<D extends { [key: string]: TokenSpec }> = { [K in keyof D]: TokenDefinition }
-// export function create_lexer_state<D extends { [key: string]: TokenSpec }>(
-// 	token_definitions: D
-// ): LexerState<D> {
-// 	const give = {} as LexerState<D>
-// 	for (const key in token_definitions) {
-// 		const regex = token_definitions[key]
-// 		give[key] = Token(key, regex)
-// 	}
-
-// 	return give
-// }
+	return give
+}
 
 
 export function match_token(token: Token | undefined, token_definition: TokenDefinition): boolean {
@@ -100,11 +99,9 @@ export function match_token(token: Token | undefined, token_definition: TokenDef
 
 	switch (token.is_virtual) {
 		case true:
-			// return token_definition.is_virtual && token.type === token_definition.name
-			return token.type === token_definition.name
+			return token_definition.is_virtual && token.type === token_definition.name
 		case false:
-			// return !token_definition.is_virtual && token.type.name === token_definition.name
-			return token.type.name === token_definition.name
+			return !token_definition.is_virtual && token.type.name === token_definition.name
 	}
 }
 
@@ -118,7 +115,7 @@ export function match_tokens(tokens: Token[], token_definitions: TokenDefinition
 	return true
 }
 
-export function match_and_trim(tokens: RawToken[], token_definitions: TokenDefinition[]) {
+export function match_and_trim(tokens: Token[], token_definitions: TokenDefinition[]) {
 	for (const [index, token_definition] of token_definitions.entries()) {
 		const token = tokens[index]
 
@@ -130,7 +127,7 @@ export function match_and_trim(tokens: RawToken[], token_definitions: TokenDefin
 }
 
 type State = {
-	tokens: TokenDefinition[],
+	tokens: RawTokenDefinition[],
 	virtual_lexer?: VirtualLexer,
 }
 
@@ -195,7 +192,7 @@ export class BaseLexer {
 		while (token_definitions_to_check.length > 0) {
 			if (this.source.length === 0) {
 				while (this.state_stack.length > 0) {
-					const { virtual_lexer } = this.state_stack.pop() as any as State
+					const { virtual_lexer } = this.state_stack.pop()!
 					if (virtual_lexer) {
 						const virtual_tokens = virtual_lexer.exit()
 						Array.prototype.unshift.apply(output_tokens, virtual_tokens)
@@ -205,7 +202,7 @@ export class BaseLexer {
 				return output_tokens
 			}
 
-			const token_definition = token_definitions_to_check.pop() as any as TokenDefinition
+			const token_definition = token_definitions_to_check.pop()!
 
 			const match = this.source.match(token_definition.regex)
 			if (match === null)
