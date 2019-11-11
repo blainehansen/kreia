@@ -1,9 +1,9 @@
 import { tuple as t } from '@ts-std/types'
 
 import { log } from './utils'
-import { Parser, f } from './parser'
+import { ParseEntity, ChoicesReturn, Parser, f } from './parser'
 import { path, branch } from './decision'
-import { Token, create_lexer_state } from './lexer'
+import { Token, TokenDefinition, create_lexer_state } from './lexer'
 
 const source = `
   (1, 2, 3, nil) ()
@@ -47,13 +47,12 @@ function parenthesized_number_list() {
   return list
 }
 
-function a(): [Token] | [Token] | [Token] {
-	return or(
-		t(tok.Comma),
-		t(tok.Num),
-		t(tok.Nil),
-	)
-}
+
+const a: [Token] = or(
+	t(tok.Comma),
+	t(tok.Num),
+	t(tok.Nil),
+)
 
 function number_list() {
 	return many_separated(
@@ -65,4 +64,4 @@ function number_list() {
 	)
 }
 
-log(lists())
+// log(lists())

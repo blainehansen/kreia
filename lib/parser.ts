@@ -8,15 +8,33 @@ import { match_tokens, TokenDefinition, BaseLexer, Token, RawToken, VirtualToken
 export function Parser(...lexer_args: Parameters<BaseLexer['reset']>) {
 	const lexer = new BaseLexer(...lexer_args)
 	return {
-		reset: lexer.reset.bind(lexer),
-		consume: consume.bind(lexer),
-		maybe: maybe.bind(lexer),
-		or: or.bind(lexer),
-		maybe_or: maybe_or.bind(lexer),
-		many: many.bind(lexer),
-		maybe_many: maybe_many.bind(lexer),
-		many_separated: many_separated.bind(lexer),
-		maybe_many_separated: maybe_many_separated.bind(lexer),
+		reset(...args: Parameters<BaseLexer['reset']>) {
+			lexer.reset(...args)
+		},
+		consume<L extends TokenDefinition[]>(...token_definitions: L) {
+			return consume(lexer, ...token_definitions)
+		},
+		maybe<I extends ParseEntity>(...entity: I) {
+			return maybe(lexer, ...entity)
+		},
+		or<C extends ParseEntity[]>(...choices: C) {
+			return or(lexer, ...choices)
+		},
+		maybe_or<C extends ParseEntity[]>(...choices: C) {
+			return maybe_or(lexer, ...choices)
+		},
+		many<I extends ParseEntity>(...entity: I) {
+			return many(lexer, ...entity)
+		},
+		maybe_many<I extends ParseEntity>(...entity: I) {
+			return maybe_many(lexer, ...entity)
+		},
+		many_separated<B extends ParseEntity, S extends ParseEntity>(body_rule: B, separator_rule: S) {
+			return many_separated(lexer, body_rule, separator_rule)
+		},
+		maybe_many_separated<B extends ParseEntity, S extends ParseEntity>(body_rule: B, separator_rule: S) {
+			return maybe_many_separated(lexer, body_rule, separator_rule)
+		},
 	}
 }
 
@@ -40,7 +58,7 @@ export function f<F extends Func>(
 	return [fn, d, ...args] as DecidableFunc<F>
 }
 
-type ParseEntity = DecidableFunc<Func> | TokenDefinition[]
+export type ParseEntity = DecidableFunc<Func> | TokenDefinition[]
 
 type EntityReturn<I extends ParseEntity> =
 	I extends TokenDefinition[] ? TokensForDefinitions<I>
@@ -91,38 +109,38 @@ function _consume<L extends TokenDefinition[]>(
 }
 
 function consume<L extends TokenDefinition[]>(
-	this: BaseLexer,
+	lexer: BaseLexer,
 	...token_definitions: L
 ): TokensForDefinitions<L> {
-	return _consume(this, token_definitions)
+	return _consume(lexer, token_definitions)
 }
 
 type Optional<T, B extends boolean> = B extends true ? T | undefined : T
 
 
 function maybe<I extends ParseEntity>(
-	this: BaseLexer,
+	lexer: BaseLexer,
 	...entity: I
 ): EntityReturn<I> | undefined {
-	if (test_entity(this, entity))
-		return perform_entity(this, entity)
+	if (test_entity(lexer, entity))
+		return perform_entity(lexer, entity)
 
 	return undefined
 }
 
 
 function many<I extends ParseEntity>(
-	this: BaseLexer,
+	lexer: BaseLexer,
 	...entity: I
 ): EntityReturn<I>[] {
-	return _many(this, false, entity)
+	return _many(lexer, false, entity)
 }
 
 function maybe_many<I extends ParseEntity>(
-	this: BaseLexer,
+	lexer: BaseLexer,
 	...entity: I
 ): EntityReturn<I>[] | undefined {
-	return _many(this, true, entity)
+	return _many(lexer, true, entity)
 }
 
 function _many<I extends ParseEntity, B extends boolean>(
@@ -147,24 +165,22 @@ function _many<I extends ParseEntity, B extends boolean>(
 
 
 
-// type ParseEntityTuple<L extends any[]> = { [K in keyof L]: ParseEntity }
-
-type ChoicesReturn<C extends ParseEntity[]> = {
-	[K in keyof C]: EntityReturn<Cast<C[K], ParseEntity>>
+export type ChoicesReturn<C extends ParseEntity[]> = {
+	[K in keyof C]: EntityReturn<C[K] extends ParseEntity ? C[K] : never>
 }[number]
 
 function or<C extends ParseEntity[]>(
-	this: BaseLexer,
+	lexer: BaseLexer,
 	...choices: C
 ): ChoicesReturn<C> {
-	return _or(this, false, choices)
+	return _or(lexer, false, choices) as ChoicesReturn<C>
 }
 
 function maybe_or<C extends ParseEntity[]>(
-	this: BaseLexer,
+	lexer: BaseLexer,
 	...choices: C
 ): ChoicesReturn<C> | undefined {
-	return _or(this, true, choices)
+	return _or(lexer, true, choices) as ChoicesReturn<C> | undefined
 }
 
 function _or<C extends ParseEntity[], B extends boolean>(
@@ -188,19 +204,19 @@ function _or<C extends ParseEntity[], B extends boolean>(
 
 
 function many_separated<B extends ParseEntity, S extends ParseEntity>(
-	this: BaseLexer,
+	lexer: BaseLexer,
 	body_rule: B,
 	separator_rule: S,
 ): EntityReturn<B>[] {
-	return _many_separated(this, false, body_rule, separator_rule)
+	return _many_separated(lexer, false, body_rule, separator_rule)
 }
 
 function maybe_many_separated<B extends ParseEntity, S extends ParseEntity>(
-	this: BaseLexer,
+	lexer: BaseLexer,
 	body_rule: B,
 	separator_rule: S,
 ): EntityReturn<B>[] | undefined {
-	return _many_separated(this, true, body_rule, separator_rule)
+	return _many_separated(lexer, true, body_rule, separator_rule)
 }
 
 function _many_separated<B extends ParseEntity, S extends ParseEntity, O extends boolean>(
