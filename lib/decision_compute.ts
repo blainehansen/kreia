@@ -2,9 +2,6 @@ import { log } from './utils'
 import { TokenDefinition, Token } from './states_lexer'
 import { Decidable, path, DecisionPath, branch, DecisionBranch } from './decision'
 
-// class BranchBuilder {
-// 	constructor()
-// }
 
 class LookaheadBuilder {
 	private items = [] as (TokenDefinition[] | DecisionBranch)[]

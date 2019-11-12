@@ -1,3 +1,4 @@
+import { tuple as t } from '@ts-std/types'
 import { Result, Ok, Err } from '@ts-std/monads'
 import { DefaultDict } from '@ts-std/collections'
 
@@ -88,36 +89,114 @@ export type GrammarItem =
 export type Grammar = GrammarItem[]
 
 
-import ts = require('typescript')
-
-function render(definition: Definition) {
-	// if it's a consume you
-	if (definition.length === 1 && definition[0].type)
+function* into_branch_iter(definition: Node[]) {
+	for (const node of definition) switch (node.type) {
+	case 'Or':
+		continue
+	case 'Maybe':
+		yield* into_branch_iter(node.definition)
+		continue
+	case 'Many':
+		yield* into_branch_iter(node.definition)
+		// in this situation we only have to check for one unambiguous match
+		// if the lookahead doesn't resolve by this point, for now we have to throw an error
+		// and until we have some sort of DecisionWhile concept, we can't do better
+		return
+	case 'Subrule':
+		yield* into_branch_iter(resolve_subrule(rules, node))
+		continue
+	case 'MacroCall':
+		yield* into_branch_iter(resolve_macro(macros, node))
+		continue
+	case 'Consume':
+		// essentially the base of the recursion, we actually yield something!
+		yield* node.token_names.map(token_name => tokens[token_name]!)
+		continue
+	}
 }
 
-function render_with_lookahead(current: Node[][], next: Node[]) {
-	const builder = new BranchBuilder()
-	builder.push_all(current)
+function compute_decidable(main: Node[], against: Node[][]) {
+	return _compute_decidable(
+		new IterWrapper(into_branch_iter(main)),
+		against.map(a => new IterWrapper(into_iter(a))),
+		new PathBuilder(),
+	)
+}
 
-	let node
-	while (node = nodes.shift()) {
-		// if the node is also branching, push it
-		if (node.type === 'Or')
-			builder.push_all(found_branch.choices)
-		else if (node.type === 'Maybe')
-			builder.push(found_branch.definition)
-		else if (node.type === 'Many')
-			builder.push(found_branch.definition)
-		else {
-			builder.push_required(node)
-			break
+function _compute_decidable(
+	main: IterWrapper<TokenDefinition | Node[][]>,
+	against: IterWrapper<TokenDefinition[]>[],
+	builder: PathBuilder,
+) {
+	let item: TokenDefinition | Node[][]
+	while (item = main.next()!) {
+		// if it's an array and therefore a definition array
+		// this is where you split and clone, using a BranchBuilder to produce a DecisionBranch
+
+		// if it's just a token, you do the simple same algorithm
+	}
+}
+
+import ts = require('typescript')
+
+let global_lookaheads = [] as (ReturnType<typeof ts.createVariableDeclarationList>)[]
+
+function render(definition: Definition, variation: 'atom' | 'spread') {
+	if (definition.length === 1) {
+		//
+	}
+
+	// this is the only function that actually has to use ts.createExpressionStatement
+
+	switch (variation) {
+	case 'atom':
+		return ts.createCall(ts.createIdentifier(is_consume ? 't' : 'f'), undefined, [])
+	case 'spread':
+		return ts.createCall(ts.createIdentifier(is_consume ? 't' : 'f'), undefined, [])
+	}
+}
+
+export class DecidableBuilder {
+	private branches: Node[][] = []
+
+	push(definitions: Node[][]) {
+		for (const definition of definitions) {
+			// filter out empty ones?
+			if (definition.length === 0)
+				continue
+			this.branches.push(definition)
 		}
 	}
 
-	const branch = builder.try_build()
-	const [lookahead_ident, lookahead_definition] = branch
-		? compute_path(branch[0]!, branch.slice(1))
-		: t(undefined, undefined)
+	try_build(last_branch: Node): Decidable | undefined {
+		// it seems that if we end up in this state and there are zero or one branches,
+		// then this is a truly superfluous thing and we should do nothing
+		if (this.branches.length === 0)
+			return undefined
+		return compute_path(this.branches[0], this.branches.slice(1))
+	}
+}
+
+function render_lookahead(current: Node[][], next: Node[]) {
+	const builder = new DecidableBuilder()
+	builder.push(current)
+
+	const nodes = next.slice()
+	let node
+	while (node = nodes.shift()) {
+		if (node.type === 'Or')
+			builder.push(found_branch.choices)
+		else if (node.type === 'Maybe')
+			builder.push([found_branch.definition])
+		// else if (node.type === 'Many')
+		// 	builder.push(found_branch.definition)
+		else
+			break
+	}
+
+	const lookahead_definition = builder.try_build(node)
+	const lookahead_number = global_lookaheads.length
+	global_lookaheads.push(lookahead_definition)
 
 	// ts.createVariableStatement(
 	// 	undefined,
@@ -135,54 +214,79 @@ function render_with_lookahead(current: Node[][], next: Node[]) {
 	// 	),
 	// )
 
-	global_lookaheads.push(lookahead_definition)
-
-	return ts.createExpressionStatement(ts.createCall(
-		ts.createIdentifier('func'), undefined,
-		[render(current[0]!), ts.createIdentifier(lookahead_ident)],
-	))
+	return ts.createIdentifier(`_${lookahead_number}`)
+	// return ts.createExpressionStatement(ts.createCall(
+	// 	ts.createIdentifier('f'), undefined,
+	// 	[render(current[0]!), ts.createIdentifier(lookahead_ident)],
+	// ))
 }
 
 function render_node(
 	node: Node,
 	next: Node[],
+	required = true,
 ) {
 	switch (node.type) {
 	case 'Or':
 		const choices = []
 		for (let choice_index = 0; choice_index < node.choices.length; choice_index++) {
 			const choice = node.choices[choice_index]
+			// in this case we need both the rendered definition and the lookahead for each one
 			const rendered = render_with_lookahead([choice].concat(node.choices.slice(choice_index + 1)), next)
 			choices.push(rendered)
 		}
 		return ts.createExpressionStatement(ts.createCall(
-			ts.createIdentifier('or'), undefined, choices,
+			ts.createIdentifier(required ? 'or' : 'maybe_or'), undefined, choices,
 		))
 
 	case 'Maybe':
-		// TODO all of these could have little optimizations to have maybe versions of all nodes and flatten things
+		if (node.definition.length === 1)
+			return render_node(node.definition, next, false)
+
 		return render_with_lookahead([node.definition], next)
 
 	case 'Many':
-		return render_with_lookahead([node.definition], next)
+		const [spread, lookahead] = render(node.definition, next, 'spread')
+		const many = ts.createCall(
+			ts.createIdentifier(required ? 'many' : 'maybe_many'), undefined, spread,
+		)
+		return wrap_function_maybe(required, many, node, next, lookahead)
 
 	case 'Subrule':
-		return ts.createExpressionStatement(ts.createCall(
+		const subrule = ts.createCall(
 			ts.createIdentifier(node.rule_name), undefined, [],
-		))
+		)
+		return wrap_function_maybe(required, subrule, node, next)
 
 	case 'MacroCall':
-		return ts.createExpressionStatement(ts.createCall(
+		const macro_call = ts.createCall(
 			ts.createIdentifier(node.macro_name), undefined,
 			node.args.map(render),
-		))
+		)
+		return wrap_function_maybe(required, macro_call, node, next)
 
 	case 'Consume':
 		return ts.createExpressionStatement(ts.createCall(
-			ts.createIdentifier('consume'), undefined,
+			ts.createIdentifier(required ? 'maybe' : 'consume'), undefined,
 			node.token_names.map(token_name => ts.createIdentifier(token_name))
 		))
 	}
+}
+
+function wrap_function_maybe(
+	required: boolean,
+	wrapping: ReturnType<typeof ts.createCall>,
+	node: Node,
+	next: Node[],
+	already_rendered_lookahead?: ReturnType<typeof ts.createIdentifier> = undefined,
+) {
+	const item = required
+		? wrapping
+		: ts.createCall(
+			ts.createIdentifier('maybe'), undefined,
+			[wrapping, already_rendered_lookahead || render_lookahead([node.definition], next)],
+		)
+	return ts.createExpressionStatement(item)
 }
 
 
@@ -215,7 +319,7 @@ function render_grammar(grammar: Grammar) {
 			rules.set(grammar_item.name, grammar_item).match(matcher)
 		case 'Macro':
 			// TODO add a condition here to treat many_separated specially
-			// maybe seed the macros UniqueDict with it's base definition
+			// maybe seed the macros UniqueDict with its base definition
 			rules.set(grammar_item.name, grammar_item).match(matcher)
 		}
 	}
@@ -242,17 +346,41 @@ function render_grammar(grammar: Grammar) {
 	// })
 
 	const rendered_macros = macros.values.map(macro => {
-		//
+		// the macro arguments are always going to be represented at runtime as ParseEntity
+		return ts.createFunctionDeclaration(
+			undefined, undefined, undefined,
+			// function name
+			ts.createIdentifier(macro.name),
+			// generics
+			macro.args.map(arg => ts.createTypeParameterDeclaration(
+				ts.createIdentifier(arg.name.toUpperCase()),
+				ts.createTypeReferenceNode(ts.createIdentifier('ParseEntity'), undefined), undefined,
+			)),
+			// actual args
+			macro.args.map(arg => ts.createParameter(
+				undefined, undefined, undefined,
+				ts.createIdentifier(arg.name), undefined,
+				ts.createTypeReferenceNode(ts.createIdentifier(arg.name.toUpperCase()), undefined), undefined,
+			)),
+			undefined,
+			ts.createBlock(
+				// these all have to be ts.createExpressionStatement
+				render_definition(macro.definition),
+				// multiline
+				true,
+			),
+		)
 	})
 
 	const rendered_rules = rules.values.map(rule => {
-		//
+		// rules are always just functions that at least initially take no parameters
+		return ts.createFunctionDeclaration(
+			undefined, undefined, undefined,
+			ts.createIdentifier(rule.name),
+			[], [], undefined,
+			ts.createBlock(render_definition(rule.definition), true),
+		)
 	})
-
-
-	// basically at the end we have a list of lookaheads with sequential index based identifiers
-	// then some statements for creating all the lexer definition stuff
-	// then all the function declarations for subrules and macros
 }
 
 
@@ -353,18 +481,4 @@ const Grammar: Grammar = [
 // 	}
 
 // 	return undefined
-// }
-
-// function analyze_and_render_rules(rules: RuleDefinition[]) {
-// 	const rules = {} as { [rule_name: string]: Rule }
-// 	const macros = {} as { [macro_name: string]: Macro }
-
-// 	for (const rule of rules) {
-// 		switch (rule.type) {
-// 		case 'Rule':
-// 			rules[rule.name] = rule
-// 		case 'Macro':
-// 			macros[rule.name] = rule
-// 		}
-// 	}
 // }

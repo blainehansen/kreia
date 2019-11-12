@@ -48,12 +48,6 @@ function parenthesized_number_list() {
 }
 
 
-const a: [Token] = or(
-	t(tok.Comma),
-	t(tok.Num),
-	t(tok.Nil),
-)
-
 function number_list() {
 	return many_separated(
 		f(() => or(
@@ -64,4 +58,4 @@ function number_list() {
 	)
 }
 
-// log(lists())
+log(lists())
