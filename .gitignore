@@ -61,3 +61,5 @@ dist
 
 lib/generate_from.ts
 lib/generate_to.ts
+
+.local*

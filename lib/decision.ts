@@ -1,6 +1,6 @@
 import '@ts-std/extensions/dist/array'
 
-import { IterWrapper } from './utils'
+// import { IterWrapper } from './utils'
 import { TokenDefinition, Token, match_and_trim } from './lexer'
 
 export abstract class Decidable {
@@ -10,14 +10,48 @@ export abstract class Decidable {
 		return result !== undefined
 	}
 
-	abstract render_ts(): ReturnType<typeof ts.createVariableStatement>
+	// abstract render_ts(): ReturnType<typeof ts.createVariableStatement>
 	abstract _test(tokens: Token[]): Token[] | undefined
 }
+
+export function is_branch(item: TokenDefinition[] | TokenDefinition | DecisionBranch): item is DecisionBranch {
+	return !Array.isArray(item) && 'type' in item && item.type === 'DecisionBranch'
+}
+
+export class PathBuilder {
+	private items = [] as (TokenDefinition[] | DecisionBranch)[]
+
+	push_branch(paths: DecisionPath[]) {
+		this.items.push(new DecisionBranch(
+			paths.filter(path => path.test_length > 0)
+		))
+	}
+
+	push(def: TokenDefinition) {
+		const last_index = this.items.length - 1
+		const last = this.items[last_index]
+		if (this.items.length === 0 || is_branch(last)) {
+			this.items.push([def])
+			return
+		}
+		last.push(def)
+	}
+
+	build(): DecisionPath {
+		const last_index = this.items.length - 1
+		const last = this.items[last_index]
+		if (is_branch(last) && (last as DecisionBranch).is_optional)
+			this.items.splice(last_index, 1)
+
+		return new DecisionPath(this.items)
+	}
+}
+
 
 export function path(...path: (TokenDefinition[] | DecisionBranch)[]) {
 	return new DecisionPath(path)
 }
-export class DecisionPath extends Decidable {
+class DecisionPath extends Decidable {
 	readonly type = 'DecisionPath'
 	readonly test_length: number
 	constructor(
@@ -48,16 +82,16 @@ export class DecisionPath extends Decidable {
 		return tokens
 	}
 
-	render_ts() {
-		return ts.createCall(
-			ts.createIdentifier('path'), undefined,
-			this.path.map(item =>
-				Array.isArray(item)
-					? ts.createArrayLiteral(item.map(tok => ts.createIdentifier(tok.name)))
-					: item.render_ts()
-			),
-		)
-	}
+	// render_ts() {
+	// 	return ts.createCall(
+	// 		ts.createIdentifier('path'), undefined,
+	// 		this.path.map(item =>
+	// 			Array.isArray(item)
+	// 				? ts.createArrayLiteral(item.map(tok => ts.createIdentifier(tok.name)))
+	// 				: item.render_ts()
+	// 		),
+	// 	)
+	// }
 
 	// iter(): IterWrapper<TokenDefinition[]> {
 	// 	const fn = function* (this: DecisionPath) {
@@ -93,20 +127,22 @@ export class DecisionPath extends Decidable {
 
 
 const EMPTY_PATH = new DecisionPath([])
-export function branch(is_optional: boolean, ...paths: DecisionPath[]) {
-	return new DecisionBranch(is_optional, paths)
+export function branch(...paths: DecisionPath[]) {
+	return new DecisionBranch(paths)
 }
-export class DecisionBranch extends Decidable {
+class DecisionBranch extends Decidable {
 	readonly type = 'DecisionBranch'
 	readonly test_length: number
 	readonly paths: readonly DecisionPath[]
+	readonly is_optional: boolean
 	constructor(
-		is_optional: boolean,
 		paths: DecisionPath[],
 	) {
 		super()
-		if (is_optional)
-			paths.push(EMPTY_PATH)
+		if (paths.length === 0)
+			throw new Error("DecisionBranch was constructed with an empty list")
+
+		this.is_optional = paths.length === 1
 		this.paths = paths.slice()
 		this.test_length = Math.max(...paths.map(p => p.test_length))
 	}
@@ -121,16 +157,16 @@ export class DecisionBranch extends Decidable {
 		return undefined
 	}
 
-	render_ts() {
-		const is_optional = this.paths.maybe_get(-1).match({
-			some: a => a.length === 0,
-			none: false,
-		})
-		return ts.createCall(
-			ts.createIdentifier('branch'), undefined,
-			[is_optional ? ts.createTrue() : ts.createFalse()].concat(this.paths.map(path => path.render_ts())),
-		)
-	}
+	// render_ts() {
+	// 	const is_optional = this.paths.maybe_get(-1).match({
+	// 		some: a => a.length === 0,
+	// 		none: false,
+	// 	})
+	// 	return ts.createCall(
+	// 		ts.createIdentifier('branch'), undefined,
+	// 		[is_optional ? ts.createTrue() : ts.createFalse()].concat(this.paths.map(path => path.render_ts())),
+	// 	)
+	// }
 }
 
 // export class DecisionWhile() {
