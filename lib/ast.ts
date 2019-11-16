@@ -2,20 +2,20 @@ import '@ts-std/extensions/dist/array'
 
 import { Dict, tuple as t } from '@ts-std/types'
 // import { Result, Ok, Err } from '@ts-std/monads'
-// import { DefaultDict } from '@ts-std/collections'
+import { OrderedDict, UniqueDict } from '@ts-std/collections'
 
 import { TokenDefinition } from './lexer'
 import { Data, exhaustive } from './utils'
 
-// export const Arg = Data((name: string) => {
-// 	return { type: 'Arg' as const, name }
-// })
-// export type Arg = ReturnType<typeof Arg>
+export const Arg = Data((name: string) => {
+	return { type: 'Arg' as const, name }
+})
+export type Arg = ReturnType<typeof Arg>
 
-// export const Var = Data((arg_name: string) => {
-// 	return { type: 'Var' as const, arg_name }
-// })
-// export type Var = ReturnType<typeof Var>
+export const Var = Data((arg_name: string): Node => {
+	return { type: 'Var' as const, arg_name }
+})
+export type Var = Readonly<{ type: 'Var', arg_name: string }>
 
 
 export const Rule = Data((name: string, definition: Definition) => {
@@ -30,18 +30,19 @@ export const Rule = Data((name: string, definition: Definition) => {
 // export const LockingVar = Data((name: string) => {
 // 	return { type: 'LockingVar' as const, name }
 // })
-// export type LockingVar = ReturnType<typeof LockingVar>
+// export type LockingVar = Readonly<{ type: 'LockingVar', name: string }>
 
-// export const LockingRule = Data((name: string, lockers: LockingArg[], definition: (Node | LockingVar)[]) => {
+// export const LockingRule = Data((name: string, lockers: LockingArg[], definition: Definition) => {
 // 	return { type: 'Rule' as const, name, definition, is_locking: true as const, lockers }
 // })
 // export type Rule = ReturnType<typeof Rule> | ReturnType<typeof LockingRule>
 export type Rule = ReturnType<typeof Rule>
 
-// export const Macro = Data((name: string, args: Arg[], definition: (Node | Var)[]) => {
-// 	return { type: 'Macro' as const, name, args, definition }
-// })
-// export type Macro = ReturnType<typeof Macro>
+
+export const Macro = Data((name: string, args: OrderedDict<Arg>, definition: Definition) => {
+	return { type: 'Macro' as const, name, args, definition }
+})
+export type Macro = ReturnType<typeof Macro>
 
 
 export const Subrule = Data((rule_name: string): Node => {
@@ -64,10 +65,10 @@ export const Or = Data((choices: Definition[]): Node => {
 })
 export type Or = Readonly<{ type: 'Or', choices: Definition[] }>
 
-// export const MacroCall = Data((macro_name: string, args: Definition[]) => {
-// 	return { type: 'MacroCall' as const, macro_name, args }
-// })
-// export type MacroCall = ReturnType<typeof MacroCall>
+export const MacroCall = Data((macro_name: string, args: OrderedDict<Definition>): Node => {
+	return { type: 'MacroCall' as const, macro_name, args }
+})
+export type MacroCall = Readonly<{ type: 'MacroCall', macro_name: string, args: OrderedDict<Definition> }>
 
 export const Consume = Data((token_names: string[]): Node => {
 	return { type: 'Consume' as const, token_names }
@@ -80,14 +81,18 @@ export type Node =
 	| Many
 	| Or
 	| Subrule
-	// | MacroCall
+	| MacroCall
+	| Var
+	// | LockingVar
 
 export interface Definition extends Array<Node> {}
 
-// export type GrammarItem =
-// 	| TokenDefinition
-// 	| Rule
-// 	| Macro
+export type GrammarItem =
+	| TokenDefinition
+	| Rule
+	| Macro
+
+
 
 // export type Grammar = GrammarItem[]
 
@@ -97,11 +102,21 @@ import { PathBuilder } from './decision'
 
 const registered_tokens = {} as Dict<TokenDefinition>
 const registered_rules = {} as Dict<Rule>
-// const registered_macros = {} as Dict<Macro>
+const registered_macros = {} as Dict<Macro>
 
 export function register_tokens(token_definitions: TokenDefinition[]) {
 	for (const token_definition of token_definitions) {
 		registered_tokens[token_definition.name] = token_definition
+	}
+}
+export function register_rules(rules: Rule[]) {
+	for (const rule of rules) {
+		registered_rules[rule.name] = rule
+	}
+}
+export function register_macros(macros: Macro[]) {
+	for (const macro of macros) {
+		registered_macros[macro.name] = macro
 	}
 }
 
@@ -121,14 +136,19 @@ function gather_branches(current: Definition[], next: Definition) {
 	case 'Consume':
 		branches.push([node as Node])
 		break
-
+	case 'Many':
+		branches.push(node.definition)
+		break
 	case 'Subrule':
 		const rule = registered_rules[node.rule_name]!
 		branches.push(rule.definition)
 		break
-	case 'Many':
-		branches.push(node.definition)
+	case 'MacroCall':
+		const resolved = resolve_macro(node.macro_name, node.args)
+		branches.push(resolved)
 		break
+	case 'Var':
+		throw new Error(`unexpected Var: ${node}`)
 	}
 
 	return branches
@@ -143,6 +163,40 @@ function is_continue(item: TokenDefinition | Continue): item is Continue {
 	return 'type' in item && item.type === 'Continue'
 }
 
+function resolve_macro(macro_name: string, args: OrderedDict<Definition>) {
+	const macro = registered_macros[macro_name]!
+	return _resolve_macro(args, macro.definition)
+}
+function _resolve_macro(args: OrderedDict<Definition>, definition: Definition) {
+	const resolved = [] as Definition
+	for (const node of definition) switch (node.type) {
+	case 'Var':
+		const arg_def = args.get_by_name(node.arg_name).to_undef()
+		if (arg_def === undefined)
+			throw new Error(`invalid arg: ${node.arg_name}`)
+		resolved.push_all(arg_def)
+		continue
+	case 'Or':
+		resolved.push(Or(node.choices.map(choice => _resolve_macro(args, choice))))
+		continue
+	case 'Maybe':
+		resolved.push(Maybe(_resolve_macro(args, node.definition)))
+		continue
+	case 'Many':
+		resolved.push(Many(_resolve_macro(args, node.definition)))
+		continue
+	case 'MacroCall':
+		const new_args = node.args.map(arg_def => _resolve_macro(args, arg_def))
+		resolved.push(MacroCall(node.macro_name, new_args))
+		continue
+	// Consume, Subrule
+	default:
+		resolved.push(node)
+		continue
+	}
+
+	return resolved
+}
 
 type AstIterItem = TokenDefinition | Definition[] | Continue
 type AstIter = IterWrapper<AstIterItem>
@@ -158,9 +212,6 @@ function AstIter(definition: Definition): AstIter {
 			yield gather_branches([node.definition], nodes_to_visit)
 			continue
 		case 'Many':
-			// in this situation we only have to check for one unambiguous match
-			// if the lookahead doesn't resolve by this point, for now we have to throw an error
-			// and until we have some sort of DecisionWhile concept, we can't do better
 			yield* iterate_definition(node.definition)
 			yield Continue(node.definition)
 			continue
@@ -171,11 +222,12 @@ function AstIter(definition: Definition): AstIter {
 			const rule = registered_rules[node.rule_name]!
 			yield* iterate_definition(rule.definition)
 			continue
-		// case 'MacroCall':
-		// 	const macro = registered_macros[node.macro_name]!
-		// 	const resolved = resolve_macro(macro, node.args)
-		// 	yield iterate_definition(resolved.definition)
-		// 	continue
+		case 'MacroCall':
+			const resolved = resolve_macro(node.macro_name, node.args)
+			yield* iterate_definition(resolved)
+			continue
+		case 'Var':
+			throw new Error(`unexpected Var ${node}`)
 		}
 	}
 
@@ -343,26 +395,6 @@ function _compute_decidable(
 // 	}
 // }
 
-// export class DecidableBuilder {
-// 	private branches: Node[][] = []
-
-// 	push(definitions: Node[][]) {
-// 		for (const definition of definitions) {
-// 			// filter out empty ones?
-// 			if (definition.length === 0)
-// 				continue
-// 			this.branches.push(definition)
-// 		}
-// 	}
-
-// 	try_build(last_branch: Node): Decidable | undefined {
-// 		// it seems that if we end up in this state and there are zero or one branches,
-// 		// then this is a truly superfluous thing and we should do nothing
-// 		if (this.branches.length === 0)
-// 			return undefined
-// 		return compute_path(this.branches[0], this.branches.slice(1))
-// 	}
-// }
 
 // function render_lookahead(current: Node[][], next: Node[]) {
 // 	const builder = new DecidableBuilder()
@@ -478,15 +510,12 @@ function _compute_decidable(
 
 
 // function render_grammar(grammar: Grammar) {
-// 	// index, then recursively lookup, pushing to a list of errors
-// 	// once you've done that, just ! assert all lookups at the codegen stage
-
-// 	// check for left recursion or anything else
-
-// 	// do codegen
-
 // 	const token_definitions = new UniqueDict<TokenDefinition>()
 // 	const macros = new UniqueDict<Macro>()
+// 	macros.set('many_separated', Macro(
+// 		'many_separated', [Arg('body_rule'), Arg('separator_rule')],
+// 		[Var('body_rule'), Maybe(Many(Var('separator_rule'), Var('body_rule')))],
+// 	))
 // 	const rules = new UniqueDict<Rule>()
 
 // 	const conflict_errors = [] as string[]
@@ -498,21 +527,21 @@ function _compute_decidable(
 // 		},
 // 	}
 
-// 	for (const grammar_item of Grammar) {
+// 	for (const grammar_item of grammar) {
 // 		switch (grammar_item.type) {
 // 		case 'Token':
 // 			token_definitions.set(grammar_item.name, grammar_item).match(matcher)
 // 		case 'Rule':
 // 			rules.set(grammar_item.name, grammar_item).match(matcher)
 // 		case 'Macro':
-// 			// TODO add a condition here to treat many_separated specially
-// 			// maybe seed the macros UniqueDict with its base definition
-// 			rules.set(grammar_item.name, grammar_item).match(matcher)
+// 			macros.set(grammar_item.name, grammar_item).match(matcher)
 // 		}
 // 	}
 
 // 	if (conflict_errors.length > 0)
 // 		throw new Error()
+
+// 	// check for left recursion or anything else
 
 // 	// const rendered_tokens = token_definitions.values.map(token_definition => {
 // 	// 	return ts.createExpressionStatement(
