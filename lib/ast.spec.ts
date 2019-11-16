@@ -6,6 +6,8 @@ import { path, branch } from './decision'
 // import { compute_decidable, register_tokens, Node, Definition, Subrule, Maybe, Many, Or, MacroCall, Consume } from './ast'
 import { compute_decidable, register_tokens, Node, Definition, Maybe, Many, Or, Consume } from './ast'
 
+import { log } from './utils'
+
 const _A = Token('A', 'A')
 const _B = Token('B', 'B')
 const _C = Token('C', 'C')
@@ -123,74 +125,125 @@ describe('compute_decidable', () => {
 		)
 	})
 
-	// it('complex branches', () => {
-	// 	expect(compute_decidable(
-	// 		path(
-	// 			[A, B],
-	// 			branch(false,
-	// 				path([C, D, E]),
-	// 				path([D]),
-	// 			),
-	// 			[A, C, A],
-	// 		),
-	// 		[
-	// 		path(
-	// 			[A],
-	// 			branch(false,
-	// 				path([B, D]),
-	// 				path([B, C]),
-	// 			),
-	// 		),
-	// 		path(
-	// 			branch(false,
-	// 				path([A, B], branch(false, path([C, A]), path([C, D, E]))),
-	// 				path([A, B], branch(false, path([A, C, A]))),
-	// 			),
-	// 		),
-	// 	])).eql(
-	// 		path(
-	// 			[A, B],
-	// 			branch(false,
-	// 				path([C, D, E]),
-	// 				path([D]),
-	// 			),
-	// 			[A],
-	// 		)
-	// 	)
+	it('unambiguous many', () => {
+		expect(compute_decidable(
+			[Many([Consume([A, B, C])])],
+			[
+			[Consume([A, B, D])],
+		])).eql(
+			path([_A, _B, _C]),
+		)
+	})
 
-	// 	expect(compute_decidable(
-	// 		path(
-	// 			[A, B],
-	// 			branch(false,
-	// 				path([C, D, E]),
-	// 				path([D]),
-	// 			),
-	// 			[A, C, A],
-	// 		),
-	// 		[
-	// 		path(
-	// 			[A],
-	// 			branch(false,
-	// 				path([B, D]),
-	// 				path([B, C]),
-	// 			),
-	// 		),
-	// 		path(
-	// 			branch(false,
-	// 				path([A, B], branch(false, path([C, D, E]))),
-	// 				path([A, B], branch(false, path([A, C, A]))),
-	// 			),
-	// 		),
-	// 	])).eql(
-	// 		path(
-	// 			[A, B],
-	// 			branch(false,
-	// 				path([C, D, E]),
-	// 				path([D]),
-	// 			),
-	// 			[A],
-	// 		)
-	// 	)
+	it('decidable many against many', () => {
+		expect(compute_decidable(
+			[Many([Consume([A])])],
+			[
+			[Many([Consume([B])])],
+		])).eql(
+			path([_A]),
+		)
+
+		expect(compute_decidable(
+			[Many([Consume([A, B])])],
+			[
+			[Many([Consume([A, C])])],
+		])).eql(
+			path([_A, _B]),
+		)
+
+		expect(compute_decidable(
+			[Many([Consume([A, B, C])])],
+			[
+			[Consume([A, B]), Many([Consume([D, A, B, C])])],
+		])).eql(
+			path([_A, _B, _C]),
+		)
+
+		expect(compute_decidable(
+			[Many([Consume([A, B, D, E])])],
+			[
+			[Consume([A, B]), Many([Consume([D, A, B, C])])],
+		])).eql(
+			path([_A, _B, _D, _E]),
+		)
+	})
+
+	it('undecidable many', () => {
+		expect(() => compute_decidable(
+			[Many([Consume([A, B, C])])],
+			[
+			// the problem here is that the many will always eat into this,
+			// and prevent it from ever happening
+			// they need to restructure their grammar
+			[Consume([A, B, C, D])],
+		])).throw('undecidable')
+
+		expect(() => compute_decidable(
+			[Many([Consume([A, B, C])])],
+			[
+			[Consume([A, B]), Many([Consume([C, A, B])])],
+		])).throw('undecidable')
+	})
+
+	it('complex branches', () => {
+		expect(compute_decidable(
+			[
+				Consume([A, B]),
+				Or([
+					[Consume([C, D, E])],
+					[Consume([D])],
+				]),
+				Consume([A, C, A])
+			],
+			[
+			[
+				Consume([A]),
+				Or([
+					[Consume([B, D])],
+					[Consume([B, C])],
+				]),
+			],
+		])).eql(
+			path(
+				[_A, _B],
+				branch(
+					path([_C, _D]),
+					path([_D]),
+				),
+				[_A],
+			)
+		)
+
+		expect(compute_decidable(
+			[
+				Consume([A, B]),
+				Or([
+					[Consume([C, D, E])],
+					[Consume([D])],
+				]),
+				Consume([A, C, A])
+			],
+			[
+			[
+				Or([
+					[Consume([A, B]), Or([
+						[Consume([C, A])],
+						[Consume([C, D, E])],
+					])],
+					[Consume([A, B, E]), Maybe([Consume([A, C, A])])],
+				]),
+			],
+		])).eql(
+			path(
+				[_A, _B],
+				branch(
+					path([_C, _D, _E]),
+					path([_D]),
+				),
+				[_A],
+			),
+		)
 
 	// 	expect(compute_decidable(
 	// 		path(
@@ -224,5 +277,5 @@ describe('compute_decidable', () => {
 	// 			),
 	// 		)
 	// 	)
-	// })
+	})
 })

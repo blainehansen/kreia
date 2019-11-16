@@ -1,6 +1,6 @@
 import '@ts-std/extensions/dist/array'
 
-import { Dict } from '@ts-std/types'
+import { Dict, tuple as t } from '@ts-std/types'
 // import { Result, Ok, Err } from '@ts-std/monads'
 // import { DefaultDict } from '@ts-std/collections'
 
@@ -18,9 +18,9 @@ import { Data, exhaustive } from './utils'
 // export type Var = ReturnType<typeof Var>
 
 
-// export const Rule = Data((name: string, definition: Definition) => {
-// 	return { type: 'Rule' as const, name, definition, is_locking: false as const }
-// })
+export const Rule = Data((name: string, definition: Definition) => {
+	return { type: 'Rule' as const, name, definition, is_locking: false as const }
+})
 
 // export const LockingArg = Data((name: string, definition: Definition) => {
 // 	return { type: 'LockingArg' as const, name, definition }
@@ -36,6 +36,7 @@ import { Data, exhaustive } from './utils'
 // 	return { type: 'Rule' as const, name, definition, is_locking: true as const, lockers }
 // })
 // export type Rule = ReturnType<typeof Rule> | ReturnType<typeof LockingRule>
+export type Rule = ReturnType<typeof Rule>
 
 // export const Macro = Data((name: string, args: Arg[], definition: (Node | Var)[]) => {
 // 	return { type: 'Macro' as const, name, args, definition }
@@ -43,22 +44,22 @@ import { Data, exhaustive } from './utils'
 // export type Macro = ReturnType<typeof Macro>
 
 
-// export const Subrule = Data((rule_name: string) => {
-// 	return { type: 'Subrule' as const, rule_name }
-// })
-// export type Subrule = ReturnType<typeof Subrule>
+export const Subrule = Data((rule_name: string): Node => {
+	return { type: 'Subrule' as const, rule_name }
+})
+export type Subrule = Readonly<{ type: 'Subrule', rule_name: string }>
 
-export const Maybe = Data((definition: Definition) => {
+export const Maybe = Data((definition: Definition): Node => {
 	return { type: 'Maybe' as const, definition }
 })
 export type Maybe = Readonly<{ type: 'Maybe', definition: Definition }>
 
-export const Many = Data((definition: Definition) => {
+export const Many = Data((definition: Definition): Node => {
 	return { type: 'Many' as const, definition }
 })
 export type Many = Readonly<{ type: 'Many', definition: Definition }>
 
-export const Or = Data((choices: Definition[]) => {
+export const Or = Data((choices: Definition[]): Node => {
 	return { type: 'Or' as const, choices }
 })
 export type Or = Readonly<{ type: 'Or', choices: Definition[] }>
@@ -68,18 +69,18 @@ export type Or = Readonly<{ type: 'Or', choices: Definition[] }>
 // })
 // export type MacroCall = ReturnType<typeof MacroCall>
 
-export const Consume = Data((token_names: string[]) => {
+export const Consume = Data((token_names: string[]): Node => {
 	return { type: 'Consume' as const, token_names }
 })
-export type Consume = ReturnType<typeof Consume>
+export type Consume = Readonly<{ type: 'Consume', token_names: string[] }>
 
 export type Node =
-	// | Subrule
+	| Consume
 	| Maybe
 	| Many
 	| Or
+	| Subrule
 	// | MacroCall
-	| Consume
 
 export interface Definition extends Array<Node> {}
 
@@ -91,9 +92,12 @@ export interface Definition extends Array<Node> {}
 // export type Grammar = GrammarItem[]
 
 
+import { IterWrapper } from './utils'
 import { PathBuilder } from './decision'
 
 const registered_tokens = {} as Dict<TokenDefinition>
+const registered_rules = {} as Dict<Rule>
+// const registered_macros = {} as Dict<Macro>
 
 export function register_tokens(token_definitions: TokenDefinition[]) {
 	for (const token_definition of token_definitions) {
@@ -108,17 +112,21 @@ function gather_branches(current: Definition[], next: Definition) {
 	let node
 	while (node = next.shift()) switch (node.type) {
 	case 'Or':
-		Array.prototype.push.apply(branches, node.choices)
+		branches.push_all(node.choices)
 		continue
 	case 'Maybe':
 		branches.push(node.definition)
 		continue
 
 	case 'Consume':
-		branches.push([node])
+		branches.push([node as Node])
 		break
-	default:
-		// TODO this is overly simplified, Many needs some more thought
+
+	case 'Subrule':
+		const rule = registered_rules[node.rule_name]!
+		branches.push(rule.definition)
+		break
+	case 'Many':
 		branches.push(node.definition)
 		break
 	}
@@ -126,134 +134,170 @@ function gather_branches(current: Definition[], next: Definition) {
 	return branches
 }
 
-function* into_branch_iter(definition: Definition): Generator<TokenDefinition | Definition[], void, undefined> {
-	const nodes_to_visit = definition.slice()
-	let node
-	while (node = nodes_to_visit.shift()) switch (node.type) {
-	case 'Or':
-		yield gather_branches(node.choices, nodes_to_visit)
-		continue
-	case 'Maybe':
-		yield gather_branches([node.definition], nodes_to_visit)
-		continue
-	case 'Many':
-		throw new Error()
-		// yield* into_branch_iter(node.definition)
-		// // in this situation we only have to check for one unambiguous match
-		// // if the lookahead doesn't resolve by this point, for now we have to throw an error
-		// // and until we have some sort of DecisionWhile concept, we can't do better
-		// return
-	case 'Consume':
-		yield* node.token_names.map(token_name => registered_tokens[token_name]!)
-		continue
-	// case 'Subrule':
-	// 	yield* into_branch_iter(resolve_subrule(rules, node))
-	// 	continue
-	// case 'MacroCall':
-	// 	yield* into_branch_iter(resolve_macro(macros, node))
-	// 	continue
-	}
+const Continue = Data((continue_definition: Definition) => {
+	return { type: 'Continue' as const, continue_definition }
+})
+type Continue = ReturnType<typeof Continue>
+
+function is_continue(item: TokenDefinition | Continue): item is Continue {
+	return 'type' in item && item.type === 'Continue'
 }
 
-// this is to simultaneously iterate over the path and the next gathered branches
-function* multi_iter(current: Definition[], next: Definition) {
-	const iters = gather_branches(current, next)
-		.map(definition => new IterWrapper(into_iter(definition)))
 
-	let sub_array = iters.flat_map(i => i.next() || [])
-	while (sub_array.length > 0) {
-		yield sub_array
-		sub_array = iters.flat_map(i => i.next() || [])
+type AstIterItem = TokenDefinition | Definition[] | Continue
+type AstIter = IterWrapper<AstIterItem>
+function AstIter(definition: Definition): AstIter {
+	function* iterate_definition(definition: Definition): Generator<AstIterItem, void, undefined> {
+		const nodes_to_visit = definition.slice()
+		let node
+		while (node = nodes_to_visit.shift()) switch (node.type) {
+		case 'Or':
+			yield node.choices
+			continue
+		case 'Maybe':
+			yield gather_branches([node.definition], nodes_to_visit)
+			continue
+		case 'Many':
+			// in this situation we only have to check for one unambiguous match
+			// if the lookahead doesn't resolve by this point, for now we have to throw an error
+			// and until we have some sort of DecisionWhile concept, we can't do better
+			yield* iterate_definition(node.definition)
+			yield Continue(node.definition)
+			continue
+		case 'Consume':
+			yield* node.token_names.map(token_name => registered_tokens[token_name]!)
+			continue
+		case 'Subrule':
+			const rule = registered_rules[node.rule_name]!
+			yield* iterate_definition(rule.definition)
+			continue
+		// case 'MacroCall':
+		// 	const macro = registered_macros[node.macro_name]!
+		// 	const resolved = resolve_macro(macro, node.args)
+		// 	yield iterate_definition(resolved.definition)
+		// 	continue
+		}
 	}
-}
 
-function* into_iter(definition: Definition): Generator<TokenDefinition[], void, undefined> {
-	const nodes_to_visit = definition.slice()
-	let node
-	while (node = nodes_to_visit.shift()) switch (node.type) {
-	case 'Or':
-		yield* multi_iter(node.choices, nodes_to_visit)
-		continue
-	case 'Maybe':
-		yield* multi_iter([node.definition], nodes_to_visit)
-		continue
-	case 'Many':
-		throw new Error()
-	case 'Consume':
-		yield* node.token_names.map(token_name => [registered_tokens[token_name]!])
-		continue
-	}
+	return new IterWrapper(iterate_definition(definition))
 }
-
-import { IterWrapper } from './utils'
 
 export function compute_decidable(main: Definition, against: Definition[]) {
-	return _compute_decidable(
-		new IterWrapper(into_branch_iter(main)),
-		against.map(a => new IterWrapper(into_iter(a))),
+	const [path, _] = _compute_decidable(
+		AstIter(main),
+		against.map(AstIter),
 		new PathBuilder(),
 	)
+	return path
 }
 
 function _compute_decidable(
-	main: IterWrapper<TokenDefinition | Definition[]>,
-	input_against: IterWrapper<TokenDefinition[]>[],
+	main: AstIter,
+	input_against: AstIter[],
 	builder: PathBuilder,
 ) {
 	let against = input_against.slice()
 
-	let item: TokenDefinition | Definition[]
-	while (item = main.next()!) {
+	let item
+	while (item = main.next()) {
+		if (against.length === 0)
+			break
+
+		// console.log()
+		// console.log()
+		// console.log('beginning iteration')
+		// console.log(item)
+
 		// this next call will already mutate the underlying definition in gather_branches
 		// so we could have entered this iteration of the loop with many things ahead
 		// but the next will have none left
 
 		if (Array.isArray(item)) {
-			const new_against = [] as IterWrapper<TokenDefinition[]>[]
+			if (item.length === 0)
+				throw new Error('empty definition')
+
+			// console.log('branching')
+			const new_against = [] as AstIter[]
 			const decision_paths = []
 
 			for (const definition of item) {
+				// console.log('recursing on item')
+				// console.log(item)
+				// console.log()
 				// it seems that *all* the exit states of the clone against iters of each definition
 				// must be added to the new list of against
-				const path_against = against.map(a => a.clone())
-				Array.prototype.push.apply(new_against, path_against)
-
-				decision_paths.push(_compute_decidable(
-					new IterWrapper(into_branch_iter(definition)),
-					path_against,
+				const [decision_path, continued_against] = _compute_decidable(
+					AstIter(definition),
+					against.map(a => a.clone()),
 					new PathBuilder(),
-				))
+				)
+				new_against.push_all(continued_against)
+				decision_paths.push(decision_path)
 			}
-
 			against = new_against
+
+			// console.log('finished with recursion')
+			// console.log()
+
 			builder.push_branch(decision_paths)
 			continue
 		}
 
+		if (is_continue(item))
+			// since we've placed an against.length check before this,
+			// hitting here means this thing is undecidable, at least for now
+			throw new Error('undecidable')
 
-		const against_items = [] as TokenDefinition[]
-		const new_against = []
-		for (const against_iter of against) {
+		// console.log('NOT branching')
+
+		const new_against = [] as AstIter[]
+		const against_iters = against.slice()
+
+		let against_iter
+		while (against_iter = against_iters.shift()) {
 			const against_item = against_iter.next()
 			if (against_item === undefined)
 				continue
 
-			Array.prototype.push.apply(against_items, against_item)
+			if (Array.isArray(against_item)) {
+				const child_iters = against_item.map(AstIter)
+				// new_against.push(against_iter)
+				against_iters.push_all(child_iters)
+				continue
+			}
+
+			if (is_continue(against_item)) {
+				// we'll just keep cycling this iterator over and over
+				// that's a safe choice since the main loop will die if it also has one
+				new_against.push(AstIter(against_item.continue_definition))
+				continue
+			}
+
+			if (item.name !== against_item.name)
+				continue
+
 			new_against.push(against_iter)
 		}
 		against = new_against
 
-		const same = against_items.filter(a => a.name === (item as TokenDefinition).name)
-
-		// if (same.length >= against.length)
+		// if (same >= against.length)
 		// 	throw new Error("all branches have the same stem")
 
+		// console.log('same')
+		// console.log(same)
+
 		builder.push(item)
-		if (same.length === 0)
-			break
 	}
 
-	return builder.build()
+	// against.length being non-zero here means that we exhausted the main branch before the others
+	// we could choose to make that an error condition, but it seems too picky
+	// for example, what about this: (A, B, C)? (A, B, C, D)
+	// that's a situation that might make perfect sense,
+	// since the Maybe only happens once, the next could definitely happen
+	// it definitely means you need to warn people that the first matched rule in an Or will be taken,
+	// so they should put longer ones first if they share stems
+
+	return t(builder.build(), against)
 }
 
 // import ts = require('typescript')
@@ -607,7 +651,7 @@ function _compute_decidable(
 // // 	case 'Subrule':
 // // 		if (node.content.name === rule.name)
 // // 			return rule.name
-// // 		Array.prototype.push.apply(stack, node.content.nodes.slice().reverse())
+// // 		stack.push_all(node.content.nodes.slice().reverse())
 // // 		continue
 
 // // 	case 'Consume':
@@ -619,7 +663,7 @@ function _compute_decidable(
 // // 	// here in the case of a Maybe, it can't prevent the top-level rule from being left-recursive, but it can still produce a left-recursive call
 
 // // 	default:
-// // 		Array.prototype.push.apply(stack, node.content.slice().reverse())
+// // 		stack.push_all(node.content.slice().reverse())
 // // 		continue
 // // 	}
 

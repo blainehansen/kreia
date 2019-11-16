@@ -170,7 +170,7 @@ export class BaseLexer {
 			const tokens = this.next()
 			if (tokens.length === 0)
 				break
-			Array.prototype.push.apply(this.buffer, tokens)
+			this.buffer.push_all(tokens)
 		}
 
 		return this.buffer.slice(0, count)

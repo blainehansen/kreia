@@ -40,7 +40,7 @@
     "typescript": "^3.6.4"
   },
   "dependencies": {
-    "@ts-std/extensions": "^1.0.8",
+    "@ts-std/extensions": "^1.0.9",
     "@ts-std/monads": "^1.0.2",
     "kreia-moo": "^0.4.8"
   }

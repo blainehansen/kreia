@@ -21,6 +21,17 @@ export function is_branch(item: TokenDefinition[] | TokenDefinition | DecisionBr
 export class PathBuilder {
 	private items = [] as (TokenDefinition[] | DecisionBranch)[]
 
+	// push_path(path: DecisionPath) {
+	// 	for (const item of path.path) {
+	// 		if (Array.isArray(item))
+	// 			for (const token of item)
+	// 				this.push(token)
+
+	// 		else
+	// 			this.items.push(item)
+	// 	}
+	// }
+
 	push_branch(paths: DecisionPath[]) {
 		this.items.push(new DecisionBranch(
 			paths.filter(path => path.test_length > 0)
