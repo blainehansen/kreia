@@ -1,11 +1,12 @@
 import '@ts-std/extensions/dist/array'
-
 import { Dict, tuple as t } from '@ts-std/types'
 // import { Result, Ok, Err } from '@ts-std/monads'
 import { OrderedDict, UniqueDict } from '@ts-std/collections'
 
+import { PathBuilder } from './decision'
 import { TokenDefinition } from './lexer'
-import { Data, exhaustive } from './utils'
+import { Data, exhaustive, IterWrapper } from './utils'
+
 
 export const Arg = Data((name: string) => {
 	return { type: 'Arg' as const, name }
@@ -92,13 +93,8 @@ export type GrammarItem =
 	| Rule
 	| Macro
 
-
-
 // export type Grammar = GrammarItem[]
 
-
-import { IterWrapper } from './utils'
-import { PathBuilder } from './decision'
 
 const registered_tokens = {} as Dict<TokenDefinition>
 const registered_rules = {} as Dict<Rule>
@@ -119,6 +115,43 @@ export function register_macros(macros: Macro[]) {
 		registered_macros[macro.name] = macro
 	}
 }
+
+function resolve_macro(macro_name: string, args: OrderedDict<Definition>) {
+	const macro = registered_macros[macro_name]!
+	return _resolve_macro(args, macro.definition)
+}
+export function _resolve_macro(args: OrderedDict<Definition>, definition: Definition) {
+	const resolved = [] as Definition
+	for (const node of definition) switch (node.type) {
+	case 'Var':
+		const arg_def = args.get_by_name(node.arg_name).to_undef()
+		if (arg_def === undefined)
+			throw new Error(`invalid arg: ${node.arg_name}`)
+		resolved.push_all(arg_def)
+		continue
+	case 'Or':
+		resolved.push(Or(node.choices.map(choice => _resolve_macro(args, choice))))
+		continue
+	case 'Maybe':
+		resolved.push(Maybe(_resolve_macro(args, node.definition)))
+		continue
+	case 'Many':
+		resolved.push(Many(_resolve_macro(args, node.definition)))
+		continue
+	case 'MacroCall':
+		const new_args = node.args.map(arg_def => _resolve_macro(args, arg_def))
+		resolved.push(MacroCall(node.macro_name, new_args))
+		continue
+	// Consume, Subrule
+	default:
+		resolved.push(node)
+		continue
+	}
+
+	return resolved
+}
+
+
 
 
 function gather_branches(current: Definition[], next: Definition) {
@@ -163,75 +196,45 @@ function is_continue(item: TokenDefinition | Continue): item is Continue {
 	return 'type' in item && item.type === 'Continue'
 }
 
-function resolve_macro(macro_name: string, args: OrderedDict<Definition>) {
-	const macro = registered_macros[macro_name]!
-	return _resolve_macro(args, macro.definition)
-}
-function _resolve_macro(args: OrderedDict<Definition>, definition: Definition) {
-	const resolved = [] as Definition
-	for (const node of definition) switch (node.type) {
-	case 'Var':
-		const arg_def = args.get_by_name(node.arg_name).to_undef()
-		if (arg_def === undefined)
-			throw new Error(`invalid arg: ${node.arg_name}`)
-		resolved.push_all(arg_def)
-		continue
-	case 'Or':
-		resolved.push(Or(node.choices.map(choice => _resolve_macro(args, choice))))
-		continue
-	case 'Maybe':
-		resolved.push(Maybe(_resolve_macro(args, node.definition)))
-		continue
-	case 'Many':
-		resolved.push(Many(_resolve_macro(args, node.definition)))
-		continue
-	case 'MacroCall':
-		const new_args = node.args.map(arg_def => _resolve_macro(args, arg_def))
-		resolved.push(MacroCall(node.macro_name, new_args))
-		continue
-	// Consume, Subrule
-	default:
-		resolved.push(node)
-		continue
-	}
-
-	return resolved
-}
 
 type AstIterItem = TokenDefinition | Definition[] | Continue
 type AstIter = IterWrapper<AstIterItem>
-function AstIter(definition: Definition): AstIter {
-	function* iterate_definition(definition: Definition): Generator<AstIterItem, void, undefined> {
-		const nodes_to_visit = definition.slice()
-		let node
-		while (node = nodes_to_visit.shift()) switch (node.type) {
-		case 'Or':
-			yield node.choices
-			continue
-		case 'Maybe':
-			yield gather_branches([node.definition], nodes_to_visit)
-			continue
-		case 'Many':
-			yield* iterate_definition(node.definition)
-			yield Continue(node.definition)
-			continue
-		case 'Consume':
-			yield* node.token_names.map(token_name => registered_tokens[token_name]!)
-			continue
-		case 'Subrule':
-			const rule = registered_rules[node.rule_name]!
-			yield* iterate_definition(rule.definition)
-			continue
-		case 'MacroCall':
-			const resolved = resolve_macro(node.macro_name, node.args)
-			yield* iterate_definition(resolved)
-			continue
-		case 'Var':
-			throw new Error(`unexpected Var ${node}`)
-		}
-	}
 
-	return new IterWrapper(iterate_definition(definition))
+function* iterate_definition(definition: Definition): Generator<AstIterItem, void, undefined> {
+	const nodes_to_visit = definition.slice()
+	let node
+	while (node = nodes_to_visit.shift()) switch (node.type) {
+	case 'Or':
+		yield node.choices
+		continue
+	case 'Maybe':
+		yield gather_branches([node.definition], nodes_to_visit)
+		continue
+	case 'Many':
+		yield* iterate_definition(node.definition)
+		yield Continue(node.definition)
+		continue
+	case 'Consume':
+		yield* node.token_names.map(token_name => registered_tokens[token_name]!)
+		continue
+	case 'Subrule':
+		const rule = registered_rules[node.rule_name]!
+		yield* iterate_definition(rule.definition)
+		continue
+	case 'MacroCall':
+		const resolved = resolve_macro(node.macro_name, node.args)
+		yield* iterate_definition(resolved)
+		continue
+	case 'Var':
+		throw new Error(`unexpected Var ${node}`)
+	}
+}
+
+function AstIter(definition: Definition): AstIter {
+	return IterWrapper.create(() => iterate_definition(definition))
+}
+function EternalAstIter(definition: Definition): AstIter {
+	return IterWrapper.create_eternal(() => iterate_definition(definition))
 }
 
 export function compute_decidable(main: Definition, against: Definition[]) {
@@ -252,13 +255,15 @@ function _compute_decidable(
 
 	let item
 	while (item = main.next()) {
-		if (against.length === 0)
-			break
-
 		// console.log()
 		// console.log()
 		// console.log('beginning iteration')
 		// console.log(item)
+		// console.log('against.length')
+		// console.log(against.length)
+
+		if (against.length === 0)
+			break
 
 		// this next call will already mutate the underlying definition in gather_branches
 		// so we could have entered this iteration of the loop with many things ahead
@@ -305,15 +310,22 @@ function _compute_decidable(
 		const new_against = [] as AstIter[]
 		const against_iters = against.slice()
 
-		let against_iter
-		while (against_iter = against_iters.shift()) {
+		let against_iter: AstIter
+		while (against_iter = against_iters.shift()!) {
+			// console.log()
+			// console.log('against_iter')
+			// console.log(against_iter)
 			const against_item = against_iter.next()
+			// console.log('against_item')
+			// console.log(against_item)
 			if (against_item === undefined)
 				continue
 
 			if (Array.isArray(against_item)) {
-				const child_iters = against_item.map(AstIter)
-				// new_against.push(against_iter)
+				// const child_iters = against_item.map(AstIter)
+				const child_iters = against_item.map(
+					definition => IterWrapper.chain_iters(AstIter(definition), against_iter.clone()),
+				)
 				against_iters.push_all(child_iters)
 				continue
 			}
@@ -321,7 +333,8 @@ function _compute_decidable(
 			if (is_continue(against_item)) {
 				// we'll just keep cycling this iterator over and over
 				// that's a safe choice since the main loop will die if it also has one
-				new_against.push(AstIter(against_item.continue_definition))
+				// new_against.push(EternalAstIter(against_item.continue_definition))
+				against_iters.push(EternalAstIter(against_item.continue_definition))
 				continue
 			}
 
@@ -330,13 +343,12 @@ function _compute_decidable(
 
 			new_against.push(against_iter)
 		}
+		// console.log('new_against')
+		// console.log(new_against)
 		against = new_against
 
 		// if (same >= against.length)
 		// 	throw new Error("all branches have the same stem")
-
-		// console.log('same')
-		// console.log(same)
 
 		builder.push(item)
 	}

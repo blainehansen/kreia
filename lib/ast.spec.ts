@@ -1,10 +1,10 @@
 import 'mocha'
 import { expect } from 'chai'
+import { OrderedDict } from '@ts-std/collections'
 
 import { Token } from './lexer'
 import { path, branch } from './decision'
-// import { compute_decidable, register_tokens, Node, Definition, Subrule, Maybe, Many, Or, MacroCall, Consume } from './ast'
-import { compute_decidable, register_tokens, Node, Definition, Maybe, Many, Or, Consume } from './ast'
+import { compute_decidable, register_tokens, _resolve_macro, Arg, Var, Node, Definition, Maybe, Many, Or, Consume } from './ast'
 
 import { log } from './utils'
 
@@ -133,6 +133,30 @@ describe('compute_decidable', () => {
 		])).eql(
 			path([_A, _B, _C]),
 		)
+
+		expect(compute_decidable(
+			[Consume([A, B, D])],
+			[
+			[Many([Consume([A, B, C])])],
+		])).eql(
+			path([_A, _B, _D]),
+		)
+
+		expect(compute_decidable(
+			[Consume([A, B, A, B, A, B, C])],
+			[
+			[Many([Consume([A, B])]), Consume([C])],
+		])).eql(
+			path([_A, _B, _A, _B, _A, _B, _C]),
+		)
+
+		expect(compute_decidable(
+			[Consume([A, B, A, B, C])],
+			[
+			[Many([Consume([A, B])]), Consume([C])],
+		])).eql(
+			path([_A, _B, _A, _B, _C]),
+		)
 	})
 
 	it('decidable many against many', () => {
@@ -245,37 +269,32 @@ describe('compute_decidable', () => {
 			),
 		)
 
-	// 	expect(compute_decidable(
-	// 		path(
-	// 			[A, B],
-	// 			branch(true,
-	// 				path([C, D, E]),
-	// 				path([D]),
-	// 			),
-	// 			[A, C, A],
-	// 		),
-	// 		[
-	// 		path(
-	// 			[A],
-	// 			branch(false,
-	// 				path([B, D]),
-	// 				path([B, C]),
-	// 			),
-	// 		),
-	// 		path(
-	// 			branch(false,
-	// 				path([A, B], branch(false, path([C, A]), path([C, D, E]))),
-	// 				path([A, B], branch(false, path([A, C, A]))),
-	// 			),
-	// 		),
-	// 	])).eql(
-	// 		path(
-	// 			[A, B],
-	// 			branch(true,
-	// 				path([C, D, E]),
-	// 				path([D]),
-	// 			),
-	// 		)
-	// 	)
+		expect(compute_decidable(
+			[Many([Maybe([Consume([D])]), Consume([B, C, E])])],
+			[
+			[Many([Consume([B]), Maybe([Consume([C])]), Consume([A])])],
+		])).eql(
+			path(
+				branch(
+					path([_D]),
+					path([_B, _C, _E]),
+				),
+			)
+		)
+	})
+})
+
+
+describe('resolve_macro', () => {
+	it('works', () => {
+		const args = OrderedDict.create_unique(
+			(_arg, index) => index === 0 ? 'body_rule' : 'separator_rule',
+			[[Consume([A])], [Consume([B])]],
+		).expect('')
+		const definition = [Var('body_rule'), Maybe([Many([Var('separator_rule'), Var('body_rule')])])]
+		const resolved = _resolve_macro(args, definition)
+		expect(resolved).eql(
+			[Consume([A]), Maybe([Many([Consume([B]), Consume([A])])])],
+		)
 	})
 })
