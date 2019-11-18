@@ -4,7 +4,14 @@ import { OrderedDict } from '@ts-std/collections'
 
 import { Token } from './lexer'
 import { path, branch } from './decision'
-import { compute_decidable, register_tokens, _resolve_macro, Arg, Var, Node, Definition, Maybe, Many, Or, Consume } from './ast'
+import { compute_decidable } from './decision_compute'
+import {
+	register_tokens, register_rules, register_macros,
+	resolve_macro, check_left_recursive, validate_references,
+	render_grammar,
+	Rule, Macro, MacroCall, Subrule, Arg, Var, Node, Definition, Maybe, Many, Or, Consume,
+} from './ast'
+
 
 import { log } from './utils'
 
@@ -287,14 +294,202 @@ describe('compute_decidable', () => {
 
 describe('resolve_macro', () => {
 	it('works', () => {
-		const args = OrderedDict.create_unique(
-			(_arg, index) => index === 0 ? 'body_rule' : 'separator_rule',
-			[[Consume([A])], [Consume([B])]],
-		).expect('')
-		const definition = [Var('body_rule'), Maybe([Many([Var('separator_rule'), Var('body_rule')])])]
-		const resolved = _resolve_macro(args, definition)
+		register_macros([
+			Macro(
+				'many_separated',
+				OrderedDict.create_unique('name', [Arg('body_rule'), Arg('separator_rule')]).expect(''),
+				[Var('body_rule'), Maybe([Many([Var('separator_rule'), Var('body_rule')])])],
+			),
+		])
+		const resolved = resolve_macro(
+			'many_separated',
+			OrderedDict.create_unique(
+				(_arg, index) => index === 0 ? 'body_rule' : 'separator_rule',
+				[[Consume([A])], [Consume([B])]],
+			).expect(''),
+		)
 		expect(resolved).eql(
 			[Consume([A]), Maybe([Many([Consume([B]), Consume([A])])])],
 		)
+	})
+})
+
+
+describe('check_left_recursive', () => {
+	function expect_left(left: boolean, ...rules: Rule[]) {
+		register_rules(rules)
+		for (const rule of rules)
+			expect(check_left_recursive(rule)).eql(left)
+	}
+
+	it('works', () => {
+		expect_left(true,
+			Rule('one', [Subrule('two')]),
+			Rule('two', [Subrule('one')]),
+		)
+
+		expect_left(true,
+			Rule('one', [Subrule('two')]),
+			Rule('two', [Maybe([Subrule('one')])]),
+		)
+
+		expect_left(true,
+			Rule('one', [Maybe([Subrule('two')])]),
+			Rule('two', [Subrule('one')]),
+		)
+
+		expect_left(true,
+			Rule('one', [Maybe([Subrule('two')])]),
+			Rule('two', [Maybe([Subrule('one')])]),
+		)
+
+		expect_left(true,
+			Rule('one', [Maybe([Consume([A])]), Subrule('two')]),
+			Rule('two', [Subrule('one')]),
+		)
+
+		// deeply nested
+		expect_left(true,
+			Rule('one', [Maybe([Consume([A])]), Subrule('two')]),
+			Rule('two', [Maybe([Consume([A])]), Subrule('three')]),
+			Rule('three', [Maybe([Consume([A])]), Subrule('four')]),
+			Rule('four', [Maybe([Consume([A])]), Subrule('one')]),
+		)
+
+		// nested but the target rule isn't the one that introduces the recursion
+		expect_left(true,
+			Rule('one', [Maybe([Consume([A])]), Subrule('two')]),
+			Rule('two', [Maybe([Consume([A])]), Subrule('three')]),
+			Rule('three', [Maybe([Consume([A])]), Subrule('two')]),
+		)
+
+		expect_left(true,
+			Rule('one', [Or([
+				[Consume([A]), Maybe([Subrule('two')])],
+				[Maybe([Consume([B])]), Subrule('two')],
+			])]),
+			Rule('two', [Subrule('one')]),
+		)
+
+		// this is an interesting situation,
+		// since it's one of these rules where something has only a single Maybe
+		// which is always a non-canonical way to put things
+		// expect_left(true,
+		// 	Rule('one', [Or([
+		// 		[Consume([A])],
+		// 		[Maybe([Consume([B])])],
+		// 	]), Subrule('two')]),
+		// 	Rule('two', [Subrule('one')]),
+		// )
+
+		expect_left(false,
+			Rule('one', [Many([Consume([A])]), Subrule('two')]),
+			Rule('two', [Subrule('one')]),
+		)
+
+		expect_left(false,
+			Rule('one', [Consume([A]), Subrule('two')]),
+			Rule('two', [Subrule('one')]),
+		)
+
+		expect_left(false,
+			Rule('one', [Maybe([Consume([A])]), Consume([A]), Subrule('two')]),
+			Rule('two', [Subrule('one')]),
+		)
+
+		expect_left(false,
+			Rule('one', [Many([Consume([A])]), Subrule('two')]),
+			Rule('two', [Subrule('one')]),
+		)
+
+		expect_left(false,
+			Rule('one', [Or([
+				[Maybe([Consume([A]), Subrule('two')]), Consume([C])],
+				[Maybe([Consume([B])]), Consume([D])],
+			]), Subrule('two')]),
+			Rule('two', [Subrule('one')]),
+		)
+	})
+})
+
+
+describe('validate_references', () => {
+	it('works', () => {
+		expect(validate_references(
+			Rule('two', [Consume([A])])
+		).length).eql(0)
+		expect(validate_references(
+			Rule('one', [Consume(['nope'])])
+		).length).eql(1)
+		expect(validate_references(
+			Rule('two', [Var('nope')])
+		).length).eql(1)
+
+
+		register_rules([
+			Rule('one', [Consume([A])]),
+		])
+		expect(validate_references(
+			Rule('two', [Subrule('three')])
+		).length).eql(1)
+		expect(validate_references(
+			Rule('two', [Subrule('one')])
+		).length).eql(0)
+
+
+		const m = Macro(
+			'm',
+			OrderedDict.create_unique('name', [Arg('thing')]).expect(''),
+			[Consume([A]), Var('thing')],
+		)
+		expect(validate_references(
+			m,
+		).length).eql(0)
+
+		expect(validate_references(
+			Macro(
+				'bad',
+				OrderedDict.create_unique('name', [Arg('thing')]).expect(''),
+				[Var('nope')],
+			)
+		).length).eql(1)
+
+		register_macros([m])
+		expect(validate_references(
+			Rule('one', [MacroCall(
+				'm', OrderedDict.create_unique('name', [Arg('thing')]).expect('').map(() => [Consume([A])]),
+			)]),
+		).length).eql(0)
+
+		expect(validate_references(
+			Rule('one', [MacroCall(
+				'm', OrderedDict.create_unique('name', [Arg('thing'), Arg('extra')]).expect('').map(() => [Consume([A])]),
+			)])
+		).length).eql(1)
+
+		expect(validate_references(
+			Rule('one', [MacroCall(
+				'm', OrderedDict.create_unique('name', [Arg('extra')]).expect('').map(() => [Consume([A])]),
+			)])
+		).length).eql(1)
+
+
+		expect(validate_references(
+			Rule('one', [MacroCall(
+				'm', OrderedDict.create_unique('name', [] as Arg[]).expect('').map(() => [Consume([A])]),
+			)])
+		).length).eql(1)
+	})
+})
+
+
+// const json_grammar = []
+
+describe('render_grammar', () => {
+	it('works', () => {
+		render_grammar([
+			_A, _B, _C, _D, _E, _F, _G, _H,
+			Rule(),
+		])
 	})
 })

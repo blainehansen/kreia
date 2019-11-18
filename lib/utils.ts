@@ -212,6 +212,6 @@ export function Data<F extends (...args: any) => any>(
 export type Data<F extends (...args: any) => any> = ReturnType<F>
 
 
-export function exhaustive(): never {
+export function exhaustive(v: never): never {
 	throw new Error()
 }

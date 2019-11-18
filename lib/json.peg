@@ -1,7 +1,4 @@
-// special whitespace sensitive tokens!!
-// %indent, %deindent, %newline = %__indent, %__deindent, %__newline
-
-%Whitespace = /\s+/, anywhere
+%Whitespace = /\s+/, ignore: true
 %Colon = ':'
 %Comma = ','
 %LeftBrace = '{'
@@ -13,30 +10,40 @@
 %Str = /"(?:\\[\"\\]|[^\n\"\\])*"/
 
 // making tokens from other token definitions, with a slice
-%directive = '@' %ident ';', slice = 1:-1
+%directive = '@' %ident ';', slice: 1..-1
 
+// here are a bunch of token macros
 // if we're making escapable sequences easy
-// %Str = @__enclosed(/\"|\'/,  escape_character = '/', discard_enclosure = true) // \ would be the default escape sequence
+%Str = %%enclosed('/\"|\'/', escape_character: '/', discard_enclosure: true) // \ would be the default escape sequence
 // other things to worry about:
 // keywords (or other "matching rules could be shorter and different")
 
+%string = %%enclosed('"', escape_character = '\\')
+%multi_comment = %%enclosed_open_close('/*', '*/', stackable = true, includes_newlines = true)
+%comment = %%enclosed_open_close('//', '\n', includes_newlines = false)
 
-%string = @__enclosed('"', escape_character = '\\')
-%multi_comment = @__enclosed_open_close('/*', '*/', stackable = true, includes_newlines = true)
-%comment = @__enclosed_open_close('//', '\n', includes_newlines = false)
-
-%postgres_string = @__enclosed('$' %ident* '$', includes_newlines = true)
-
-%indent, %deindent, %newline = @__significant_whitespace
+// this is a virtual lexer useage directive
+// only one per state is allowed
+&{ %indent, %deindent, %newline } = &significant_whitespace
 // doing it this way allows the parser to take over and process the stuff itself
 // basically, after %raw_block_begin is encountered, all newlines and indents and stuff will be handled as raw,
 // and then once a %deindent is actually given to the parser, that means that everything is back to normal?
-%indent, %deindent, %newline, %raw_block_begin = @__significant_whitespace_with_raw_block('|"')
-
-block_string = @__raw_block(
+&{ %indent, %deindent, %newline, raw_block } = &significant_whitespace_with_raw_block
 	'|"',
-	ident_interpolation = @__raw_block_capture('$' %ident),
-	expression_interpolation = @__raw_block_capture_open_close('${', '}', expression_stem)
+	ident_interpolator: '$' %ident,
+	expression_begin_interpolator: '${',
+	expression_end_interpolator: '}',
+
+
+#some_state =
+	{ %special, %tokens } = &my_virtual_lexer
+	%normal = 'normal'
+
+
+block_string = %%raw_block(
+	'|"',
+	ident_interpolation = %%raw_block_capture('$' %ident),
+	expression_interpolation = %%raw_block_capture_open_close('${', '}', expression_stem)
 )
 
 
@@ -44,8 +51,8 @@ block_string = @__raw_block(
 
 %dollar_ident = '$' %ident
 
-%dollar_expression_open = '${'
-%right_brace = '}'
+%dollar_expression_open = '${', push: #main
+%right_brace = '}', pop: true
 
 block_string_line = (%block_string_any | %dollar_ident | %dollar_expression_open expression_stem %right_brace)+
 
@@ -91,14 +98,37 @@ atomic_entity =
 
 
 
+%strstart = '`', push: #lit
+%ident = /\w+/,
+%lbrace = '{', push: #main
+%rbrace =   '}', pop: true
+%colon = ':'
+%space = /\s+/
+
+#lit =
+	%interp = '${', push: #main
+	%escape = /\\./
+	%strend = '`', pop: true
+	%const = '/(?:[^$`]|\\$(?!\\{))+/'
 
 
+expression =
+	| %ident
+	| %lbrace %space (%ident %colon %space %expression)* %space %rbrace
+	|
+		%strstart
+		*
+			| %const | (%escape %strend)
+			| %interp expression %rbrace
+		%strend
 
 
-
-
-
-
+postgres_string<$sigil = %ident> =
+	%dollar $sigil %dollar
+	*
+		| %not_dollar
+		| %escape $dollar
+	%dollar $sigil %dollar
 
 
 html_tag<$tag_name = %html_tag_ident> =

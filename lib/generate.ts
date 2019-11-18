@@ -3,6 +3,10 @@
 
 import ts = require('typescript')
 
+function render() {
+	//
+}
+
 function f() {
 	return ts.createFunctionDeclaration(
 		undefined,

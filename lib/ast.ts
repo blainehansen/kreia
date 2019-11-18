@@ -1,11 +1,49 @@
+import { Dict } from '@ts-std/types'
 import '@ts-std/extensions/dist/array'
-import { Dict, tuple as t } from '@ts-std/types'
+import { Enum, empty, variant } from '@ts-std/enum'
 // import { Result, Ok, Err } from '@ts-std/monads'
-import { OrderedDict, UniqueDict } from '@ts-std/collections'
+import '@ts-std/collections/dist/impl.Hashable.string'
+import { OrderedDict, UniqueDict, HashSet } from '@ts-std/collections'
 
-import { PathBuilder } from './decision'
+
 import { TokenDefinition } from './lexer'
-import { Data, exhaustive, IterWrapper } from './utils'
+import { Data, exhaustive } from './utils'
+
+
+export const File = Data((name: string, source: string) => {
+	return { type: 'File' as const, name, source }
+})
+export type File = ReturnType<typeof File>
+
+export const Span = Data((file: File, start: number, end: number) => {
+	return { type: 'Span' as const, file, start, end }
+})
+export type Span = ReturnType<typeof Span>
+
+
+export const VirtualLexerDirective = Data((virtual_lexer_name: string, destructure: (Token | Subrule)[]) => {
+	return { type: 'VirtualLexerDirective' as const,  }
+})
+
+
+
+export const LexerState = Data((state_name: string) => {
+	return { type: 'LexerState' as const, state_name }
+})
+export type LexerState = ReturnType<typeof LexerState>
+
+const StateTransform = Enum({
+	Push: variant<LexerState>(),
+	Pop: empty(),
+})
+type StateTransform = Enum<typeof StateTransform> | undefined
+
+export const Token = Data((
+	name: string, spec: string | string[],
+	options: { ignore?: true, state_transform?: StateTransform },
+) => {
+	//
+})
 
 
 export const Arg = Data((name: string) => {
@@ -93,34 +131,28 @@ export type GrammarItem =
 	| Rule
 	| Macro
 
-// export type Grammar = GrammarItem[]
+export type Grammar = GrammarItem[]
 
 
-const registered_tokens = {} as Dict<TokenDefinition>
-const registered_rules = {} as Dict<Rule>
-const registered_macros = {} as Dict<Macro>
+export let registered_tokens = {} as Dict<TokenDefinition>
+export let registered_rules = {} as Dict<Rule>
+export let registered_macros = {} as Dict<Macro>
 
 export function register_tokens(token_definitions: TokenDefinition[]) {
-	for (const token_definition of token_definitions) {
-		registered_tokens[token_definition.name] = token_definition
-	}
+	registered_tokens = token_definitions.unique_index_by('name').expect('')
 }
 export function register_rules(rules: Rule[]) {
-	for (const rule of rules) {
-		registered_rules[rule.name] = rule
-	}
+	registered_rules = rules.unique_index_by('name').expect('')
 }
 export function register_macros(macros: Macro[]) {
-	for (const macro of macros) {
-		registered_macros[macro.name] = macro
-	}
+	registered_macros = macros.unique_index_by('name').expect('')
 }
 
-function resolve_macro(macro_name: string, args: OrderedDict<Definition>) {
+export function resolve_macro(macro_name: string, args: OrderedDict<Definition>) {
 	const macro = registered_macros[macro_name]!
 	return _resolve_macro(args, macro.definition)
 }
-export function _resolve_macro(args: OrderedDict<Definition>, definition: Definition) {
+function _resolve_macro(args: OrderedDict<Definition>, definition: Definition) {
 	const resolved = [] as Definition
 	for (const node of definition) switch (node.type) {
 	case 'Var':
@@ -152,219 +184,222 @@ export function _resolve_macro(args: OrderedDict<Definition>, definition: Defini
 }
 
 
+// import ts = require('typescript')
 
-
-function gather_branches(current: Definition[], next: Definition) {
-	const branches = current.slice()
-
-	let node
-	while (node = next.shift()) switch (node.type) {
-	case 'Or':
-		branches.push_all(node.choices)
-		continue
-	case 'Maybe':
-		branches.push(node.definition)
-		continue
-
+export function check_left_recursive(thing: Rule | Macro) {
+	const seen_rules = {} as Dict<true>
+	const seen_macros = {} as Dict<true>
+	const one_to_add = thing.type === 'Rule' ? seen_rules : seen_macros
+	one_to_add[thing.name] = true
+	return _check_left_recursive(seen_rules, seen_macros, thing.definition)
+}
+function _check_left_recursive(
+	seen_rules: Dict<true>,
+	seen_macros: Dict<true>,
+	definition: Definition,
+): boolean {
+	for (const node of definition) switch (node.type) {
 	case 'Consume':
-		branches.push([node as Node])
-		break
+		return false
+	case 'Maybe':
+		if (_check_left_recursive(seen_rules, seen_macros, node.definition))
+			return true
+		continue
+	case 'Or':
+		for (const choice of node.choices)
+			if (_check_left_recursive(seen_rules, seen_macros, choice))
+				return true
+		return false
 	case 'Many':
-		branches.push(node.definition)
-		break
+		if (_check_left_recursive(seen_rules, seen_macros, node.definition))
+			return true
+		return false
+
 	case 'Subrule':
-		const rule = registered_rules[node.rule_name]!
-		branches.push(rule.definition)
-		break
+		if (seen_rules[node.rule_name])
+			return true
+		const subrule = registered_rules[node.rule_name]!
+		if (_check_left_recursive({ [node.rule_name]: true, ...seen_rules }, seen_macros, subrule.definition))
+			return true
+		return false
+
 	case 'MacroCall':
-		const resolved = resolve_macro(node.macro_name, node.args)
-		branches.push(resolved)
-		break
+		if (seen_macros[node.macro_name])
+			return true
+		const call_definition = resolve_macro(node.macro_name, node.args)
+		if (_check_left_recursive(seen_rules, { [node.macro_name]: true, ...seen_macros }, call_definition))
+			return true
+		return false
+
 	case 'Var':
-		throw new Error(`unexpected Var: ${node}`)
+		continue
+	default: return exhaustive(node)
 	}
 
-	return branches
-}
-
-const Continue = Data((continue_definition: Definition) => {
-	return { type: 'Continue' as const, continue_definition }
-})
-type Continue = ReturnType<typeof Continue>
-
-function is_continue(item: TokenDefinition | Continue): item is Continue {
-	return 'type' in item && item.type === 'Continue'
+	return false
 }
 
 
-type AstIterItem = TokenDefinition | Definition[] | Continue
-type AstIter = IterWrapper<AstIterItem>
+export function validate_references(thing: Rule | Macro) {
+	const validation_errors = [] as string[]
 
-function* iterate_definition(definition: Definition): Generator<AstIterItem, void, undefined> {
-	const nodes_to_visit = definition.slice()
+	const nodes_to_visit = thing.definition.slice()
 	let node
 	while (node = nodes_to_visit.shift()) switch (node.type) {
 	case 'Or':
-		yield node.choices
-		continue
-	case 'Maybe':
-		yield gather_branches([node.definition], nodes_to_visit)
+		nodes_to_visit.push_all(...node.choices)
 		continue
 	case 'Many':
-		yield* iterate_definition(node.definition)
-		yield Continue(node.definition)
+	case 'Maybe':
+		nodes_to_visit.push_all(node.definition)
 		continue
+
 	case 'Consume':
-		yield* node.token_names.map(token_name => registered_tokens[token_name]!)
+		for (const token_name of node.token_names)
+			if (!(token_name in registered_tokens))
+				validation_errors.push(`Token ${token_name} couldn't be found.`)
 		continue
+
 	case 'Subrule':
-		const rule = registered_rules[node.rule_name]!
-		yield* iterate_definition(rule.definition)
+		if (!(node.rule_name in registered_rules))
+			validation_errors.push(`Rule ${node.rule_name} couldn't be found.`)
 		continue
+
 	case 'MacroCall':
-		const resolved = resolve_macro(node.macro_name, node.args)
-		yield* iterate_definition(resolved)
-		continue
-	case 'Var':
-		throw new Error(`unexpected Var ${node}`)
-	}
-}
-
-function AstIter(definition: Definition): AstIter {
-	return IterWrapper.create(() => iterate_definition(definition))
-}
-function EternalAstIter(definition: Definition): AstIter {
-	return IterWrapper.create_eternal(() => iterate_definition(definition))
-}
-
-export function compute_decidable(main: Definition, against: Definition[]) {
-	const [path, _] = _compute_decidable(
-		AstIter(main),
-		against.map(AstIter),
-		new PathBuilder(),
-	)
-	return path
-}
-
-function _compute_decidable(
-	main: AstIter,
-	input_against: AstIter[],
-	builder: PathBuilder,
-) {
-	let against = input_against.slice()
-
-	let item
-	while (item = main.next()) {
-		// console.log()
-		// console.log()
-		// console.log('beginning iteration')
-		// console.log(item)
-		// console.log('against.length')
-		// console.log(against.length)
-
-		if (against.length === 0)
-			break
-
-		// this next call will already mutate the underlying definition in gather_branches
-		// so we could have entered this iteration of the loop with many things ahead
-		// but the next will have none left
-
-		if (Array.isArray(item)) {
-			if (item.length === 0)
-				throw new Error('empty definition')
-
-			// console.log('branching')
-			const new_against = [] as AstIter[]
-			const decision_paths = []
-
-			for (const definition of item) {
-				// console.log('recursing on item')
-				// console.log(item)
-				// console.log()
-				// it seems that *all* the exit states of the clone against iters of each definition
-				// must be added to the new list of against
-				const [decision_path, continued_against] = _compute_decidable(
-					AstIter(definition),
-					against.map(a => a.clone()),
-					new PathBuilder(),
-				)
-				new_against.push_all(continued_against)
-				decision_paths.push(decision_path)
-			}
-			against = new_against
-
-			// console.log('finished with recursion')
-			// console.log()
-
-			builder.push_branch(decision_paths)
+		const macro = registered_macros[node.macro_name]
+		if (macro === undefined) {
+			validation_errors.push(`Macro ${node.macro_name} couldn't be found.`)
 			continue
 		}
 
-		if (is_continue(item))
-			// since we've placed an against.length check before this,
-			// hitting here means this thing is undecidable, at least for now
-			throw new Error('undecidable')
-
-		// console.log('NOT branching')
-
-		const new_against = [] as AstIter[]
-		const against_iters = against.slice()
-
-		let against_iter: AstIter
-		while (against_iter = against_iters.shift()!) {
-			// console.log()
-			// console.log('against_iter')
-			// console.log(against_iter)
-			const against_item = against_iter.next()
-			// console.log('against_item')
-			// console.log(against_item)
-			if (against_item === undefined)
-				continue
-
-			if (Array.isArray(against_item)) {
-				// const child_iters = against_item.map(AstIter)
-				const child_iters = against_item.map(
-					definition => IterWrapper.chain_iters(AstIter(definition), against_iter.clone()),
-				)
-				against_iters.push_all(child_iters)
-				continue
-			}
-
-			if (is_continue(against_item)) {
-				// we'll just keep cycling this iterator over and over
-				// that's a safe choice since the main loop will die if it also has one
-				// new_against.push(EternalAstIter(against_item.continue_definition))
-				against_iters.push(EternalAstIter(against_item.continue_definition))
-				continue
-			}
-
-			if (item.name !== against_item.name)
-				continue
-
-			new_against.push(against_iter)
+		const macro_keys = HashSet.from(macro.args.keys())
+		const node_keys = HashSet.from(node.args.keys())
+		if (!macro_keys.equal(node_keys)) {
+			validation_errors.push(`Macro ${node.macro_name} called with invalid arguments: ${node_keys.values().join(', ')}`)
+			continue
 		}
-		// console.log('new_against')
-		// console.log(new_against)
-		against = new_against
 
-		// if (same >= against.length)
-		// 	throw new Error("all branches have the same stem")
+		nodes_to_visit.push_all(...node.args.values())
+		continue
 
-		builder.push(item)
+	case 'Var':
+		// a var is only valid if we're in a Macro
+		if (thing.type === 'Rule') {
+			validation_errors.push(`unexpected variable: ${node}`)
+			continue
+		}
+
+		if (thing.args.get_by_name(node.arg_name).is_none())
+			validation_errors.push(`variable ${node.arg_name} is invalid in this macro`)
+		continue
+
+	default: return exhaustive(node)
 	}
 
-	// against.length being non-zero here means that we exhausted the main branch before the others
-	// we could choose to make that an error condition, but it seems too picky
-	// for example, what about this: (A, B, C)? (A, B, C, D)
-	// that's a situation that might make perfect sense,
-	// since the Maybe only happens once, the next could definitely happen
-	// it definitely means you need to warn people that the first matched rule in an Or will be taken,
-	// so they should put longer ones first if they share stems
-
-	return t(builder.build(), against)
+	return validation_errors
 }
 
-// import ts = require('typescript')
+
+export function render_grammar(grammar: Grammar) {
+	const token_definitions = new UniqueDict<TokenDefinition>()
+	const rules = new UniqueDict<Rule>()
+	const macros = new UniqueDict<Macro>()
+	macros.set('many_separated', Macro(
+		'many_separated',
+		OrderedDict.create_unique('name', [Arg('body_rule'), Arg('separator_rule')]).expect(''),
+		[Var('body_rule'), Maybe([Many([Var('separator_rule'), Var('body_rule')])])],
+	)).expect('')
+
+	const matcher = {
+		ok: () => undefined,
+		err: (e: [string, unknown, unknown]) =>
+			`there are conflicting definitions for: ${e[0]}`,
+	}
+
+	const conflict_errors = grammar.filter_map(grammar_item => {
+		switch (grammar_item.type) {
+		case 'Token':
+			return token_definitions.set(grammar_item.name, grammar_item).match(matcher)
+		case 'Rule':
+			return rules.set(grammar_item.name, grammar_item).match(matcher)
+		case 'Macro':
+			return macros.set(grammar_item.name, grammar_item).match(matcher)
+		}
+	})
+
+	if (conflict_errors.length > 0)
+		throw new Error(conflict_errors.join('\n\n'))
+
+	registered_tokens = token_definitions.into_dict()
+	registered_rules = rules.into_dict()
+	registered_macros = macros.into_dict()
+
+	const rules_macros: (Rule | Macro)[] = [...rules.values(), ...macros.values()]
+	const validation_errors = rules_macros
+		.flat_map(validate_references)
+	if (validation_errors.length > 0)
+		throw new Error(validation_errors.join('\n\n'))
+
+	const left_recursive_rules = rules_macros
+		.filter(check_left_recursive)
+	if (left_recursive_rules.length > 0)
+		throw new Error(`There are left recursive rules: ${left_recursive_rules.join('\n\n')}`)
+
+	const rendered_tokens = token_definitions.values().map(token_definition => {
+		return ts.createExpressionStatement(
+			ts.createCall(ts.createIdentifier('Token'), undefined, [
+				ts.createStringLiteral(token_definition.name),
+				// ts.createRegularExpressionLiteral('/\\s+/'),
+				ts.createRegularExpressionLiteral(token_definition.regex.source),
+				ts.createObjectLiteral(
+					[
+						ts.createPropertyAssignment(
+							ts.createIdentifier('ignore'),
+							ts.createTrue(),
+						),
+					],
+					false,
+				),
+			]),
+		)
+	})
+
+	const rendered_macros = macros.values.map(macro => {
+		// the macro arguments are always going to be represented at runtime as ParseEntity
+		return ts.createFunctionDeclaration(
+			undefined, undefined, undefined,
+			// function name
+			ts.createIdentifier(macro.name),
+			// generics
+			macro.args.map(arg => ts.createTypeParameterDeclaration(
+				ts.createIdentifier(arg.name.toUpperCase()),
+				ts.createTypeReferenceNode(ts.createIdentifier('ParseEntity'), undefined), undefined,
+			)),
+			// actual args
+			macro.args.map(arg => ts.createParameter(
+				undefined, undefined, undefined,
+				ts.createIdentifier(arg.name), undefined,
+				ts.createTypeReferenceNode(ts.createIdentifier(arg.name.toUpperCase()), undefined), undefined,
+			)),
+			undefined,
+			// render_definition has to return ts.createExpressionStatement[]
+			ts.createBlock(render_definition(macro.definition), true),
+		)
+	})
+
+	const rendered_rules = rules.values.map(rule => {
+		// rules are always just functions that at least initially take no parameters
+		return ts.createFunctionDeclaration(
+			undefined, undefined, undefined,
+			ts.createIdentifier(rule.name),
+			[], [], undefined,
+			ts.createBlock(render_definition(rule.definition), true),
+		)
+	})
+}
+
+
+
 
 // // let global_lookaheads = [] as (ReturnType<typeof ts.createVariableDeclarationList>)[]
 // let global_lookaheads = [] as (ReturnType<typeof ts.createCall>)[]
@@ -521,96 +556,6 @@ function _compute_decidable(
 // }
 
 
-// function render_grammar(grammar: Grammar) {
-// 	const token_definitions = new UniqueDict<TokenDefinition>()
-// 	const macros = new UniqueDict<Macro>()
-// 	macros.set('many_separated', Macro(
-// 		'many_separated', [Arg('body_rule'), Arg('separator_rule')],
-// 		[Var('body_rule'), Maybe(Many(Var('separator_rule'), Var('body_rule')))],
-// 	))
-// 	const rules = new UniqueDict<Rule>()
-
-// 	const conflict_errors = [] as string[]
-
-// 	const matcher = {
-// 		ok: () => {},
-// 		err: (e: [string, unknown, unknown]) => {
-// 			conflict_errors.push(`there are conflicting definitions for: ${e[0]}`)
-// 		},
-// 	}
-
-// 	for (const grammar_item of grammar) {
-// 		switch (grammar_item.type) {
-// 		case 'Token':
-// 			token_definitions.set(grammar_item.name, grammar_item).match(matcher)
-// 		case 'Rule':
-// 			rules.set(grammar_item.name, grammar_item).match(matcher)
-// 		case 'Macro':
-// 			macros.set(grammar_item.name, grammar_item).match(matcher)
-// 		}
-// 	}
-
-// 	if (conflict_errors.length > 0)
-// 		throw new Error()
-
-// 	// check for left recursion or anything else
-
-// 	// const rendered_tokens = token_definitions.values.map(token_definition => {
-// 	// 	return ts.createExpressionStatement(
-// 	// 		ts.createCall(ts.createIdentifier('Token'), undefined, [
-// 	// 			ts.createStringLiteral(token_definition.name),
-// 	// 			ts.createRegularExpressionLiteral('/\\s+/'),
-// 	// 			ts.createObjectLiteral(
-// 	// 				[
-// 	// 					ts.createPropertyAssignment(
-// 	// 						ts.createIdentifier('ignore'),
-// 	// 						ts.createTrue(),
-// 	// 					),
-// 	// 				],
-// 	// 				false,
-// 	// 			),
-// 	// 		]),
-// 	// 	)
-// 	// })
-
-// 	const rendered_macros = macros.values.map(macro => {
-// 		// the macro arguments are always going to be represented at runtime as ParseEntity
-// 		return ts.createFunctionDeclaration(
-// 			undefined, undefined, undefined,
-// 			// function name
-// 			ts.createIdentifier(macro.name),
-// 			// generics
-// 			macro.args.map(arg => ts.createTypeParameterDeclaration(
-// 				ts.createIdentifier(arg.name.toUpperCase()),
-// 				ts.createTypeReferenceNode(ts.createIdentifier('ParseEntity'), undefined), undefined,
-// 			)),
-// 			// actual args
-// 			macro.args.map(arg => ts.createParameter(
-// 				undefined, undefined, undefined,
-// 				ts.createIdentifier(arg.name), undefined,
-// 				ts.createTypeReferenceNode(ts.createIdentifier(arg.name.toUpperCase()), undefined), undefined,
-// 			)),
-// 			undefined,
-// 			ts.createBlock(
-// 				// these all have to be ts.createExpressionStatement
-// 				render_definition(macro.definition),
-// 				// multiline
-// 				true,
-// 			),
-// 		)
-// 	})
-
-// 	const rendered_rules = rules.values.map(rule => {
-// 		// rules are always just functions that at least initially take no parameters
-// 		return ts.createFunctionDeclaration(
-// 			undefined, undefined, undefined,
-// 			ts.createIdentifier(rule.name),
-// 			[], [], undefined,
-// 			ts.createBlock(render_definition(rule.definition), true),
-// 		)
-// 	})
-// }
-
 
 // // const Padded = Macro(
 // // 	'padded', [Arg('body')],
@@ -651,62 +596,3 @@ function _compute_decidable(
 // 		),
 // 	),
 // ]
-
-
-
-
-
-// // a few things have to happen
-
-// // # validate the ast
-// // go through every item in the grammar, and check that it is valid
-// // there are a few requirements
-// // - all references to tokens (consume), macros (macrocall), and rules (subrule) must actually exist (create a lookup map for each variety, and recursively check all grammar nodes. there will also be a step of some sort to convert abstract ast subrules into resolved ones) actually this whole step might be unwise. it might be a good idea to simply look things up as you go through the validation and generation steps, using a monad.Maybe to unwrap things.
-// // - rules must not be left-recursive (every rule must descend to a non-optional consume before it can call itself in a subrule. when recursing into a maybe, consumes within the non-optional path of the maybe only terminate the maybe, not the whole rule)
-
-// // # figure out unambiguous lookaheads
-// // traverse the tree, and at every decision point (a Maybe, Or, Many), follow this algorithm:
-// // - gather all differentiatable paths
-// // -- (for a Maybe, it's the Maybe path as well as all next paths including the first mandatory path)
-// // -- (for an Or, it's all the branches of the Or)
-// // -- (for a Many, the branch is the continuation point after the body_rule, including all next paths like Maybe)
-// // - traverse all differentiatable paths at the same time. you keep all paths that have an identical sibling. so every time a path has a mandatory consume that's different than all the others, you can remove it from consideration and give it the lookahead branch you've calculated so far. a path requires a so-far-possibly-identical sibling to be kept, so by definition if there's only one left, we're done.
-// // - if you reach the end of the branches and there are more than one remaining, the grammar is redundant or undecidable
-
-// // function check_lr_rules(rules: Rule[]) {
-// // 	const lr_rules = [] as Rule[]
-// // 	for (const rule of rules) {
-// // 		const lr_name = check_lr_rule(rule)
-// // 		if (lr_name !== undefined)
-// // 			lr_rules.push(lr_name)
-// // 	}
-
-// // 	if (lr_rules.length > 0)
-// // 		throw new Error(`There are rules which are left-recursive: ${lr_rules.join(', ')}`)
-// // }
-
-// // function check_lr_rule(rule: Rule): string | undefined {
-// // 	const stack = rule.nodes.slice()
-// // 	let node
-// // 	while (node = stack.pop()) switch (node.key) {
-// // 	case 'Subrule':
-// // 		if (node.content.name === rule.name)
-// // 			return rule.name
-// // 		stack.push_all(node.content.nodes.slice().reverse())
-// // 		continue
-
-// // 	case 'Consume':
-// // 		return undefined
-
-// // 	case 'Or':
-// // 	case 'MacroCall':
-
-// // 	// here in the case of a Maybe, it can't prevent the top-level rule from being left-recursive, but it can still produce a left-recursive call
-
-// // 	default:
-// // 		stack.push_all(node.content.slice().reverse())
-// // 		continue
-// // 	}
-
-// // 	return undefined
-// // }
