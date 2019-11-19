@@ -15,22 +15,22 @@ export function Parser(...lexer_args: Parameters<BaseLexer['reset']>) {
 			return lock(lexer, token_definition)
 		},
 		consume<L extends TokenDefinition[]>(...token_definitions: L) {
-			return consume(lexer, ...token_definitions)
+			return consume(lexer, token_definitions)
 		},
 		maybe<E extends ParseEntity>(...entity: E) {
-			return maybe(lexer, ...entity)
+			return maybe(lexer, entity)
 		},
 		or<C extends ParseEntity[]>(...choices: C) {
-			return or(lexer, ...choices)
+			return or(lexer, choices)
 		},
 		maybe_or<C extends ParseEntity[]>(...choices: C) {
-			return maybe_or(lexer, ...choices)
+			return maybe_or(lexer, choices)
 		},
 		many<E extends ParseEntity>(...entity: E) {
-			return many(lexer, ...entity)
+			return many(lexer, entity)
 		},
 		maybe_many<E extends ParseEntity>(...entity: E) {
-			return maybe_many(lexer, ...entity)
+			return maybe_many(lexer, entity)
 		},
 		many_separated<B extends ParseEntity, S extends ParseEntity>(body_rule: B, separator_rule: S) {
 			return many_separated(lexer, body_rule, separator_rule)
@@ -82,7 +82,7 @@ function perform_entity<F extends Func, E extends DecidableFunc<F> | TokenDefini
 		const [fn, _, ...args] = entity
 		return fn(...args)
 	}
-	return _consume(lexer, entity as TokenDefinition[]) as EntityReturn<E>
+	return consume(lexer, entity as TokenDefinition[]) as EntityReturn<E>
 }
 
 function test_entity<F extends Func, E extends DecidableFunc<F> | TokenDefinition[]>(
@@ -91,13 +91,30 @@ function test_entity<F extends Func, E extends DecidableFunc<F> | TokenDefinitio
 ): boolean {
 	if (is_decidable_func(entity)) {
 		const [, tester, ] = entity
-		const toks = lexer.peek(tester.test_length)
-		return tester.test(toks)
+		// const toks = lexer.peek(tester.test_length)
+		// return tester.test(toks)
+		return tester.test(lexer)
 	}
-	const toks = lexer.peek(entity.length)
-	return match_tokens(toks, entity as TokenDefinition[])
+	// const toks = lexer.peek(entity.length)
+	// return match_tokens(toks, entity as TokenDefinition[])
+	return lexer.test(entity as TokenDefinition[])
 }
 
+function consume<L extends TokenDefinition[]>(
+	lexer: BaseLexer,
+	token_definitions: L
+): TokensForDefinitions<L> {
+	// const next_tokens = lexer.advance(token_definitions.length)
+	const next_tokens_result = lexer.require(token_definitions)
+
+	if (next_tokens_result.is_err())
+		throw new Error("next tokens didn't match")
+	return next_tokens_result.value
+	// if (match_tokens(next_tokens, token_definitions))
+	// 	return next_tokens as TokensForDefinitions<L>
+	// else
+	// 	throw new Error("next tokens didn't match")
+}
 
 // function lock<E extends ParseEntity>(lexer: BaseLexer, ...entity: E) {
 function lock(lexer: BaseLexer, token_definition: RawTokenDefinition) {
@@ -116,32 +133,11 @@ function lock(lexer: BaseLexer, token_definition: RawTokenDefinition) {
 	}
 }
 
-
-function _consume<L extends TokenDefinition[]>(
-	lexer: BaseLexer,
-	token_definitions: L
-): TokensForDefinitions<L> {
-	const next_tokens = lexer.advance(token_definitions.length)
-
-	if (match_tokens(next_tokens, token_definitions))
-		return next_tokens as TokensForDefinitions<L>
-	else
-		throw new Error("next tokens didn't match")
-}
-
-function consume<L extends TokenDefinition[]>(
-	lexer: BaseLexer,
-	...token_definitions: L
-): TokensForDefinitions<L> {
-	return _consume(lexer, token_definitions)
-}
-
 type Optional<T, B extends boolean> = B extends true ? T | undefined : T
-
 
 function maybe<E extends ParseEntity>(
 	lexer: BaseLexer,
-	...entity: E
+	entity: E
 ): EntityReturn<E> | undefined {
 	if (test_entity(lexer, entity))
 		return perform_entity(lexer, entity)
@@ -152,14 +148,14 @@ function maybe<E extends ParseEntity>(
 
 function many<E extends ParseEntity>(
 	lexer: BaseLexer,
-	...entity: E
+	entity: E
 ): EntityReturn<E>[] {
 	return _many(lexer, false, entity)
 }
 
 function maybe_many<E extends ParseEntity>(
 	lexer: BaseLexer,
-	...entity: E
+	entity: E
 ): EntityReturn<E>[] | undefined {
 	return _many(lexer, true, entity)
 }
@@ -170,9 +166,8 @@ function _many<E extends ParseEntity, B extends boolean>(
 	entity: E,
 ): Optional<EntityReturn<E>[], B> {
 	let should_proceed = !is_optional || test_entity(lexer, entity)
-	if (is_optional)
-		if (!should_proceed)
-			return undefined as Optional<EntityReturn<E>[], B>
+	if (is_optional && !should_proceed)
+		return undefined as Optional<EntityReturn<E>[], B>
 
 	const results = [] as EntityReturn<E>[]
 
@@ -192,14 +187,14 @@ export type ChoicesReturn<C extends ParseEntity[]> = {
 
 function or<C extends ParseEntity[]>(
 	lexer: BaseLexer,
-	...choices: C
+	choices: C
 ): ChoicesReturn<C> {
 	return _or(lexer, false, choices) as ChoicesReturn<C>
 }
 
 function maybe_or<C extends ParseEntity[]>(
 	lexer: BaseLexer,
-	...choices: C
+	choices: C
 ): ChoicesReturn<C> | undefined {
 	return _or(lexer, true, choices) as ChoicesReturn<C> | undefined
 }

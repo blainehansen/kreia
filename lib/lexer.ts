@@ -9,15 +9,14 @@ export type Token =
 	| RawToken
 	| VirtualToken
 
-export type RawToken = {
-	type: TokenDefinition,
+export type RawToken = Readonly<{
+	type: RawTokenDefinition,
 	content: string,
-	is_virtual: false,
-}
-export type VirtualToken = {
-	type: string,
-	is_virtual: true,
-}
+	span: Span,
+}>
+export type VirtualToken = Readonly<{
+	type: VirtualTokenDefinition,
+} & Pick<Span, 'index' | 'line' | 'column'>>
 
 const StateTransform = Enum({
 	Push: variant<() => State>(),
@@ -39,7 +38,8 @@ export type RawTokenDefinition = Readonly<{
 export type VirtualTokenDefinition = Readonly<{
 	type: 'Token',
 	name: string,
-	state_transform?: StateTransform,
+	virtual_lexer: VirtualLexerClass,
+	// state_transform?: StateTransform,
 	is_virtual: true,
 }>
 
@@ -90,13 +90,13 @@ function denature_spec(spec: TokenSpec): [BaseTokenSpec, TokenOptions] {
 }
 
 
-type State = {
-	tokens: RawTokenDefinition[],
-	virtual_lexer?: VirtualLexer,
-}
+// type State = {
+// 	tokens: RawTokenDefinition[],
+// 	virtual_lexer?: VirtualLexer,
+// }
 
 interface VirtualLexerClass<V extends VirtualLexer, A extends any[]> {
-	readonly implied_manifest: readonly RawTokenDefinition[]
+	readonly concerned_manifest: readonly RawTokenDefinition[]
 	readonly virtual_manifest: readonly VirtualTokenDefinition[]
 	new(...args: A): V
 }
@@ -191,6 +191,29 @@ export function match_and_trim(tokens: Token[], token_definitions: TokenDefiniti
 }
 
 
+type LexerState = Readonly<{
+	source: string, index: number,
+	line: number, column: number,
+}>
+
+type NonEmpty<T> = [T, ...T[]]
+
+type LexerCache = Readonly<{
+	state: LexerState,
+	saved_tokens: readonly NonEmpty<Token>,
+}>
+
+export const SourceFile = Data((source: string, filename?: string) => {
+	return { type: 'SourceFile' as const, source, filename }
+})
+export type SourceFile = ReturnType<typeof SourceFile>
+
+export const Span = Data((file: SourceFile, start: number, end: number) => {
+	return { type: 'Span' as const, file, start, end }
+})
+export type Span = ReturnType<typeof Span>
+
+
 export class BaseLexer {
 	private buffer!: Token[]
 	private state_stack!: State[]
@@ -207,105 +230,278 @@ export class BaseLexer {
 		this.source = source
 	}
 
-	advance(count: number): Token[] {
-		if (count <= 0) throw new Error(`advance can't be called with a non positive whole number: ${count}`)
+	private source_file: SourceFile
+	private state: LexerState
+	private cache: LexerCache | undefined
 
-		// this.current_token_index += count
-		// you have to do something with this.buffer.length here
+	static attempt_token(
+		{ source, index, line, column }: LexerState,
+		token_definition: RawTokenDefinition,
+		source_file: SourceFile,
+	): [RawToken, LexerState] | undefined {
+		const match = source.match(token_definition.regex)
+		if (match === null)
+			return undefined
 
-		const tokens = this.peek(count)
-		this.buffer.splice(0, count)
-		return tokens
-	}
+		const content = match[0]
+		const characters_consumed = content.length
+		const new_index = index + characters_consumed
+		const split_newlines = content.split('\n')
+		const count_newlines = split_newlines.length - 1
+		const new_line = line + count_newlines
+		const new_column = count_newlines === 0
+			? column + characters_consumed
+			: split_newlines[count_newlines].length
 
-	peek(count: number): Token[] {
-		if (count <= 0) throw new Error(`you can't look a non positive whole number count: ${count}`)
-
-		while (this.buffer.length < count) {
-			const tokens = this.next()
-			if (tokens.length === 0)
-				break
-			this.buffer.push_all(tokens)
+		const token = {
+			content,
+			type: token_definition,
+			span: { source_file, start: index, end: new_index, line, column },
 		}
-
-		return this.buffer.slice(0, count)
+		const state = {
+			source: source.slice(characters_consumed),
+			index: new_index,
+			line: new_line,
+			column: new_column,
+		}
+		return t(token, state)
 	}
 
-	private next(): Token[] {
-		if (this.source.length === 0)
-			return []
+	protected request(token_definitions: TokenDefinition[]): LexerCache | undefined {
+		// request doesn't mutate anything, not even cache
+		// it merely returns a possible cache candidate and lets the calling function decide what to do
 
-		const output_tokens = [] as Token[]
+		const { source_file } = this
+		let state = { ...this.state }
+		let buffered_virtual_tokens = [] as VirtualToken[]
 
-		const current_state = this.state_stack[this.state_stack.length - 1]
-		if (!current_state)
-			throw new Error("popped too many times")
-
-		const { tokens: token_definitions, virtual_lexer } = current_state
-
-		let token_definitions_to_check = token_definitions.slice()
-		while (token_definitions_to_check.length > 0) {
-			if (this.source.length === 0) {
-				while (this.state_stack.length > 0) {
-					const { virtual_lexer } = this.state_stack.pop()!
-					if (virtual_lexer) {
-						const virtual_tokens = virtual_lexer.exit()
-						output_tokens.push_all(virtual_tokens)
-					}
+		const tokens = [] as TokenDefinition[]
+		for (const token_definition of token_definitions) {
+			if (token_definition.is_virtual) {
+				const attempt_from_cache = match_and_trim(buffered_virtual_tokens, [token_definition])
+				if (attempt_from_cache !== undefined) {
+					tokens.push({ type: token_definition } as VirtualTokenDefinition)
+					buffered_virtual_tokens = attempt_from_cache
+					continue
 				}
 
-				return output_tokens
+				// TODO the truly right way to do this virtual_lexer nonsense is to have two varieties of involvement
+				// these exposed virtual_tokens that you're playing with now
+				// and "interest" hooks on normal raw tokens,
+				// that specify a virtual_lexer that wants to be called whenever that token is requested and matched
+
+				// and of course, the realization I'm having now is that the significant_whitespace_raw_block virtual lexer
+				// should simply *contain* the raw_block state machine
+				// the top level virtual_lexer should be the one notified when a raw_block_begin occurs,
+				// and it will initialize the raw_block lexer and drive it
+
+				// and of course, these virtual_lexers can have "hidden" raw tokens that are implied to be ignored,
+				// but that they nonetheless contribute to the whole grammar
+				// these are exposed in the form of these sequence tokens
+
+				// the indentation lexer can signal interest in the space token,
+				// and expose it for use?
+				// I suppose it does make sense to have a token that is ignored but still can be explicitly requested
+				// then it's both on the list of ignored, so that we can try for it whenever a request fails
+				// but still explicitly request it at certain times
+
+
+				// this also means that virtual_lexers should be resettable, we should be able to grab a state from them at the beginning
+				// of this method, and return them to that state after we're done
+				// it also could make sense to do that simply with the whole lexer, we grab the state at the beginning of this method
+				// and restore to that when we're done
+
+				// a virtual_token will have a sequence that needs to occur before it can process
+				// what we can do is request that sequence
+				const found_sequence = [] as RawToken[]
+				for (const sequence_token_definition of token_definition.interest_sequence) {
+					let attempt = BaseLexer.attempt_token(state, sequence_token_definition, source_file)
+					// if we want to have "maybe" tokens in sequences *at the beginning of the sequence*
+					// like we would if the indenation lexer wanted to signal interest in [newline, space, tab, space, any]
+					// so that it could get mad whenever a space was encountered at the beginning of a line
+					// then this block shouldn't break, but continue
+					if (attempt === undefined)
+						break
+
+					const [token, new_state] = attempt
+					found_sequence.push(token)
+					state = new_state
+				}
+
+				// then pass it possibly incomplete into the virtual_lexer (this is to handle "maybe" tokens in the sequence)
+				// then it returns a list of virtual tokens
+				const virtual_tokens = token_definition.virtual_lexer.process(found_sequence)
+				// we attempt to pull what we're looking for from that list,
+				const remaining_virtual_tokens = match_and_trim(virtual_tokens, [token_definition])
+
+				// if we don't find what we need, we return undefined and fail
+				if (remaining_virtual_tokens === undefined)
+					return undefined
+
+				// if we do find what we need, we push what was requested into our return list
+				tokens.push({ type: token_definition } as VirtualTokenDefinition)
+				// and cache the rest, those might fail in the future
+				buffered_virtual_tokens = remaining_virtual_tokens
+				continue
 			}
 
-			const token_definition = token_definitions_to_check.pop()!
+			if (buffered_virtual_tokens.length > 0)
+				return undefined
 
-			const match = this.source.match(token_definition.regex)
-			if (match === null)
+			// TODO go through list of ignored tokens
+
+			const attempt = BaseLexer.attempt_token(state, token_definition, source_file)
+			if (attempt === undefined)
+				return undefined
+			const [token, new_state] = attempt
+			state = new_state
+
+			// here is where we would check if there's an interested virtual_lexer
+
+			if (token_definition.ignore)
 				continue
 
-			const content = match[0]
-			this.source = this.source.slice(content.length)
-
-			const matched_token: RawToken = { type: token_definition, content, is_virtual: false }
-
-			let virtual_transform = undefined as StateTransform
-			if (virtual_lexer) {
-				const [virtual_tokens, state_transform] = virtual_lexer.process(matched_token)
-				virtual_transform = state_transform
-				output_tokens.push_all(virtual_tokens)
-			}
-
-			if (virtual_transform && token_definition.state_transform)
-				throw new Error("both the virtual_lexer and the token_definition had a state_transform")
-
-			const state_transform = virtual_transform || token_definition.state_transform
-
-			if (state_transform)
-				state_transform.match({
-					Push: next_state => {
-						this.state_stack.push(next_state())
-					},
-					Pop: () => {
-						if (virtual_lexer) {
-							const virtual_tokens = virtual_lexer.exit()
-							output_tokens.push_all(virtual_tokens)
-						}
-						this.state_stack.pop()
-					},
-				})
-
-			if (token_definition.ignore && output_tokens.length === 0) {
-				token_definitions_to_check = token_definitions.slice()
-				continue
-			}
-			if (!token_definition.ignore)
-				output_tokens.push(matched_token)
-
-			return output_tokens
+			tokens.push(token)
 		}
 
-		throw new Error("didn't match any tokens, unexpected")
+		return {
+			state: { source, index, line, column },
+			saved_tokens: tokens,
+		}
 	}
+
+	test(token_definitions: TokenDefinition[]): boolean {
+		// this function merely tests, so it only saves the cache but doesn't do anything else
+		const possible_cache = this.request(token_definitions)
+		if (possible_cache === undefined)
+			return false
+		this.cache = possible_cache
+		return true
+	}
+
+	require(token_definitions: TokenDefinition[]): Token[] | undefined {
+		// require returns and destroys the cache if it exists,
+		// and it updates the current state
+
+		if (this.cache !== undefined) {
+			const { saved_tokens, state } = this.cache
+			if (!match_tokens(saved_tokens, token_definitions))
+				return undefined
+
+			this.cache = undefined
+			this.state = state
+			return saved_tokens
+		}
+
+		const cache = this.request(token_definitions)
+		if (cache === undefined)
+			return undefined
+		const { saved_tokens, state } = cache
+		this.state = state
+		return saved_tokens
+	}
+
+
+
+	// advance(count: number): Token[] {
+	// 	if (count <= 0) throw new Error(`advance can't be called with a non positive whole number: ${count}`)
+
+	// 	// this.current_token_index += count
+	// 	// you have to do something with this.buffer.length here
+
+	// 	const tokens = this.peek(count)
+	// 	this.buffer.splice(0, count)
+	// 	return tokens
+	// }
+
+	// peek(count: number): Token[] {
+	// 	if (count <= 0) throw new Error(`you can't look a non positive whole number count: ${count}`)
+
+	// 	while (this.buffer.length < count) {
+	// 		const tokens = this.next()
+	// 		if (tokens.length === 0)
+	// 			break
+	// 		this.buffer.push_all(tokens)
+	// 	}
+
+	// 	return this.buffer.slice(0, count)
+	// }
+
+	// private next(): Token[] {
+	// 	if (this.source.length === 0)
+	// 		return []
+
+	// 	const output_tokens = [] as Token[]
+
+	// 	const current_state = this.state_stack[this.state_stack.length - 1]
+	// 	if (!current_state)
+	// 		throw new Error("popped too many times")
+
+	// 	const { tokens: token_definitions, virtual_lexer } = current_state
+
+	// 	let token_definitions_to_check = token_definitions.slice()
+	// 	while (token_definitions_to_check.length > 0) {
+	// 		if (this.source.length === 0) {
+	// 			while (this.state_stack.length > 0) {
+	// 				const { virtual_lexer } = this.state_stack.pop()!
+	// 				if (virtual_lexer) {
+	// 					const virtual_tokens = virtual_lexer.exit()
+	// 					output_tokens.push_all(virtual_tokens)
+	// 				}
+	// 			}
+
+	// 			return output_tokens
+	// 		}
+
+	// 		const token_definition = token_definitions_to_check.pop()!
+
+	// 		const match = this.source.match(token_definition.regex)
+	// 		if (match === null)
+	// 			continue
+
+	// 		const content = match[0]
+	// 		this.source = this.source.slice(content.length)
+
+	// 		const matched_token: RawToken = { type: token_definition, content, is_virtual: false }
+
+	// 		let virtual_transform = undefined as StateTransform
+	// 		if (virtual_lexer) {
+	// 			const [virtual_tokens, state_transform] = virtual_lexer.process(matched_token)
+	// 			virtual_transform = state_transform
+	// 			output_tokens.push_all(virtual_tokens)
+	// 		}
+
+	// 		if (virtual_transform && token_definition.state_transform)
+	// 			throw new Error("both the virtual_lexer and the token_definition had a state_transform")
+
+	// 		const state_transform = virtual_transform || token_definition.state_transform
+
+	// 		if (state_transform)
+	// 			state_transform.match({
+	// 				Push: next_state => {
+	// 					this.state_stack.push(next_state())
+	// 				},
+	// 				Pop: () => {
+	// 					if (virtual_lexer) {
+	// 						const virtual_tokens = virtual_lexer.exit()
+	// 						output_tokens.push_all(virtual_tokens)
+	// 					}
+	// 					this.state_stack.pop()
+	// 				},
+	// 			})
+
+	// 		if (token_definition.ignore && output_tokens.length === 0) {
+	// 			token_definitions_to_check = token_definitions.slice()
+	// 			continue
+	// 		}
+	// 		if (!token_definition.ignore)
+	// 			output_tokens.push(matched_token)
+
+	// 		return output_tokens
+	// 	}
+
+	// 	throw new Error("didn't match any tokens, unexpected")
+	// }
 }
 
 

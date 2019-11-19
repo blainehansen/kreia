@@ -10,16 +10,6 @@ import { TokenDefinition } from './lexer'
 import { Data, exhaustive } from './utils'
 
 
-export const File = Data((name: string, source: string) => {
-	return { type: 'File' as const, name, source }
-})
-export type File = ReturnType<typeof File>
-
-export const Span = Data((file: File, start: number, end: number) => {
-	return { type: 'Span' as const, file, start, end }
-})
-export type Span = ReturnType<typeof Span>
-
 
 export const VirtualLexerDirective = Data((virtual_lexer_name: string, destructure: (Token | Subrule)[]) => {
 	return { type: 'VirtualLexerDirective' as const,  }
