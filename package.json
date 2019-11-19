@@ -5,7 +5,7 @@
   "main": "./kreia.js",
   "types": "./kreia.d.ts",
   "scripts": {
-    "main": "ts-node experiment.ts",
+    "main": "ts-node lib/parser_test.ts",
     "preversion": "npm test",
     "finalize-version": "git push origin master && git push origin master --tags && npm publish",
     "test": "mocha -r ts-node/register lib/ast.spec.ts",
