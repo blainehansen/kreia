@@ -90,10 +90,6 @@ export function log(obj: any) {
 // }
 
 
-// export type IterWrapper<T> =
-// 	| IterWrapper<T, false>
-// 	| IterWrapper<T, true>
-
 
 // export class IterWrapper<T, E extends boolean> {
 export type GeneratorProducer<T> = () => Generator<T, void, undefined>
@@ -167,40 +163,8 @@ export class IterWrapper<T> {
 
 
 
-// export class MultiIter<T> implements NiceGenerator<T> {
+// export class MultiIter<T> implements NiceGenerator<T[]> {
 // 	constructor(protected branches: NiceGenerator<T>[]) {}
-
-
-// }
-
-// // this is to simultaneously iterate over the path and the next gathered branches
-// function* multi_iter(branches: Definition[]) {
-// 	const iters = branches
-// 		.map(definition => new IterWrapper(into_iter(definition)))
-
-// 	let sub_array = iters.flat_map(i => i.next() || [])
-// 	while (sub_array.length > 0) {
-// 		yield sub_array
-// 		sub_array = iters.flat_map(i => i.next() || [])
-// 	}
-// }
-
-// function* into_iter(definition: Definition): Generator<TokenDefinition[], void, undefined> {
-// 	const nodes_to_visit = definition.slice()
-// 	let node
-// 	while (node = nodes_to_visit.shift()) switch (node.type) {
-// 	case 'Or':
-// 		yield* multi_iter(node.choices)
-// 		continue
-// 	case 'Maybe':
-// 		yield* multi_iter(gather_branches([node.definition], nodes_to_visit))
-// 		continue
-// 	case 'Many':
-// 		throw new Error()
-// 	case 'Consume':
-// 		yield* node.token_names.map(token_name => [registered_tokens[token_name]!])
-// 		continue
-// 	}
 // }
 
 

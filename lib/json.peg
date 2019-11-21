@@ -28,11 +28,10 @@
 // doing it this way allows the parser to take over and process the stuff itself
 // basically, after %raw_block_begin is encountered, all newlines and indents and stuff will be handled as raw,
 // and then once a %deindent is actually given to the parser, that means that everything is back to normal?
-&{ %indent, %deindent, %newline, raw_block } = &significant_whitespace_with_raw_block
+&{ %space, %indent, %deindent, %newline, %raw_block_begin, %raw_block_str, %raw_block_interpolated_ident, %raw_block_interpolation_begin } = &significant_whitespace_with_raw_block
 	'|"',
 	ident_interpolator: '$' %ident,
-	expression_begin_interpolator: '${',
-	expression_end_interpolator: '}',
+	interpolation_begin_: '${',
 
 
 #some_state =
