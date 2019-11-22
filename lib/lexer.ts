@@ -187,8 +187,6 @@ class Lexer<V extends Dict<any>> {
 
 		const tokens = [] as Token[]
 		for (const token_definition of token_definitions) {
-			console.log(token_definition.name)
-
 			if (token_definition.is_virtual) {
 				// try to grab from any already output virtual tokens
 				const attempt_from_cache = match_and_trim(buffered_virtual_tokens, [token_definition])
@@ -212,14 +210,12 @@ class Lexer<V extends Dict<any>> {
 
 				const { virtual_lexer, state: virtual_lexer_state } = state.virtual_lexers[token_definition.virtual_lexer_name]
 
-				// console.log(found_sequence)
 				const [virtual_tokens, new_virtual_lexer_state] = virtual_lexer.process(
 					found_sequence,
 					token_definition.lookahead_regex ? token_definition.lookahead_regex.test(state.source) : false,
 					virtual_lexer_state,
 					state,
 				)
-				console.log(virtual_tokens)
 
 				const remaining_virtual_tokens = match_and_trim(virtual_tokens, [token_definition])
 				if (remaining_virtual_tokens === undefined)
@@ -256,7 +252,6 @@ class Lexer<V extends Dict<any>> {
 			if (attempt === undefined)
 				return undefined
 			const [token, new_state] = attempt
-			console.log(token)
 			state = new_state
 
 			// here is where we would check if there's an interested virtual_lexer
@@ -350,172 +345,67 @@ export function match_and_trim(tokens: Token[], token_definitions: TokenDefiniti
 }
 
 
+type TokenOptions = { ignore?: true }
+type BaseTokenSpec = RegExp | string | (RegExp | string)[]
+type TokenSpec = BaseTokenSpec | { match: BaseTokenSpec } & TokenOptions
 
-const n = {
-	type: 'Token',
-	name: 'n',
-	regex: /[a-z]+/,
-	is_virtual: false,
-} as UserRawTokenDefinition
+function source_regex(def: RegExp | string) {
+	return typeof def === 'string'
+		? def.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // $& means the whole matched string
+		: def.source
+}
 
-const space = {
-	name: 'space',
-	regex: / +/,
-	ignore: true,
-	is_virtual: false,
-} as HiddenTokenDefinition
-const newline = {
-	name: 'newline',
-	regex: /[\t ]*\n+/,
-	ignore: true,
-	is_virtual: false,
-} as HiddenTokenDefinition
-const tab = {
-	name: 'tab',
-	regex: /\t+/,
-	ignore: true,
-	is_virtual: false,
-} as HiddenTokenDefinition
-const single_tab = {
-	name: 'single_tab',
-	regex: /\t/,
-	ignore: true,
-	is_virtual: false,
-} as HiddenTokenDefinition
+function denature_spec(spec: TokenSpec): [BaseTokenSpec, TokenOptions] {
+	if (typeof spec === 'object' && 'match' in spec) {
+		const { match, ...options } = spec
+		return [match, options]
+	}
+	return [spec, {}]
+}
 
-const indent = {
-	type: 'Token',
-	name: 'indent',
-	virtual_lexer_name: 'IndentationLexer',
-	sequence: [newline, tab],
-	lookahead_regex: /[^\W]/,
-	is_virtual: true,
-} as VirtualTokenDefinition
-const deindent = {
-	type: 'Token',
-	name: 'deindent',
-	virtual_lexer_name: 'IndentationLexer',
-	sequence: [newline, tab],
-	lookahead_regex: /[^\W]/,
-	is_virtual: true,
-} as VirtualTokenDefinition
-const indent_continue = {
-	type: 'Token',
-	name: 'indent_continue',
-	virtual_lexer_name: 'IndentationLexer',
-	sequence: [newline, tab],
-	lookahead_regex: /[^\W]/,
-	is_virtual: true,
-} as VirtualTokenDefinition
-const exposed_space = {
-	type: 'Token',
-	name: 'space',
-	virtual_lexer_name: 'IndentationLexer',
-	regex: / +/,
-	ignore: true,
-	is_virtual: false,
-} as ExposedRawTokenDefinition
+function make_regex(regex: BaseTokenSpec) {
+	const base_source = Array.isArray(regex)
+		? regex.map(r => `(?:${source_regex(r)})`).join('|')
+		: source_regex(regex)
 
-class SpacesError extends Error { constructor() { super("spaces are not allowed at the beginning of lines") } }
-
-type IndentationState = { indentation: number, last_illegal_spaces: boolean }
-
-const IndentationLexer: VirtualLexer<IndentationState> = {
-	use() {
-		return [indent, deindent, indent_continue, exposed_space]
-	},
-	initialize() {
-		return { indentation: 0, last_illegal_spaces: true }
-	},
-	process(sequence, lookahead_matched, state, lexer_state) {
-		console.log(sequence)
-		console.log(state)
-		if (!lookahead_matched)
-			return t([], {
-				indentation: state.indentation,
-				last_illegal_spaces: sequence.length > 0,
-			})
-
-		if (sequence.length === 1) {
-			const [tok] = sequence
-
-			if (tok.type.name === 'newline')
-				return t(produce_deindents(state.indentation, lexer_state), { indentation: 0, last_illegal_spaces: false })
-
-			if (tok.type.name === 'tab')
-				return make_indents(tok.content.length, state.indentation, lexer_state)
-
-			throw new Error()
-		}
-		if (sequence.length === 2) {
-			const [, tok] = sequence
-			return make_indents(tok.content.length, state.indentation, lexer_state)
-		}
-
-		return t([], state)
-	},
-	process_interest(token, state, lexer_state) {
-		if (token.type.name === 'space' && state.last_illegal_spaces)
-			throw new SpacesError()
-		return t([], state)
-	},
-	exit(state, lexer_state) {
-		return produce_deindents(state.indentation, lexer_state)
-	},
+	return new RegExp('^' + base_source)
 }
 
 
-function produce_deindents(count: number, { line, column, index }: LexerState<Dict<unknown>>): VirtualToken[] {
-	const span = { index, line, column }
+export function UserToken(name: string, spec: TokenSpec) {
+	const [regex, { ignore }] = denature_spec(spec)
 
-	if (count === 0)
-		return [{ is_virtual: true, type: indent_continue, span }]
-	return Array
-		.from({ length: count })
-		.map(() => ({ is_virtual: true, type: deindent, span }))
+	const token_definition = {
+		type: 'Token', name, is_virtual: false,
+		regex: make_regex(regex),
+	} as UserRawTokenDefinition
+
+	if (ignore !== undefined)
+		(token_definition as any).ignore = ignore
+
+	return token_definition
 }
 
-
-function make_indents(
-	new_indentation: number,
-	current_indentation: number,
-	lexer_state: LexerState<Dict<unknown>>,
-): [VirtualToken[], IndentationState] {
-	if (new_indentation > current_indentation + 1)
-		throw new Error("indentation can only increase by one")
-
-	const { line, column, index } = lexer_state
-	const span = { index, line, column }
-	const state = { indentation: new_indentation, last_illegal_spaces: false }
-
-	if (new_indentation === current_indentation + 1)
-		return t([{ is_virtual: true, type: indent, span }], state)
-
-	if (new_indentation === current_indentation)
-		return t([{ is_virtual: true, type: indent_continue, span }], state)
-
-	const virtual_tokens = produce_deindents(current_indentation - new_indentation, lexer_state)
-	return t(virtual_tokens, state)
+export function ExposedToken(name: string, virtual_lexer_name: string, spec: TokenSpec) {
+	const token_definition = UserToken(name, spec) as unknown as ExposedRawTokenDefinition
+	(token_definition as any).virtual_lexer_name = virtual_lexer_name
+	return token_definition
 }
 
+export function VirtualToken(
+	name: string, virtual_lexer_name: string,
+	sequence: HiddenTokenDefinition[],
+	lookahead_regex: BaseTokenSpec,
+): VirtualTokenDefinition {
+	return {
+		type: 'Token', name, virtual_lexer_name, sequence, is_virtual: true,
+		lookahead_regex: make_regex(lookahead_regex),
+	}
+}
 
-const source = `\
-a
-	b
-
-a
-a
-	b
-		c
-		c
-			d
-	b
-		c`
-
-const lexer = new Lexer({ IndentationLexer }, source)
-
-// test
-// require
-
-const a = lexer.require([n, indent, n, deindent, n, indent_continue, n])
-console.log(a)
+export function HiddenToken(name: string, regex: BaseTokenSpec): HiddenTokenDefinition {
+	return {
+		name, ignore: true, is_virtual: false,
+		regex: make_regex(regex),
+	}
+}
