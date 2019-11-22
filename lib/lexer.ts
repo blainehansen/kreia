@@ -94,10 +94,6 @@ type VirtualLexerStateDict<V extends Dict<any>> = {
 }
 
 
-// type SimpleLexerState = {
-// 	index: number, line: number, column: number,
-// }
-
 type LexerState<V extends Dict<any>> = Readonly<{
 	source: string, index: number,
 	line: number, column: number,
