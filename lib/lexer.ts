@@ -74,11 +74,24 @@ type Token =
 	| RawToken
 	| VirtualToken
 
-type VirtualLexer<S> = {
-	// use(...args: unknown[]): (ExposedRawTokenDefinition | VirtualTokenDefinition)[],
-	use(): (ExposedRawTokenDefinition | VirtualTokenDefinition)[],
+// type VirtualLexer<S, A extends any[] = []> = {
+// 	// use(...args: unknown[]): (ExposedRawTokenDefinition | VirtualTokenDefinition)[],
+// 	use(...args: A): (ExposedRawTokenDefinition | VirtualTokenDefinition)[],
+// 	initialize(): S,
+// 	process(sequence: HiddenToken[], lookahead_matched: boolean, state: S, lexer_state: LexerState<Dict<unknown>>): [VirtualToken[], S],
+// 	process_interest(token: RawToken, state: S, lexer_state: LexerState<Dict<unknown>>): [VirtualToken[], S],
+// 	exit(state: S, lexer_state: LexerState<Dict<unknown>>): VirtualToken[],
+// }
+
+type VirtualLexer<S, A extends any[] = []> = {
+	use(...args: A): (ExposedRawTokenDefinition | VirtualTokenDefinition)[],
 	initialize(): S,
-	process(sequence: HiddenToken[], lookahead_matched: boolean, state: S, lexer_state: LexerState<Dict<unknown>>): [VirtualToken[], S],
+	request<V extends Dict<any>>(
+		virtual_token: VirtualTokenDefinition,
+		state: S,
+		lexer_state: LexerState<V>>,
+		file: SourceFile,
+	): [(HiddenToken | VirtualToken)[], LexerState<V>] | undefined,
 	process_interest(token: RawToken, state: S, lexer_state: LexerState<Dict<unknown>>): [VirtualToken[], S],
 	exit(state: S, lexer_state: LexerState<Dict<unknown>>): VirtualToken[],
 }
@@ -139,8 +152,8 @@ class Lexer<V extends Dict<any>> {
 	}
 
 	static attempt_token<V extends Dict<any>, T extends TestableTokenDefinition>(
-		{ source, index, line, column, virtual_lexers }: LexerState<V>,
 		token_definition: T,
+		{ source, index, line, column, virtual_lexers }: LexerState<V>,
 		file: SourceFile,
 	) {
 		const match = source.match(token_definition.regex)
@@ -195,7 +208,7 @@ class Lexer<V extends Dict<any>> {
 				// otherwise, actually try to pull the thing out
 				const found_sequence = [] as HiddenToken[]
 				for (const sequence_token_definition of token_definition.sequence) {
-					let attempt = Lexer.attempt_token(state, sequence_token_definition, file)
+					let attempt = Lexer.attempt_token(sequence_token_definition, state, file)
 					if (attempt === undefined)
 						continue
 
@@ -237,14 +250,14 @@ class Lexer<V extends Dict<any>> {
 				if (ignored_token_definition.name === token_definition.name)
 					continue
 
-				const attempt = Lexer.attempt_token(state, ignored_token_definition, file)
+				const attempt = Lexer.attempt_token(ignored_token_definition, state, file)
 				if (attempt === undefined)
 					continue
 				const [, new_state] = attempt
 				state = new_state
 			}
 
-			const attempt = Lexer.attempt_token(state, token_definition, file)
+			const attempt = Lexer.attempt_token(token_definition, state, file)
 			if (attempt === undefined)
 				return undefined
 			const [token, new_state] = attempt
@@ -290,17 +303,11 @@ class Lexer<V extends Dict<any>> {
 
 		if (this.cache !== undefined) {
 			const { saved_tokens, state } = this.cache
-			// if (!match_tokens(saved_tokens, token_definitions))
-			// 	return undefined
+			this.cache = undefined
 			if (match_tokens(saved_tokens, token_definitions)) {
-				this.cache = undefined
 				this.state = state
 				return saved_tokens
 			}
-
-			// this.cache = undefined
-			// this.state = state
-			// return saved_tokens
 		}
 
 		const cache = this.request(token_definitions)
@@ -309,6 +316,21 @@ class Lexer<V extends Dict<any>> {
 		const { saved_tokens, state } = cache
 		this.state = state
 		return saved_tokens
+	}
+
+	exit() {
+		const { state } = this
+		if (state.source !== 0)
+			throw new Error("lexing didn't complete")
+
+		const exit_tokens = [] as VirtualToken[]
+		for (const { virtual_lexer, state: virtual_lexer_state } of Object.values(state.virtual_lexers)) {
+			exit_tokens.push_all(virtual_lexer.exit(virtual_lexer_state, state))
+		}
+
+		if (this.)
+
+		return exit_tokens
 	}
 }
 
@@ -405,3 +427,7 @@ export function HiddenToken(name: string, regex: BaseTokenSpec): HiddenTokenDefi
 		regex: make_regex(regex),
 	}
 }
+
+// export function ConcatTokens(tokens: TestableTokenDefinition[]) {
+// 	// basically just extract the sources (without the ^) and put them together
+// }
