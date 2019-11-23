@@ -3,97 +3,85 @@ import { Dict, tuple as t } from '@ts-std/types'
 import { Enum, empty, variant } from '@ts-std/enum'
 
 
-type UserRawTokenDefinition = {
+export type UserRawTokenDefinition = {
 	type: 'Token',
 	name: string,
 	regex: RegExp,
 	ignore?: true,
 	is_virtual: false,
 }
-type ExposedRawTokenDefinition = UserRawTokenDefinition & {
+export type ExposedRawTokenDefinition = UserRawTokenDefinition & {
 	virtual_lexer_name: string,
 }
 
-type HiddenTokenDefinition =
+export type HiddenTokenDefinition =
 	Pick<UserRawTokenDefinition, 'name' | 'regex' | 'is_virtual'>
 	& { ignore: true }
 
-type VirtualTokenDefinition = {
+export type VirtualTokenDefinition = {
 	type: 'Token',
 	name: string,
 	virtual_lexer_name: string,
-	sequence: readonly HiddenTokenDefinition[],
-	lookahead_regex?: RegExp,
 	is_virtual: true,
 }
 
 
-type RawTokenDefinition =
+export type RawTokenDefinition =
 	| UserRawTokenDefinition
 	| ExposedRawTokenDefinition
 
-type TestableTokenDefinition =
+export type TestableTokenDefinition =
 	| UserRawTokenDefinition
 	| ExposedRawTokenDefinition
 	| HiddenTokenDefinition
 
-type TokenDefinition =
+export type TokenDefinition =
 	| UserRawTokenDefinition
 	| ExposedRawTokenDefinition
 	| VirtualTokenDefinition
 
 
 
-type SourceFile = Readonly<{
+export type SourceFile = Readonly<{
 	source: string, filename?: string,
 }>
 
-type Span = Readonly<{
+export type Span = Readonly<{
 	file: SourceFile, start: number, end: number, line: number, column: number,
 }>
 
-type RawToken = {
+export type RawToken = {
 	type: UserRawTokenDefinition | ExposedRawTokenDefinition,
 	content: string,
 	is_virtual: false,
 	span: Span,
 }
-type HiddenToken = {
+export type HiddenToken = {
 	type: HiddenTokenDefinition,
 	content: string,
 	is_virtual: false,
 	span: Span,
 }
-type VirtualToken = {
+export type VirtualToken = {
 	type: VirtualTokenDefinition,
 	is_virtual: true,
 	span: Pick<Span, 'line' | 'column'> & { index: number },
 }
 
-type Token =
+export type Token =
 	| RawToken
 	| VirtualToken
 
-// type VirtualLexer<S, A extends any[] = []> = {
-// 	// use(...args: unknown[]): (ExposedRawTokenDefinition | VirtualTokenDefinition)[],
-// 	use(...args: A): (ExposedRawTokenDefinition | VirtualTokenDefinition)[],
-// 	initialize(): S,
-// 	process(sequence: HiddenToken[], lookahead_matched: boolean, state: S, lexer_state: LexerState<Dict<unknown>>): [VirtualToken[], S],
-// 	process_interest(token: RawToken, state: S, lexer_state: LexerState<Dict<unknown>>): [VirtualToken[], S],
-// 	exit(state: S, lexer_state: LexerState<Dict<unknown>>): VirtualToken[],
-// }
-
-type VirtualLexer<S, A extends any[] = []> = {
+export type VirtualLexer<S, A extends any[] = []> = {
 	use(...args: A): (ExposedRawTokenDefinition | VirtualTokenDefinition)[],
 	initialize(): S,
 	request<V extends Dict<any>>(
 		virtual_token: VirtualTokenDefinition,
 		state: S,
-		lexer_state: LexerState<V>>,
+		lexer_state: LexerState<V>,
 		file: SourceFile,
-	): [(HiddenToken | VirtualToken)[], LexerState<V>] | undefined,
-	process_interest(token: RawToken, state: S, lexer_state: LexerState<Dict<unknown>>): [VirtualToken[], S],
-	exit(state: S, lexer_state: LexerState<Dict<unknown>>): VirtualToken[],
+	): [HiddenToken[], VirtualToken, LexerState<V>] | undefined,
+	notify(token: RawToken, state: S): S,
 }
 
 type VirtualLexerDict<V extends Dict<any>> =
@@ -107,7 +95,7 @@ type VirtualLexerStateDict<V extends Dict<any>> = {
 }
 
 
-type LexerState<V extends Dict<any>> = Readonly<{
+export type LexerState<V extends Dict<any>> = Readonly<{
 	source: string, index: number,
 	line: number, column: number,
 	virtual_lexers: VirtualLexerStateDict<V>,
@@ -121,7 +109,7 @@ type LexerCache<V extends Dict<any>> = Readonly<{
 }>
 
 
-class Lexer<V extends Dict<any>> {
+export class Lexer<V extends Dict<any>> {
 	constructor(raw_virtual_lexers: V, source: string, filename?: string) {
 		this.reset(raw_virtual_lexers, source, filename)
 	}
@@ -149,6 +137,24 @@ class Lexer<V extends Dict<any>> {
 		this.ignored_token_definitions = ignored_token_definitions
 
 		this.state = { source, index: 0, line: 0, column: 0, virtual_lexers }
+	}
+
+	static patch_virtual_lexer_state<V extends Dict<any>, S>(
+		state: LexerState<V>,
+		virtual_lexer_name: string,
+		virtual_lexer_state: S,
+	): LexerState<V> {
+		if (!(virtual_lexer_name in state.virtual_lexers))
+			throw new Error("")
+		const { virtual_lexer } = state.virtual_lexers[virtual_lexer_name]
+
+		return {
+			...state,
+			virtual_lexers: {
+				...state.virtual_lexers,
+				[virtual_lexer_name]: { virtual_lexer, state: virtual_lexer_state },
+			}
+		}
 	}
 
 	static attempt_token<V extends Dict<any>, T extends TestableTokenDefinition>(
@@ -192,58 +198,20 @@ class Lexer<V extends Dict<any>> {
 
 		const { file } = this
 		let state = { ...this.state }
-		let buffered_virtual_tokens = [] as VirtualToken[]
-
 		const tokens = [] as Token[]
+
 		for (const token_definition of token_definitions) {
 			if (token_definition.is_virtual) {
-				// try to grab from any already output virtual tokens
-				const attempt_from_cache = match_and_trim(buffered_virtual_tokens, [token_definition])
-				if (attempt_from_cache !== undefined) {
-					tokens.push({ type: token_definition } as VirtualToken)
-					buffered_virtual_tokens = attempt_from_cache as unknown as VirtualToken[]
-					continue
-				}
-
-				// otherwise, actually try to pull the thing out
-				const found_sequence = [] as HiddenToken[]
-				for (const sequence_token_definition of token_definition.sequence) {
-					let attempt = Lexer.attempt_token(sequence_token_definition, state, file)
-					if (attempt === undefined)
-						continue
-
-					const [token, new_state] = attempt
-					found_sequence.push(token as HiddenToken)
-					state = new_state
-				}
-
 				const { virtual_lexer, state: virtual_lexer_state } = state.virtual_lexers[token_definition.virtual_lexer_name]
-
-				const [virtual_tokens, new_virtual_lexer_state] = virtual_lexer.process(
-					found_sequence,
-					token_definition.lookahead_regex ? token_definition.lookahead_regex.test(state.source) : false,
-					virtual_lexer_state,
-					state,
-				)
-
-				const remaining_virtual_tokens = match_and_trim(virtual_tokens, [token_definition])
-				if (remaining_virtual_tokens === undefined)
+				const virtual_attempt = virtual_lexer.request(token_definition, virtual_lexer_state, state, file)
+				if (virtual_attempt === undefined)
 					return undefined
+				const [_ignored_tokens, virtual_token, new_state] = virtual_attempt
+				state = new_state
 
-				tokens.push({ type: token_definition } as VirtualToken)
-				state = {
-					...state,
-					virtual_lexers: {
-						...state.virtual_lexers,
-						[token_definition.virtual_lexer_name]: { virtual_lexer, state: new_virtual_lexer_state },
-					},
-				}
-				buffered_virtual_tokens = remaining_virtual_tokens as unknown as VirtualToken[]
+				tokens.push(virtual_token)
 				continue
 			}
-
-			if (buffered_virtual_tokens.length > 0)
-				return undefined
 
 			// go through list of ignored tokens
 			for (const ignored_token_definition of this.ignored_token_definitions) {
@@ -253,7 +221,7 @@ class Lexer<V extends Dict<any>> {
 				const attempt = Lexer.attempt_token(ignored_token_definition, state, file)
 				if (attempt === undefined)
 					continue
-				const [, new_state] = attempt
+				const [_ignored_token, new_state] = attempt
 				state = new_state
 			}
 
@@ -266,15 +234,11 @@ class Lexer<V extends Dict<any>> {
 			// here is where we would check if there's an interested virtual_lexer
 			if ('virtual_lexer_name' in token_definition) {
 				const { virtual_lexer, state: virtual_lexer_state } = state.virtual_lexers[token_definition.virtual_lexer_name]
-				const [virtual_tokens, new_virtual_lexer_state] = virtual_lexer.process_interest(token, virtual_lexer_state, state)
-				state = {
-					...state,
-					virtual_lexers: {
-						...state.virtual_lexers,
-						[token_definition.virtual_lexer_name]: { virtual_lexer, state: new_virtual_lexer_state },
-					},
-				}
-				tokens.push_all(virtual_tokens)
+				const new_virtual_lexer_state = virtual_lexer.notify(token, virtual_lexer_state)
+				state = Lexer.patch_virtual_lexer_state(
+					state, token_definition.virtual_lexer_name,
+					{ virtual_lexer, state: new_virtual_lexer_state },
+				)
 			}
 
 			if (token_definition.ignore)
@@ -319,18 +283,8 @@ class Lexer<V extends Dict<any>> {
 	}
 
 	exit() {
-		const { state } = this
-		if (state.source !== 0)
-			throw new Error("lexing didn't complete")
-
-		const exit_tokens = [] as VirtualToken[]
-		for (const { virtual_lexer, state: virtual_lexer_state } of Object.values(state.virtual_lexers)) {
-			exit_tokens.push_all(virtual_lexer.exit(virtual_lexer_state, state))
-		}
-
-		if (this.)
-
-		return exit_tokens
+		if (this.state.source.length !== 0)
+			throw new Error("the source wasn't entirely consumed")
 	}
 }
 
@@ -381,7 +335,7 @@ function denature_spec(spec: TokenSpec): [BaseTokenSpec, TokenOptions] {
 	return [spec, {}]
 }
 
-function make_regex(regex: BaseTokenSpec) {
+export function make_regex(regex: BaseTokenSpec) {
 	const base_source = Array.isArray(regex)
 		? regex.map(r => `(?:${source_regex(r)})`).join('|')
 		: source_regex(regex)
@@ -410,14 +364,9 @@ export function ExposedToken(name: string, virtual_lexer_name: string, spec: Tok
 	return token_definition
 }
 
-export function VirtualToken(
-	name: string, virtual_lexer_name: string,
-	sequence: HiddenTokenDefinition[],
-	lookahead_regex: BaseTokenSpec,
-): VirtualTokenDefinition {
+export function VirtualToken(name: string, virtual_lexer_name: string): VirtualTokenDefinition {
 	return {
-		type: 'Token', name, virtual_lexer_name, sequence, is_virtual: true,
-		lookahead_regex: make_regex(lookahead_regex),
+		type: 'Token', name, virtual_lexer_name, is_virtual: true,
 	}
 }
 
