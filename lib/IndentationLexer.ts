@@ -115,36 +115,3 @@ export function make_indents(
 	}
 	return deindents
 }
-
-
-
-// const name = UserToken('name', /[a-z]+/)
-
-// const source = `\
-// a
-// 	b
-
-// a
-// a
-// 	b
-// 		c
-// 		c
-// 			d
-// 	b
-// 		c`
-
-// const lexer = new Lexer({ IndentationLexer }, source)
-
-// console.log(lexer.require([
-// 	name, indent, name, deindent,
-// 	name, indent_continue, name,
-// 	indent, name, indent, name, indent_continue, name,
-// 	indent, name, deindent, deindent,
-// 	name, indent, name,
-// 	deindent, deindent,
-// ]))
-
-// console.log(lexer.test([name, indent_continue]))
-// console.log(lexer.test([name, indent]))
-// console.log(lexer.test([name, indent_continue]))
-// console.log(lexer.test([name, indent]))
