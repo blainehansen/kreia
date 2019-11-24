@@ -46,6 +46,7 @@ export type TestableTokenDefinition =
 	| UserRawTokenDefinition
 	| ExposedRawTokenDefinition
 	| HiddenTokenDefinition
+	| ContentVirtualTokenDefinition
 
 export type TokenDefinition =
 	| UserRawTokenDefinition
