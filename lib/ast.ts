@@ -17,22 +17,22 @@ export const VirtualLexerDirective = Data((virtual_lexer_name: string, destructu
 
 
 
-export const LexerState = Data((state_name: string) => {
-	return { type: 'LexerState' as const, state_name }
-})
-export type LexerState = ReturnType<typeof LexerState>
+// export const LexerState = Data((state_name: string) => {
+// 	return { type: 'LexerState' as const, state_name }
+// })
+// export type LexerState = ReturnType<typeof LexerState>
 
-const StateTransform = Enum({
-	Push: variant<LexerState>(),
-	Pop: empty(),
-})
-type StateTransform = Enum<typeof StateTransform> | undefined
+// const StateTransform = Enum({
+// 	Push: variant<LexerState>(),
+// 	Pop: empty(),
+// })
+// type StateTransform = Enum<typeof StateTransform> | undefined
 
-export const Token = Data((
-	name: string, spec: string | string[],
-	options: { ignore?: true, state_transform?: StateTransform },
-) => {
-	//
+// export const Token = Data((
+// 	name: string, spec: string | string[],
+// 	options: { ignore?: true, state_transform?: StateTransform },
+// ) => {
+// 	//
 })
 
 

@@ -105,11 +105,11 @@ function consume<L extends TokenDefinition[]>(
 	token_definitions: L
 ): TokensForDefinitions<L> {
 	// const next_tokens = lexer.advance(token_definitions.length)
-	const next_tokens_result = lexer.require(token_definitions)
+	const next_tokens = lexer.require(token_definitions)
 
-	if (next_tokens_result.is_err())
+	if (next_tokens === undefined)
 		throw new Error("next tokens didn't match")
-	return next_tokens_result.value
+	return next_tokens
 	// if (match_tokens(next_tokens, token_definitions))
 	// 	return next_tokens as TokensForDefinitions<L>
 	// else
