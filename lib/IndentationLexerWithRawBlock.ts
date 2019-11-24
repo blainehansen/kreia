@@ -142,5 +142,5 @@ export const IndentationLexerWithRawBlock: VirtualLexer<IndentationStateWithRawB
 // 	deindent, deindent,
 // ]))
 
-// console.log(lexer.test([name, indent_continue, name, deindent, name, indent_continue, name]))
-// console.log(lexer.test([name, indent, name, indent_continue, name, indent_continue, name]))
+// console.log(lexer.test([name, indent_continue]))
+// console.log(lexer.test([name, indent]))

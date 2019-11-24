@@ -34,7 +34,7 @@ export type ContentVirtualTokenDefinition = EmptyVirtualTokenDefinition & {
 	regex: RegExp,
 }
 export type VirtualTokenDefinition =
-	| EmptyVirtualToken
+	| EmptyVirtualTokenDefinition
 	| ContentVirtualTokenDefinition
 
 
@@ -76,21 +76,16 @@ export type HiddenToken = {
 	span: Span,
 }
 export type EmptyVirtualToken = {
-	type: VirtualTokenDefinition,
+	type: EmptyVirtualTokenDefinition,
 	is_virtual: true,
 	span: Pick<Span, 'line' | 'column'> & { index: number },
 }
 export type ContentVirtualToken = {
-	type: VirtualTokenDefinition,
+	type: ContentVirtualTokenDefinition,
 	is_virtual: true,
 	content: string,
 	span: Span,
 }
-// export type VirtualToken = {
-// 	type: VirtualTokenDefinition,
-// 	is_virtual: true,
-// 	span: Pick<Span, 'line' | 'column'> & { index: number },
-// }
 export type VirtualToken =
 	| EmptyVirtualToken
 	| ContentVirtualToken
@@ -168,24 +163,9 @@ export class Lexer<V extends Dict<any>> {
 
 		this.ignored_token_definitions = ignored_token_definitions
 
-		this.state = { source, index: 0, line: 0, column: 0, virtual_lexers }
-	}
-
-	static patch_virtual_lexer_state<V extends Dict<any>, S>(
-		state: LexerState<V>,
-		virtual_lexer_name: string,
-		virtual_lexer_state: S,
-	): LexerState<V> {
-		if (!(virtual_lexer_name in state.virtual_lexers))
-			throw new Error("")
-		const { virtual_lexer } = state.virtual_lexers[virtual_lexer_name]
-
-		return {
-			...state,
-			virtual_lexers: {
-				...state.virtual_lexers,
-				[virtual_lexer_name]: { virtual_lexer, state: virtual_lexer_state },
-			}
+		this.state = {
+			source_state: { source, index: 0, line: 1, column: 1 },
+			virtual_lexers,
 		}
 	}
 
@@ -247,11 +227,10 @@ export class Lexer<V extends Dict<any>> {
 		for (const token_definition of token_definitions) {
 			if (token_definition.is_virtual) {
 				const { virtual_lexer, state: virtual_lexer_state } = state.virtual_lexers[token_definition.virtual_lexer_name]
-				// const virtual_attempt = virtual_lexer.request(token_definition, virtual_lexer_state, state, file)
+
 				const virtual_attempt = virtual_lexer.request(token_definition, virtual_lexer_state, state.source_state, file)
 				if (virtual_attempt === undefined)
 					return undefined
-				// const [_ignored_tokens, virtual_token, new_state] = virtual_attempt
 				const [_ignored_tokens, virtual_token, new_virtual_lexer_state, new_source_state] = virtual_attempt
 				state = {
 					source_state: new_source_state,
@@ -260,7 +239,6 @@ export class Lexer<V extends Dict<any>> {
 						[token_definition.virtual_lexer_name]: { virtual_lexer, state: new_virtual_lexer_state },
 					},
 				}
-				// state = new_state
 
 				tokens.push(virtual_token)
 				continue
@@ -271,30 +249,29 @@ export class Lexer<V extends Dict<any>> {
 				if (ignored_token_definition.name === token_definition.name)
 					continue
 
-				const attempt = Lexer.attempt_token(ignored_token_definition, state, file)
+				const attempt = Lexer.attempt_token(ignored_token_definition, state.source_state, file)
 				if (attempt === undefined)
 					continue
-				// const [_ignored_token, new_state] = attempt
 				const [_ignored_token, new_source_state] = attempt
-				// state = new_state
 				state = { source_state: new_source_state, virtual_lexers: state.virtual_lexers }
 			}
 
-			const attempt = Lexer.attempt_token(token_definition, state, file)
+			const attempt = Lexer.attempt_token(token_definition, state.source_state, file)
 			if (attempt === undefined)
 				return undefined
-			// const [token, new_state] = attempt
 			const [token, new_source_state] = attempt
-			// state = new_state
 			state = { source_state: new_source_state, virtual_lexers: state.virtual_lexers }
 
 			if ('virtual_lexer_name' in token_definition) {
 				const { virtual_lexer, state: virtual_lexer_state } = state.virtual_lexers[token_definition.virtual_lexer_name]
 				const new_virtual_lexer_state = virtual_lexer.notify(token, virtual_lexer_state)
-				state = Lexer.patch_virtual_lexer_state(
-					state, token_definition.virtual_lexer_name,
-					{ virtual_lexer, state: new_virtual_lexer_state },
-				)
+				state = {
+					source_state: state.source_state,
+					virtual_lexers: {
+						...state.virtual_lexers,
+						[token_definition.virtual_lexer_name]: { virtual_lexer, state: new_virtual_lexer_state }
+					},
+				}
 			}
 
 			if (token_definition.ignore)
@@ -339,7 +316,7 @@ export class Lexer<V extends Dict<any>> {
 	}
 
 	exit() {
-		if (this.state.source.length !== 0)
+		if (this.state.source_state.source.length !== 0)
 			throw new Error("the source wasn't entirely consumed")
 	}
 }
