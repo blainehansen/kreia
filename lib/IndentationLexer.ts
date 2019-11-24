@@ -5,7 +5,7 @@ import { Lexer, SourceState, VirtualLexer, UserToken, HiddenToken, VirtualToken,
 export const newline = HiddenToken('newline', /[\t ]*\n+/)
 export const tab = HiddenToken('tab', /\t+/)
 
-export const any_non_whitespace = make_regex(/\w/)
+export const any_non_whitespace = make_regex(/[^ \t\n]/)
 export const indent = VirtualToken('indent', 'IndentationLexer')
 export const deindent = VirtualToken('deindent', 'IndentationLexer')
 export const indent_continue = VirtualToken('indent_continue', 'IndentationLexer')

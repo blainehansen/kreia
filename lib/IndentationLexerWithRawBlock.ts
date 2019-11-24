@@ -13,7 +13,7 @@ const need_tab_tester = make_regex(/\t/)
 
 const block_tab = HiddenToken('block_tab', /\t/)
 const raw_block_begin = ExposedToken('raw_block_begin', 'IndentationLexer', /\|\"\n/)
-const raw_block_content = VirtualToken('raw_block_content', 'IndentationLexer', /[^\n]*\n+/)
+const raw_block_content = VirtualToken('raw_block_content', 'IndentationLexer', [/[^\n]*\n+/, /[^\n]+\n*/])
 const raw_block_end = VirtualToken('raw_block_end', 'IndentationLexer')
 
 
@@ -94,7 +94,6 @@ export const IndentationLexerWithRawBlock: VirtualLexer<IndentationStateWithRawB
 		}
 
 		// now we simply lex the content, which is basically anything
-		// const attempt = Lexer.attempt_token(raw_block_content, source_state, file)
 		const attempt = Lexer.attempt_regex(raw_block_content.regex, source_state, file)
 		if (attempt === undefined)
 			return undefined
@@ -123,31 +122,40 @@ export const IndentationLexerWithRawBlock: VirtualLexer<IndentationStateWithRawB
 }
 
 
-// const name = UserToken('name', /[a-z]+/)
+const name = UserToken('name', /[a-z]+/)
 
-// const source = `\
-// a
-// 	b
+const source = `\
+a
+	|"
 
-// a
-// a
-// 	b
-// 		c
-// 		c
-// 			d
-// 	b
-// 		c`
 
-// const lexer = new Lexer({ IndentationLexerWithRawBlock }, source)
+		jkfg ;l {}d 893 d#@# sdlfk
+		     djfsadkf dfsadf asdfasf
 
-// console.log(lexer.require([
-// 	name, indent, name, deindent,
-// 	name, indent_continue, name,
-// 	indent, name, indent, name, indent_continue, name,
-// 	indent, name, deindent, deindent,
-// 	name, indent, name,
-// 	deindent, deindent,
-// ]))
+			sdfd
+			sdfkjd f;adfk
+		 adf
+
+
+
+		     ffdgadf
+	b`
+
+const lexer = new Lexer({ IndentationLexer: IndentationLexerWithRawBlock }, source)
+
+console.log(lexer.require([
+	name, indent,
+	raw_block_begin,
+	raw_block_content,
+	raw_block_content,
+	raw_block_content,
+	raw_block_content,
+	raw_block_content,
+	raw_block_content,
+	raw_block_content,
+	raw_block_end,
+	name, deindent,
+]))
 
 // console.log(lexer.test([name, indent_continue]))
 // console.log(lexer.test([name, indent]))
