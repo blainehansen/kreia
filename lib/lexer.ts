@@ -109,7 +109,7 @@ export type VirtualLexer<S, A extends any[] = []> = Readonly<{
 
 // type VirtualLexers = Dict<VirtualLexer<any, any[]>>
 type VirtualLexerDict<V extends Dict<any>> =
-	{ [K in keyof V]: V[K] }
+	{ [K in keyof V]: VirtualLexer<V[K]> }
 
 type VirtualLexerState<S> =
 	{ readonly virtual_lexer: VirtualLexer<S>, state: S }
@@ -124,32 +124,34 @@ export type SourceState = Readonly<{
 	line: number, column: number,
 }>
 
-type LexerState<V extends Dict<any>> = Readonly<{
+export type LexerState<V extends Dict<any>> = Readonly<{
 	source_state: SourceState,
 	virtual_lexers: VirtualLexerStateDict<V>,
 }>
+// type UnknownLexerState = LexerState<Dict<unknown>>
 
 type NonEmpty<T> = [T, ...T[]]
 
-type LexerCache<V extends Dict<any>> = Readonly<{
-	state: LexerState<V>,
-	saved_tokens: NonEmpty<Token>,
-}>
-
-
 export class Lexer<V extends Dict<any>> {
-	constructor(raw_virtual_lexers: V, source: string, filename?: string) {
-		this.reset(raw_virtual_lexers, source, filename)
+	constructor(
+		raw_virtual_lexers: VirtualLexerDict<V>,
+		ignored_token_definitions: RawTokenDefinition[],
+		source: string, filename?: string,
+	) {
+		this.reset(raw_virtual_lexers, ignored_token_definitions, source, filename)
 	}
 
 	private file!: SourceFile
 	private state!: LexerState<V>
-	private cache: LexerCache<V> | undefined = undefined
 	private ignored_token_definitions!: RawTokenDefinition[]
-	reset(raw_virtual_lexers: V, source: string, filename?: string) {
+	reset(
+		raw_virtual_lexers: VirtualLexerDict<V>,
+		input_ignored_token_definitions: RawTokenDefinition[],
+		source: string, filename?: string,
+	) {
 		this.file = { source, filename }
 
-		const ignored_token_definitions = [] as RawTokenDefinition[]
+		const ignored_token_definitions = input_ignored_token_definitions.slice()
 		const virtual_lexers = {} as VirtualLexerStateDict<V>
 		for (const virtual_lexer_name in raw_virtual_lexers) {
 			const virtual_lexer = raw_virtual_lexers[virtual_lexer_name]
@@ -217,12 +219,13 @@ export class Lexer<V extends Dict<any>> {
 		return t(token, new_source_state)
 	}
 
-	protected request(token_definitions: TokenDefinition[]): LexerCache<V> | undefined {
-		// request doesn't mutate anything, not even cache
-		// it merely returns a possible cache candidate and lets the calling function decide what to do
-
-		const { file } = this
-		let state = { ...this.state } as LexerState<V>
+	protected static request<V extends Dict<any>>(
+		token_definitions: TokenDefinition[],
+		input_state: LexerState<V>,
+		file: SourceFile,
+		ignored_token_definitions: RawTokenDefinition[],
+	): [NonEmpty<Token>, LexerState<V>] | undefined {
+		let state = input_state
 		const tokens = [] as Token[]
 
 		for (const token_definition of token_definitions) {
@@ -246,7 +249,7 @@ export class Lexer<V extends Dict<any>> {
 			}
 
 			// go through list of ignored tokens
-			for (const ignored_token_definition of this.ignored_token_definitions) {
+			for (const ignored_token_definition of ignored_token_definitions) {
 				if (ignored_token_definition.name === token_definition.name)
 					continue
 
@@ -283,38 +286,35 @@ export class Lexer<V extends Dict<any>> {
 
 		return tokens.length === 0
 			? undefined
-			: { state, saved_tokens: [tokens[0], ...tokens.slice(1)] }
+			: [tokens as NonEmpty<Token>, state]
 	}
 
-	test(token_definitions: TokenDefinition[]): boolean {
-		// this function merely tests, so it only saves the cache but doesn't do anything else
-		const possible_cache = this.request(token_definitions)
-		if (possible_cache === undefined)
-			return false
-		this.cache = possible_cache
-		return true
+	test(
+		token_definitions: TokenDefinition[],
+		input_lexer_state?: LexerState<V>,
+	): [NonEmpty<Token>, LexerState<V>] | undefined {
+		return Lexer.request(
+			token_definitions, input_lexer_state || this.state,
+			this.file, this.ignored_token_definitions,
+		)
 	}
 
-	require(token_definitions: TokenDefinition[]): Token[] | undefined {
-		// require returns and destroys the cache if it exists,
-		// and it updates the current state
+	require(token_definitions: TokenDefinition[]): Token[] {
+		const attempt = Lexer.request(
+			token_definitions, this.state,
+			this.file, this.ignored_token_definitions,
+		)
+		if (attempt === undefined)
+			// TODO make nice source frames and everything
+			throw new Error()
 
-		if (this.cache !== undefined) {
-			const { saved_tokens, state } = this.cache
-			this.cache = undefined
-			if (match_tokens(saved_tokens, token_definitions)) {
-				this.state = state
-				return saved_tokens
-			}
-		}
-
-		const cache = this.request(token_definitions)
-		if (cache === undefined)
-			return undefined
-		const { saved_tokens, state } = cache
-		this.state = state
-		return saved_tokens
+		this.state = attempt[1]
+		return attempt[0]
 	}
+
+	// this would turn off ignore
+	// require_all() {
+	// }
 
 	exit() {
 		if (this.state.source_state.source.length !== 0)

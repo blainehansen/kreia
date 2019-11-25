@@ -25,12 +25,12 @@ describe('IndentationLexer', () => {
 		const [indent, deindent, indent_continue] = defs
 		const name = UserToken('name', /[a-z]+/)
 
-		const lexer = new Lexer({ IndentationLexer }, source)
+		const lexer = new Lexer({ IndentationLexer }, [], source)
 
-		expect(lexer.test([name, indent_continue])).false
-		expect(lexer.test([name, indent])).true
-		expect(lexer.test([name, indent_continue])).false
-		expect(lexer.test([name, indent])).true
+		expect(lexer.test([name, indent_continue])).eql(undefined)
+		expect(lexer.test([name, indent])).not.eql(undefined)
+		expect(lexer.test([name, indent_continue])).eql(undefined)
+		expect(lexer.test([name, indent])).not.eql(undefined)
 
 		const toks = lexer.require([
 			name, indent, name, deindent,
@@ -39,13 +39,13 @@ describe('IndentationLexer', () => {
 			indent, name, deindent, deindent,
 			name, indent, name,
 			deindent, deindent,
-		])!
+		])
 		expect(toks.length).eql(22)
 
-		expect(lexer.test([name])).false
-		expect(lexer.test([indent])).false
-		expect(lexer.test([deindent])).false
-		expect(lexer.test([indent_continue])).false
+		expect(lexer.test([name])).eql(undefined)
+		expect(lexer.test([indent])).eql(undefined)
+		expect(lexer.test([deindent])).eql(undefined)
+		expect(lexer.test([indent_continue])).eql(undefined)
 
 		expect(() => lexer.exit()).not.throw()
 	})

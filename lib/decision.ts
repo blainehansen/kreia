@@ -1,16 +1,14 @@
 import '@ts-std/extensions/dist/array'
+import { Dict } from '@ts-std/types'
 
-import { TokenDefinition, Token, match_and_trim } from './lexer'
+import { Lexer, LexerState, TokenDefinition, Token, match_and_trim } from './lexer'
 
 export abstract class Decidable {
 	abstract readonly test_length: number
-	test(tokens: Token[]): boolean {
-		const result = this._test(tokens)
-		return result !== undefined
-	}
-
-	// abstract render_ts(): ReturnType<typeof ts.createVariableStatement>
-	abstract _test(tokens: Token[]): Token[] | undefined
+	abstract test<V extends Dict<any>>(
+		lexer: Lexer<V>,
+		lexer_state?: LexerState<V>,
+	): [Token[], LexerState<V>] | undefined
 }
 
 export function is_branch(item: TokenDefinition[] | TokenDefinition | DecisionBranch): item is DecisionBranch {
@@ -64,41 +62,27 @@ class DecisionPath extends Decidable {
 		).sum()
 	}
 
-	// _test(input_tokens: Token[]): Token[] | undefined {
-	test(lexer: BaseLexer): Token[] | undefined {
-		// let tokens: Token[] | undefined = input_tokens.slice()
+	test<V extends Dict<any>>(
+		lexer: Lexer<V>,
+		input_lexer_state?: LexerState<V>,
+	): [Token[], LexerState<V>] | undefined {
+		const tokens = [] as Token[]
+		let lexer_state = input_lexer_state
 
 		for (const item of this.path) {
-			// tokens = Array.isArray(item)
-			// 	? match_and_trim(tokens, item)
-			// 	: item._test(tokens)
-			// if (tokens === undefined)
-			// 	return undefined
-			// if (tokens.length === 0)
-			// 	return tokens
+			const attempt = Array.isArray(item)
+				? lexer.test(item, lexer_state)
+				: item.test(lexer, lexer_state)
+			if (attempt === undefined)
+				return undefined
 
-			const success = Array.isArray(item)
-				? lexer.test(item)
-				: item.test(lexer)
-
-			if (!success)
-				return false
+			const [consumed_tokens, new_lexer_state] = attempt
+			tokens.push_all(consumed_tokens)
+			lexer_state = new_lexer_state
 		}
 
-		// return tokens
-		return true
+		return [tokens, lexer_state as LexerState<V>]
 	}
-
-	// render_ts() {
-	// 	return ts.createCall(
-	// 		ts.createIdentifier('path'), undefined,
-	// 		this.path.map(item =>
-	// 			Array.isArray(item)
-	// 				? ts.createArrayLiteral(item.map(tok => ts.createIdentifier(tok.name)))
-	// 				: item.render_ts()
-	// 		),
-	// 	)
-	// }
 }
 
 
@@ -124,32 +108,17 @@ class DecisionBranch extends Decidable {
 		this.test_length = Math.max(...paths.map(p => p.test_length))
 	}
 
-	// _test(tokens: Token[]): Token[] | undefined {
-	test(lexer: BaseLexer): Token[] | undefined {
+	test<V extends Dict<any>>(
+		lexer: Lexer<V>,
+		lexer_state?: LexerState<V>,
+	): [Token[], LexerState<V>] | undefined {
 		for (const path of this.paths) {
-			// const path_result = path._test(tokens)
-			// if (path_result !== undefined)
-			// 	return path_result
-			if (path.test(lexer))
-				return true
+			const attempt = path.test(lexer, lexer_state)
+			if (attempt === undefined)
+				continue
+			return attempt
 		}
 
-		// return undefined
-		return false
+		return undefined
 	}
-
-	// render_ts() {
-	// 	const is_optional = this.paths.maybe_get(-1).match({
-	// 		some: a => a.length === 0,
-	// 		none: false,
-	// 	})
-	// 	return ts.createCall(
-	// 		ts.createIdentifier('branch'), undefined,
-	// 		[is_optional ? ts.createTrue() : ts.createFalse()].concat(this.paths.map(path => path.render_ts())),
-	// 	)
-	// }
 }
-
-// export class DecisionWhile() {
-// 	//
-// }

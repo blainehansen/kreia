@@ -3,6 +3,31 @@
 
 import ts = require('typescript')
 
+// DecisionPath
+// render_ts() {
+// 	return ts.createCall(
+// 		ts.createIdentifier('path'), undefined,
+// 		this.path.map(item =>
+// 			Array.isArray(item)
+// 				? ts.createArrayLiteral(item.map(tok => ts.createIdentifier(tok.name)))
+// 				: item.render_ts()
+// 		),
+// 	)
+// }
+
+// DecisionBranch
+// render_ts() {
+// 	const is_optional = this.paths.maybe_get(-1).match({
+// 		some: a => a.length === 0,
+// 		none: false,
+// 	})
+// 	return ts.createCall(
+// 		ts.createIdentifier('branch'), undefined,
+// 		[is_optional ? ts.createTrue() : ts.createFalse()].concat(this.paths.map(path => path.render_ts())),
+// 	)
+// }
+
+
 function render() {
 	//
 }

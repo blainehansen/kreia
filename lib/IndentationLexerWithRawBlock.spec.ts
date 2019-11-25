@@ -30,12 +30,12 @@ describe('IndentationLexerWithRawBlock', () => {
 		const [indent, deindent, indent_continue, raw_block_begin, raw_block_content, raw_block_end] = defs
 		const name = UserToken('name', /[a-z]+/)
 
-		const lexer = new Lexer({ IndentationLexer: IndentationLexerWithRawBlock }, source)
+		const lexer = new Lexer({ IndentationLexer: IndentationLexerWithRawBlock }, [], source)
 
-		expect(lexer.test([name, indent_continue])).false
-		expect(lexer.test([name, indent])).true
-		expect(lexer.test([name, indent_continue])).false
-		expect(lexer.test([name, indent])).true
+		expect(lexer.test([name, indent_continue])).eql(undefined)
+		expect(lexer.test([name, indent])).not.eql(undefined)
+		expect(lexer.test([name, indent_continue])).eql(undefined)
+		expect(lexer.test([name, indent])).not.eql(undefined)
 
 		const toks = lexer.require([
 			name, indent,
@@ -49,7 +49,7 @@ describe('IndentationLexerWithRawBlock', () => {
 			raw_block_content,
 			raw_block_end,
 			name, deindent,
-		])!
+		])
 
 		expect(toks.length).eql(13)
 
@@ -62,13 +62,13 @@ describe('IndentationLexerWithRawBlock', () => {
 		expect((contents[5] as any).content).eql(' adf\n\n\n\n')
 		expect((contents[6] as any).content).eql('     ffdgadf\n')
 
-		expect(lexer.test([name])).false
-		expect(lexer.test([indent])).false
-		expect(lexer.test([deindent])).false
-		expect(lexer.test([indent_continue])).false
-		expect(lexer.test([raw_block_begin])).false
-		expect(lexer.test([raw_block_content])).false
-		expect(lexer.test([raw_block_end])).false
+		expect(lexer.test([name])).eql(undefined)
+		expect(lexer.test([indent])).eql(undefined)
+		expect(lexer.test([deindent])).eql(undefined)
+		expect(lexer.test([indent_continue])).eql(undefined)
+		expect(lexer.test([raw_block_begin])).eql(undefined)
+		expect(lexer.test([raw_block_content])).eql(undefined)
+		expect(lexer.test([raw_block_end])).eql(undefined)
 
 		expect(() => lexer.exit()).not.throw()
 	})
