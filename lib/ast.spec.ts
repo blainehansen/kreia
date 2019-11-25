@@ -2,27 +2,27 @@ import 'mocha'
 import { expect } from 'chai'
 import { OrderedDict } from '@ts-std/collections'
 
-import { Token } from './lexer'
+import { UserToken } from './lexer'
 import { path, branch } from './decision'
 import { compute_decidable } from './decision_compute'
 import {
 	register_tokens, register_rules, register_macros,
-	resolve_macro, check_left_recursive, validate_references,
+	resolve_macro, resolve_rule, check_left_recursive, validate_references,
 	render_grammar,
-	Rule, Macro, MacroCall, Subrule, Arg, Var, Node, Definition, Maybe, Many, Or, Consume,
+	Rule, Macro, MacroCall, Subrule, Arg, Var, Node, Definition, Maybe, Many, Or, Consume, LockingVar, LockingArg
 } from './ast'
 
 
 import { log } from './utils'
 
-const _A = Token('A', 'A')
-const _B = Token('B', 'B')
-const _C = Token('C', 'C')
-const _D = Token('D', 'D')
-const _E = Token('E', 'E')
-const _F = Token('F', 'F')
-const _G = Token('G', 'G')
-const _H = Token('H', 'H')
+const _A = UserToken('A', 'A')
+const _B = UserToken('B', 'B')
+const _C = UserToken('C', 'C')
+const _D = UserToken('D', 'D')
+const _E = UserToken('E', 'E')
+const _F = UserToken('F', 'F')
+const _G = UserToken('G', 'G')
+const _H = UserToken('H', 'H')
 
 register_tokens([_A, _B, _C, _D, _E, _F, _G, _H])
 
@@ -314,6 +314,22 @@ describe('resolve_macro', () => {
 	})
 })
 
+describe('resolve_rule', () => {
+	it('works', () => {
+		register_rules([
+			Rule(
+				'one',
+				[LockingVar('sigil'), Many([Consume(['B']), LockingVar('sigil')])],
+				OrderedDict.create_unique<LockingArg>('name', [LockingArg('sigil', 'A')],).expect(''),
+			),
+		])
+
+		expect(resolve_rule('one')).eql(
+			[Consume(['A']), Many([Consume(['B']), Consume(['A'])])],
+		)
+	})
+})
+
 
 describe('check_left_recursive', () => {
 	function expect_left(left: boolean, ...rules: Rule[]) {
@@ -489,7 +505,7 @@ describe('render_grammar', () => {
 	it('works', () => {
 		render_grammar([
 			_A, _B, _C, _D, _E, _F, _G, _H,
-			Rule(),
+			Rule('something', [] as Definition),
 		])
 	})
 })

@@ -53,188 +53,188 @@
 // and a sample version of the userland code for the json example
 
 
-type Func = () => any
-type ParseFunction<F extends Func> = F & { __lookahead: LookaheadPath }
+// type Func = () => any
+// type ParseFunction<F extends Func> = F & { __lookahead: LookaheadPath }
 
-class LookaheadPath {
-	constructor(readonly a: number) {}
-}
+// class LookaheadPath {
+// 	constructor(readonly a: number) {}
+// }
 
-function random_bool() { return Math.random() > 0.5 }
+// function random_bool() { return Math.random() > 0.5 }
 
-type Lexer = { [tokenName: string]: BaseTokenDefinition }
-type TokenManifest<L extends Lexer> = { [K in keyof L]: { name: K } & L[T] }
+// type Lexer = { [tokenName: string]: BaseTokenDefinition }
+// type TokenManifest<L extends Lexer> = { [K in keyof L]: { name: K } & L[T] }
 
-type BaseTokenDefinition = { regex: number }
-// type TokenDefinition<L extends Lexer> = { name: keyof L, regex: RegExp }
-type TokenDefinition<L extends Lexer, K extends keyof L> = { name: keyof L, regex: number }
-type Token<L extends Lexer, K extends keyof L> = { name: K, value: string }
+// type BaseTokenDefinition = { regex: number }
+// // type TokenDefinition<L extends Lexer> = { name: keyof L, regex: RegExp }
+// type TokenDefinition<L extends Lexer, K extends keyof L> = { name: keyof L, regex: number }
+// type Token<L extends Lexer, K extends keyof L> = { name: K, value: string }
 
-type TokenDefinitionTuple<L extends Lexer, T extends any[]> = { [K in keyof T]: TokenDefinition<L> }
-type TokenTuple<L extends Lexer, T extends any[]> = { [K in keyof T]: Token<L> }
+// type TokenDefinitionTuple<L extends Lexer, T extends any[]> = { [K in keyof T]: TokenDefinition<L> }
+// type TokenTuple<L extends Lexer, T extends any[]> = { [K in keyof T]: Token<L> }
 
-type ParseObject<F extends Func> = { f: F, l: LookaheadPath }
+// type ParseObject<F extends Func> = { f: F, l: LookaheadPath }
 
-type ParseEntity<F extends Func> = ParseFunction<F> | ParseObject<F>
+// type ParseEntity<F extends Func> = ParseFunction<F> | ParseObject<F>
 
-type BothEntity<F extends Func, L extends Lexer, A extends any[]> =
-	ParseEntity<F>
-	| TokenDefinitionTuple<L, A>
-
-
-type BothEntityTuple<L extends Lexer, A extends any[]> = {
-	[K in keyof A]:
-		A[K] extends any[] ? TokenDefinitionTuple<L, A[K]>
-		: A[K] extends Func ? ParseFunction<A[K]>
-		: A[K] extends ParseObject<infer R> ? ParseObject<R>
-		: never
-}
-
-type UnionReturnBothEntityTuple<L extends Lexer, A extends any[]> = {
-	[K in keyof A]:
-		A[K] extends any[] ? TokenTuple<L, A[K]>
-		: A[K] extends Func ? ReturnType<A[K]>
-		: A[K] extends ParseObject<infer R> ? ReturnType<R>
-		: never
-}[number]
+// type BothEntity<F extends Func, L extends Lexer, A extends any[]> =
+// 	ParseEntity<F>
+// 	| TokenDefinitionTuple<L, A>
 
 
-function entity_is_function<F extends Func>(entity: ParseEntity<F>): entity is ParseFunction<F> {
-	return typeof entity === 'function'
-}
+// type BothEntityTuple<L extends Lexer, A extends any[]> = {
+// 	[K in keyof A]:
+// 		A[K] extends any[] ? TokenDefinitionTuple<L, A[K]>
+// 		: A[K] extends Func ? ParseFunction<A[K]>
+// 		: A[K] extends ParseObject<infer R> ? ParseObject<R>
+// 		: never
+// }
 
-function act_on_entity<F extends Func, L extends Lexer, A extends any[]>(entity: BothEntity<F, L, A>): ReturnType<F> | TokenTuple<L, A> {
-	if (Array.isArray(entity))
-		return entity.map(token_definition => ({
-			name: token_definition.name,
-			value: '' + token_definition.regex,
-		})) as TokenTuple<L, A>
-
-	else if (entity_is_function(entity)) return entity()
-
-	return entity.f()
-}
-
-function or<L extends Lexer, A extends any[]>(...entities: BothEntityTuple<L, A>): UnionReturnBothEntityTuple<L, A> | undefined {
-	for (const entity of entities) {
-		if (random_bool()) {
-			return act_on_entity(entity)
-		}
-	}
-	return undefined
-}
+// type UnionReturnBothEntityTuple<L extends Lexer, A extends any[]> = {
+// 	[K in keyof A]:
+// 		A[K] extends any[] ? TokenTuple<L, A[K]>
+// 		: A[K] extends Func ? ReturnType<A[K]>
+// 		: A[K] extends ParseObject<infer R> ? ReturnType<R>
+// 		: never
+// }[number]
 
 
-function one() {
-	return 5
-}
-one.__lookahead = new LookaheadPath(6)
+// function entity_is_function<F extends Func>(entity: ParseEntity<F>): entity is ParseFunction<F> {
+// 	return typeof entity === 'function'
+// }
 
-const results: string | number | undefined = or(
-	one,
-	{ l: new LookaheadPath(2), f: () => 'string' },
-)
+// function act_on_entity<F extends Func, L extends Lexer, A extends any[]>(entity: BothEntity<F, L, A>): ReturnType<F> | TokenTuple<L, A> {
+// 	if (Array.isArray(entity))
+// 		return entity.map(token_definition => ({
+// 			name: token_definition.name,
+// 			value: '' + token_definition.regex,
+// 		})) as TokenTuple<L, A>
+
+// 	else if (entity_is_function(entity)) return entity()
+
+// 	return entity.f()
+// }
+
+// function or<L extends Lexer, A extends any[]>(...entities: BothEntityTuple<L, A>): UnionReturnBothEntityTuple<L, A> | undefined {
+// 	for (const entity of entities) {
+// 		if (random_bool()) {
+// 			return act_on_entity(entity)
+// 		}
+// 	}
+// 	return undefined
+// }
 
 
+// function one() {
+// 	return 5
+// }
+// one.__lookahead = new LookaheadPath(6)
 
-
-
-function maybe<F extends Func>(entity: ParseEntity<F>): ReturnType<F> | undefined {
-	if (entity_is_function(entity)) {
-		console.log(entity.__lookahead)
-		return entity()
-	}
-	console.log(entity.l.a)
-	return entity.f()
-}
-
-
-
-function json_entity() {
-	kreia.or(
-		array,
-		object,
-		atomic_entity,
-	)
-}
-
-function separated_by_commas(rule: ParseFunction) {
-	kreia.maybe({ l: __separated_by_commas__branch_1, f() {
-		rule()
-		kreia.maybe_many({ l: __separated_by_commas__branch__1__1, f() {
-			kreia.consume(tokens.Comma)
-			rule()
-		}})
-	}})
-}
-
-function atomic_entity() {
-	kreia.or(
-		[tokens.Str],
-		[tokens.Num],
-		[tokens.Primitive],
-	)
-}
-
-json_entity.__lookahead_path = new Something()
+// const results: string | number | undefined = or(
+// 	one,
+// 	{ l: new LookaheadPath(2), f: () => 'string' },
+// )
 
 
 
 
 
-class Parser<L extends Lexer> {
-	private source: string = ''
-	constructor(readonly lexer: L) {}
+// function maybe<F extends Func>(entity: ParseEntity<F>): ReturnType<F> | undefined {
+// 	if (entity_is_function(entity)) {
+// 		console.log(entity.__lookahead)
+// 		return entity()
+// 	}
+// 	console.log(entity.l.a)
+// 	return entity.f()
+// }
 
-	reset(source: string) {
-		this.source = source
-	}
 
-	private _test<A extends any[]>(
-		toks: TokenDefinitionTuple<L, A>,
-	): TokenTuple<L, A> | string {
-		let source = this.source
 
-		// let consumed_length = 0
-		const output_tokens = [] as TokenTuple<L, A>
+// function json_entity() {
+// 	kreia.or(
+// 		array,
+// 		object,
+// 		atomic_entity,
+// 	)
+// }
 
-		// const anywhere_tokens = this.anywhere_tokens.slice()
+// function separated_by_commas(rule: ParseFunction) {
+// 	kreia.maybe({ l: __separated_by_commas__branch_1, f() {
+// 		rule()
+// 		kreia.maybe_many({ l: __separated_by_commas__branch__1__1, f() {
+// 			kreia.consume(tokens.Comma)
+// 			rule()
+// 		}})
+// 	}})
+// }
 
-		for (const token_definition of toks) {
-			// for (const tester of anywhere_tokens.concat([token_definition]))
-			// const match = tester.match(token_definition.regex)
+// function atomic_entity() {
+// 	kreia.or(
+// 		[tokens.Str],
+// 		[tokens.Num],
+// 		[tokens.Primitive],
+// 	)
+// }
 
-			// assume that token_definition has `^` at it's beginning
-			const match = source.match(token_definition.regex)
-			if (match === null) return source.slice(0, 15)
-				// this should try all anywhere_tokens in this case before failing
+// json_entity.__lookahead_path = new Something()
 
-			const text = match[0]
-			// output_tokens.push({ name: token_definition.name, text })
-			const length = text.length
-			source = source.slice(length)
-			// consumed_length += length
-		}
 
-		// this.source = source.slice(consumed_length)
 
-		// return output_tokens
-		return true
-	}
 
-	consume<A extends any[]>(...toks: TokenDefinitionTuple<L, A>): TokenTuple<L, A> {
-		const tokens = this._test(toks)
-		if (typeof tokens === 'string')
-			throw new ParseError(toks, tokens)
 
-		return tokens
-	}
+// class Parser<L extends Lexer> {
+// 	private source: string = ''
+// 	constructor(readonly lexer: L) {}
 
-	maybe_consume<A extends any[]>(...toks: TokenDefinitionTuple<L, A>): TokenTuple<L, A> | undefined {
-		const tokens = this._test(toks)
-		return typeof tokens !== 'string'
-			? tokens
-			: undefined
-	}
-}
+// 	reset(source: string) {
+// 		this.source = source
+// 	}
+
+// 	private _test<A extends any[]>(
+// 		toks: TokenDefinitionTuple<L, A>,
+// 	): TokenTuple<L, A> | string {
+// 		let source = this.source
+
+// 		// let consumed_length = 0
+// 		const output_tokens = [] as TokenTuple<L, A>
+
+// 		// const anywhere_tokens = this.anywhere_tokens.slice()
+
+// 		for (const token_definition of toks) {
+// 			// for (const tester of anywhere_tokens.concat([token_definition]))
+// 			// const match = tester.match(token_definition.regex)
+
+// 			// assume that token_definition has `^` at it's beginning
+// 			const match = source.match(token_definition.regex)
+// 			if (match === null) return source.slice(0, 15)
+// 				// this should try all anywhere_tokens in this case before failing
+
+// 			const text = match[0]
+// 			// output_tokens.push({ name: token_definition.name, text })
+// 			const length = text.length
+// 			source = source.slice(length)
+// 			// consumed_length += length
+// 		}
+
+// 		// this.source = source.slice(consumed_length)
+
+// 		// return output_tokens
+// 		return true
+// 	}
+
+// 	consume<A extends any[]>(...toks: TokenDefinitionTuple<L, A>): TokenTuple<L, A> {
+// 		const tokens = this._test(toks)
+// 		if (typeof tokens === 'string')
+// 			throw new ParseError(toks, tokens)
+
+// 		return tokens
+// 	}
+
+// 	maybe_consume<A extends any[]>(...toks: TokenDefinitionTuple<L, A>): TokenTuple<L, A> | undefined {
+// 		const tokens = this._test(toks)
+// 		return typeof tokens !== 'string'
+// 			? tokens
+// 			: undefined
+// 	}
+// }
 

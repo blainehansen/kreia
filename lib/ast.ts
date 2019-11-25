@@ -1,7 +1,5 @@
 import { Dict } from '@ts-std/types'
 import '@ts-std/extensions/dist/array'
-import { Enum, empty, variant } from '@ts-std/enum'
-// import { Result, Ok, Err } from '@ts-std/monads'
 import '@ts-std/collections/dist/impl.Hashable.string'
 import { OrderedDict, UniqueDict, HashSet } from '@ts-std/collections'
 
@@ -10,30 +8,9 @@ import { TokenDefinition } from './lexer'
 import { Data, exhaustive } from './utils'
 
 
-
-export const VirtualLexerDirective = Data((virtual_lexer_name: string, destructure: (Token | Subrule)[]) => {
-	return { type: 'VirtualLexerDirective' as const,  }
-})
-
-
-
-// export const LexerState = Data((state_name: string) => {
-// 	return { type: 'LexerState' as const, state_name }
+// export const VirtualLexerDirective = Data((virtual_lexer_name: string, destructure: (Token | Subrule)[]) => {
+// 	return { type: 'VirtualLexerDirective' as const,  }
 // })
-// export type LexerState = ReturnType<typeof LexerState>
-
-// const StateTransform = Enum({
-// 	Push: variant<LexerState>(),
-// 	Pop: empty(),
-// })
-// type StateTransform = Enum<typeof StateTransform> | undefined
-
-// export const Token = Data((
-// 	name: string, spec: string | string[],
-// 	options: { ignore?: true, state_transform?: StateTransform },
-// ) => {
-// 	//
-})
 
 
 export const Arg = Data((name: string) => {
@@ -47,29 +24,24 @@ export const Var = Data((arg_name: string): Node => {
 export type Var = Readonly<{ type: 'Var', arg_name: string }>
 
 
-export const Rule = Data((name: string, definition: Definition) => {
-	return { type: 'Rule' as const, name, definition, is_locking: false as const }
+export const LockingArg = Data((name: string, token_name: string) => {
+	return { type: 'LockingArg' as const, name, token_name }
 })
+export type LockingArg = ReturnType<typeof LockingArg>
 
-// export const LockingArg = Data((name: string, definition: Definition) => {
-// 	return { type: 'LockingArg' as const, name, definition }
-// })
-// export type LockingArg = ReturnType<typeof LockingArg>
+export const LockingVar = Data((locking_arg_name: string) => {
+	return { type: 'LockingVar' as const, locking_arg_name }
+})
+export type LockingVar = ReturnType<typeof LockingVar>
 
-// export const LockingVar = Data((name: string) => {
-// 	return { type: 'LockingVar' as const, name }
-// })
-// export type LockingVar = Readonly<{ type: 'LockingVar', name: string }>
-
-// export const LockingRule = Data((name: string, lockers: LockingArg[], definition: Definition) => {
-// 	return { type: 'Rule' as const, name, definition, is_locking: true as const, lockers }
-// })
-// export type Rule = ReturnType<typeof Rule> | ReturnType<typeof LockingRule>
+export const Rule = Data((name: string, definition: Definition, locking_args?: OrderedDict<LockingArg>) => {
+	return { type: 'Rule' as const, name, definition, locking_args }
+})
 export type Rule = ReturnType<typeof Rule>
 
 
-export const Macro = Data((name: string, args: OrderedDict<Arg>, definition: Definition) => {
-	return { type: 'Macro' as const, name, args, definition }
+export const Macro = Data((name: string, args: OrderedDict<Arg>, definition: Definition, locking_args?: OrderedDict<LockingArg>) => {
+	return { type: 'Macro' as const, name, args, definition, locking_args }
 })
 export type Macro = ReturnType<typeof Macro>
 
@@ -112,7 +84,7 @@ export type Node =
 	| Subrule
 	| MacroCall
 	| Var
-	// | LockingVar
+	| LockingVar
 
 export interface Definition extends Array<Node> {}
 
@@ -138,30 +110,42 @@ export function register_macros(macros: Macro[]) {
 	registered_macros = macros.unique_index_by('name').expect('')
 }
 
+const empty_ordered_dict = OrderedDict.create<any>(t => '', [])
+export function resolve_rule(rule_name: string) {
+	const rule = registered_rules[rule_name]!
+	return _resolve(empty_ordered_dict, rule.locking_args || empty_ordered_dict, rule.definition)
+}
+
 export function resolve_macro(macro_name: string, args: OrderedDict<Definition>) {
 	const macro = registered_macros[macro_name]!
-	return _resolve_macro(args, macro.definition)
+	return _resolve(args, macro.locking_args || empty_ordered_dict, macro.definition)
 }
-function _resolve_macro(args: OrderedDict<Definition>, definition: Definition) {
+function _resolve(
+	args: OrderedDict<Definition>,
+	locking_args: OrderedDict<LockingArg>,
+	definition: Definition,
+) {
 	const resolved = [] as Definition
 	for (const node of definition) switch (node.type) {
 	case 'Var':
-		const arg_def = args.get_by_name(node.arg_name).to_undef()
-		if (arg_def === undefined)
-			throw new Error(`invalid arg: ${node.arg_name}`)
+		const arg_def = args.get_by_name(node.arg_name).to_undef()!
 		resolved.push_all(arg_def)
 		continue
+	case 'LockingVar':
+		const locking_arg_def = locking_args.get_by_name(node.locking_arg_name).to_undef()!
+		resolved.push(Consume([locking_arg_def.token_name]))
+		continue
 	case 'Or':
-		resolved.push(Or(node.choices.map(choice => _resolve_macro(args, choice))))
+		resolved.push(Or(node.choices.map(choice => _resolve(args, locking_args, choice))))
 		continue
 	case 'Maybe':
-		resolved.push(Maybe(_resolve_macro(args, node.definition)))
+		resolved.push(Maybe(_resolve(args, locking_args, node.definition)))
 		continue
 	case 'Many':
-		resolved.push(Many(_resolve_macro(args, node.definition)))
+		resolved.push(Many(_resolve(args, locking_args, node.definition)))
 		continue
 	case 'MacroCall':
-		const new_args = node.args.map(arg_def => _resolve_macro(args, arg_def))
+		const new_args = node.args.map(arg_def => _resolve(args, locking_args, arg_def))
 		resolved.push(MacroCall(node.macro_name, new_args))
 		continue
 	// Consume, Subrule
@@ -223,6 +207,9 @@ function _check_left_recursive(
 
 	case 'Var':
 		continue
+	case 'LockingVar':
+		continue
+
 	default: return exhaustive(node)
 	}
 
@@ -283,6 +270,21 @@ export function validate_references(thing: Rule | Macro) {
 			validation_errors.push(`variable ${node.arg_name} is invalid in this macro`)
 		continue
 
+	case 'LockingVar':
+		if (thing.locking_args === undefined) {
+			validation_errors.push(`unexpected locking variable: ${node}`)
+			continue
+		}
+
+		const locking_arg = thing.locking_args.get_by_name(node.locking_arg_name)
+		if (locking_arg.is_none()) {
+			validation_errors.push(`locking variable ${node.locking_arg_name} is invalid in this rule`)
+			continue
+		}
+		if(!(locking_arg.value.token_name in registered_tokens))
+			validation_errors.push(`Token ${locking_arg.value.token_name} couldn't be found.`)
+		continue
+
 	default: return exhaustive(node)
 	}
 
@@ -335,57 +337,57 @@ export function render_grammar(grammar: Grammar) {
 	if (left_recursive_rules.length > 0)
 		throw new Error(`There are left recursive rules: ${left_recursive_rules.join('\n\n')}`)
 
-	const rendered_tokens = token_definitions.values().map(token_definition => {
-		return ts.createExpressionStatement(
-			ts.createCall(ts.createIdentifier('Token'), undefined, [
-				ts.createStringLiteral(token_definition.name),
-				// ts.createRegularExpressionLiteral('/\\s+/'),
-				ts.createRegularExpressionLiteral(token_definition.regex.source),
-				ts.createObjectLiteral(
-					[
-						ts.createPropertyAssignment(
-							ts.createIdentifier('ignore'),
-							ts.createTrue(),
-						),
-					],
-					false,
-				),
-			]),
-		)
-	})
+	// const rendered_tokens = token_definitions.values().map(token_definition => {
+	// 	return ts.createExpressionStatement(
+	// 		ts.createCall(ts.createIdentifier('Token'), undefined, [
+	// 			ts.createStringLiteral(token_definition.name),
+	// 			// ts.createRegularExpressionLiteral('/\\s+/'),
+	// 			ts.createRegularExpressionLiteral(token_definition.regex.source),
+	// 			ts.createObjectLiteral(
+	// 				[
+	// 					ts.createPropertyAssignment(
+	// 						ts.createIdentifier('ignore'),
+	// 						ts.createTrue(),
+	// 					),
+	// 				],
+	// 				false,
+	// 			),
+	// 		]),
+	// 	)
+	// })
 
-	const rendered_macros = macros.values.map(macro => {
-		// the macro arguments are always going to be represented at runtime as ParseEntity
-		return ts.createFunctionDeclaration(
-			undefined, undefined, undefined,
-			// function name
-			ts.createIdentifier(macro.name),
-			// generics
-			macro.args.map(arg => ts.createTypeParameterDeclaration(
-				ts.createIdentifier(arg.name.toUpperCase()),
-				ts.createTypeReferenceNode(ts.createIdentifier('ParseEntity'), undefined), undefined,
-			)),
-			// actual args
-			macro.args.map(arg => ts.createParameter(
-				undefined, undefined, undefined,
-				ts.createIdentifier(arg.name), undefined,
-				ts.createTypeReferenceNode(ts.createIdentifier(arg.name.toUpperCase()), undefined), undefined,
-			)),
-			undefined,
-			// render_definition has to return ts.createExpressionStatement[]
-			ts.createBlock(render_definition(macro.definition), true),
-		)
-	})
+	// const rendered_macros = macros.values.map(macro => {
+	// 	// the macro arguments are always going to be represented at runtime as ParseEntity
+	// 	return ts.createFunctionDeclaration(
+	// 		undefined, undefined, undefined,
+	// 		// function name
+	// 		ts.createIdentifier(macro.name),
+	// 		// generics
+	// 		macro.args.map(arg => ts.createTypeParameterDeclaration(
+	// 			ts.createIdentifier(arg.name.toUpperCase()),
+	// 			ts.createTypeReferenceNode(ts.createIdentifier('ParseEntity'), undefined), undefined,
+	// 		)),
+	// 		// actual args
+	// 		macro.args.map(arg => ts.createParameter(
+	// 			undefined, undefined, undefined,
+	// 			ts.createIdentifier(arg.name), undefined,
+	// 			ts.createTypeReferenceNode(ts.createIdentifier(arg.name.toUpperCase()), undefined), undefined,
+	// 		)),
+	// 		undefined,
+	// 		// render_definition has to return ts.createExpressionStatement[]
+	// 		ts.createBlock(render_definition(macro.definition), true),
+	// 	)
+	// })
 
-	const rendered_rules = rules.values.map(rule => {
-		// rules are always just functions that at least initially take no parameters
-		return ts.createFunctionDeclaration(
-			undefined, undefined, undefined,
-			ts.createIdentifier(rule.name),
-			[], [], undefined,
-			ts.createBlock(render_definition(rule.definition), true),
-		)
-	})
+	// const rendered_rules = rules.values.map(rule => {
+	// 	// rules are always just functions that at least initially take no parameters
+	// 	return ts.createFunctionDeclaration(
+	// 		undefined, undefined, undefined,
+	// 		ts.createIdentifier(rule.name),
+	// 		[], [], undefined,
+	// 		ts.createBlock(render_definition(rule.definition), true),
+	// 	)
+	// })
 }
 
 

@@ -5,7 +5,7 @@ import { PathBuilder } from './decision'
 import { TokenDefinition } from './lexer'
 import { Data, exhaustive, IterWrapper } from './utils'
 import {
-	registered_tokens, registered_rules, registered_macros, resolve_macro,
+	registered_tokens, registered_rules, resolve_rule, resolve_macro,
 	Arg, Var, Rule, Macro, Subrule, Maybe, Many, Or, MacroCall, Consume, Node, Definition,
 } from './ast'
 
@@ -28,15 +28,17 @@ function gather_branches(current: Definition[], next: Definition) {
 		branches.push(node.definition)
 		break
 	case 'Subrule':
-		const rule = registered_rules[node.rule_name]!
-		branches.push(rule.definition)
+		const rule_definition = resolve_rule(node.rule_name)
+		branches.push(rule_definition)
 		break
 	case 'MacroCall':
-		const resolved = resolve_macro(node.macro_name, node.args)
-		branches.push(resolved)
+		const call_definition = resolve_macro(node.macro_name, node.args)
+		branches.push(call_definition)
 		break
 	case 'Var':
-		throw new Error(`unexpected variable: ${node}`)
+		throw new Error(`unexpected Var: ${node}`)
+	case 'LockingVar':
+		throw new Error(`unexpected LockingVar: ${node}`)
 	default: return exhaustive(node)
 	}
 
@@ -74,8 +76,8 @@ function* iterate_definition(definition: Definition): Generator<AstIterItem, voi
 		yield* node.token_names.map(token_name => registered_tokens[token_name]!)
 		continue
 	case 'Subrule':
-		const rule = registered_rules[node.rule_name]!
-		yield* iterate_definition(rule.definition)
+		const rule_definition = resolve_rule(node.rule_name)
+		yield* iterate_definition(rule_definition)
 		continue
 	case 'MacroCall':
 		const call_definition = resolve_macro(node.macro_name, node.args)
@@ -83,6 +85,8 @@ function* iterate_definition(definition: Definition): Generator<AstIterItem, voi
 		continue
 	case 'Var':
 		throw new Error(`unexpected Var ${node}`)
+	case 'LockingVar':
+		throw new Error(`unexpected LockingVar ${node}`)
 	default: return exhaustive(node)
 	}
 }

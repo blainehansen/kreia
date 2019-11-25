@@ -1,6 +1,5 @@
 import '@ts-std/extensions/dist/array'
 import { Dict, tuple as t } from '@ts-std/types'
-import { Enum, empty, variant } from '@ts-std/enum'
 
 
 export type UserRawTokenDefinition = {
@@ -18,12 +17,6 @@ export type HiddenTokenDefinition =
 	Pick<UserRawTokenDefinition, 'name' | 'regex' | 'is_virtual'>
 	& { ignore: true }
 
-// export type VirtualTokenDefinition = {
-// 	type: 'Token',
-// 	name: string,
-// 	virtual_lexer_name: string,
-// 	is_virtual: true,
-// }
 export type EmptyVirtualTokenDefinition = {
 	type: 'Token',
 	name: string,

@@ -122,17 +122,24 @@ expression =
 		%strend
 
 
-postgres_string<$sigil = %ident> =
-	%dollar $sigil %dollar
+@customizable_postgres_string<%%sigil = %ident>[$open, $close] =
+	$open %%sigil $close
+	*
+		| %escape $open
+		| %any
+	$open %%sigil $close
+
+postgres_string<%%sigil = %ident> =
+	%dollar %%sigil %dollar
 	*
 		| %not_dollar
 		| %escape $dollar
-	%dollar $sigil %dollar
+	%dollar %%sigil %dollar
 
 
-html_tag<$tag_name = %html_tag_ident> =
-	%open_angle $tag_name (%ident %eq string)*
+html_tag<%%tag_name = %html_tag_ident> =
+	%open_angle %%tag_name (%ident %eq string)*
 
 	| %slash %close_angle
-	| %close_angle (text | html_tag)* %open_angle $tag_name %slash %close_angle
+	| %close_angle (text | html_tag)* %open_angle %%tag_name %slash %close_angle
 
