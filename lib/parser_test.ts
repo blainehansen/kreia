@@ -11,29 +11,23 @@ const source = `
 	(1, (2, 3, 4), (((), nil)))
 `
 
-const tok = {
-	LeftParen: UserToken('LeftParen', '('),
-	RightParen: UserToken('RightParen', ')'),
-	Num: UserToken('Num', /[0-9]+/),
-	Nil: UserToken('Nil', 'nil'),
-	Comma: UserToken('Comma', ','),
-	Whitespace: UserToken('Whitespace', { match: /\s+/, ignore: true }),
-}
+const LeftParen = UserToken('LeftParen', '(')
+const RightParen = UserToken('RightParen', ')')
+const Num = UserToken('Num', /[0-9]+/)
+const Nil = UserToken('Nil', 'nil')
+const Comma = UserToken('Comma', ',')
+const Whitespace = UserToken('Whitespace', { match: /\s+/, ignore: true })
 
 const {
 	reset,
-	consume,
-	maybe,
-	or,
-	maybe_or,
-	many,
-	maybe_many,
-	many_separated,
-	maybe_many_separated,
-} = Parser({}, [tok.Whitespace], source)
+	consume, maybe,
+	or, maybe_or,
+	many, maybe_many,
+	many_separated, maybe_many_separated,
+} = Parser({}, [Whitespace], source)
 
-const _0 = path([tok.LeftParen])
-const _1 = branch(path([tok.Num]), path([tok.Nil]))
+const _0 = path([LeftParen])
+const _1 = branch(path([Num]), path([Nil]))
 const _2 = branch(_0, path(_1))
 
 function lists() {
@@ -41,9 +35,9 @@ function lists() {
 }
 
 function parenthesized_number_list() {
-	consume(tok.LeftParen)
+	consume(LeftParen)
 	const list = maybe(number_list, _2)
-	consume(tok.RightParen)
+	consume(RightParen)
 	return list
 }
 
@@ -53,11 +47,11 @@ function number_list() {
 		f(() => or(
 			f(parenthesized_number_list, _0),
 			f(() => or(
-				t(tok.Num),
-				t(tok.Nil),
+				t(Num),
+				t(Nil),
 			), _1),
 		), _0),
-		t(tok.Comma),
+		t(Comma),
 	)
 }
 
@@ -96,17 +90,17 @@ log(lists())
 // 	maybe_many,
 // 	many_separated,
 // 	maybe_many_separated,
-// } = Parser({}, [tok.Whitespace], source)
+// } = Parser({}, [Whitespace], source)
 
 // function postgres_string() {
-// 	const sigil = lock(tok.Ident)
-// 	consume(tok.Dollar)
+// 	const sigil = lock(Ident)
+// 	consume(Dollar)
 // 	const s = sigil()
-// 	consume(tok.Dollar)
-// 	const idents = maybe_many(tok.Ident) || []
-// 	consume(tok.Dollar)
+// 	consume(Dollar)
+// 	const idents = maybe_many(Ident) || []
+// 	consume(Dollar)
 // 	sigil()
-// 	consume(tok.Dollar)
+// 	consume(Dollar)
 
 // 	return t(s, idents)
 // }

@@ -1,10 +1,13 @@
-import { Dict } from '@ts-std/types'
+import { Dict, tuple as t } from '@ts-std/types'
 import '@ts-std/extensions/dist/array'
 import '@ts-std/collections/dist/impl.Hashable.string'
 import { OrderedDict, UniqueDict, HashSet } from '@ts-std/collections'
 
 import { TokenOptions } from './lexer'
 import { Data, exhaustive } from './utils'
+
+import { AstDecidable } from './decision'
+import { gather_branches, compute_decidable } from './decision_compute'
 
 
 // export const VirtualLexerDirective = Data((virtual_lexer_name: string, destructure: (Token | Subrule)[]) => {
@@ -353,41 +356,11 @@ export function render_grammar(grammar: Grammar) {
 	if (left_recursive_rules.length > 0)
 		throw new Error(`There are left recursive rules: ${left_recursive_rules.join('\n\n')}`)
 
-	const rendered_tokens = render_token_defs(token_defs.values())
-
-	// const rendered_macros = macros.values.map(macro => {
-	// 	// the macro arguments are always going to be represented at runtime as ParseEntity
-	// 	return ts.createFunctionDeclaration(
-	// 		undefined, undefined, undefined,
-	// 		// function name
-	// 		ts.createIdentifier(macro.name),
-	// 		// generics
-	// 		macro.args.map(arg => ts.createTypeParameterDeclaration(
-	// 			ts.createIdentifier(arg.name.toUpperCase()),
-	// 			ts.createTypeReferenceNode(ts.createIdentifier('ParseEntity'), undefined), undefined,
-	// 		)),
-	// 		// actual args
-	// 		macro.args.map(arg => ts.createParameter(
-	// 			undefined, undefined, undefined,
-	// 			ts.createIdentifier(arg.name), undefined,
-	// 			ts.createTypeReferenceNode(ts.createIdentifier(arg.name.toUpperCase()), undefined), undefined,
-	// 		)),
-	// 		undefined,
-	// 		// render_definition has to return ts.createExpressionStatement[]
-	// 		ts.createBlock(render_definition(macro.definition), true),
-	// 	)
-	// })
-
-	// const rendered_rules = rules.values.map(rule => {
-	// 	// rules are always just functions that at least initially take no parameters
-	// 	return ts.createFunctionDeclaration(
-	// 		undefined, undefined, undefined,
-	// 		ts.createIdentifier(rule.name),
-	// 		[], [], undefined,
-	// 		ts.createBlock(render_definition(rule.definition), true),
-	// 	)
-	// })
+	const rendered_tokens = token_defs.values().map(token_def => render_token_def(token_def))
+	const rendered_macros = macros.values().map(macro => render_macro(macro))
+	const rendered_rules = rules.values().map(rule => render_rule(rule))
 }
+
 
 function render_regex_spec(regex_spec: RegexSpec) {
 	switch (regex_spec.type) {
@@ -423,22 +396,72 @@ function render_token_def(token_def: TokenDef) {
 			))
 
 		const body = ts.createObjectLiteral(assigments, false)
-		return ts.createPropertyAssignment(ts.createIdentifier(token_def.name), body)
+		return wrap_token_def(token_def.name, body)
 	}
 	default:
 		const body = render_match_spec(token_def.def)
-		return ts.createPropertyAssignment(ts.createIdentifier(token_def.name), body)
+		return wrap_token_def(token_def.name, body)
 	}
 }
 
-function render_token_defs(token_defs: TokenDef[]) {
+function wrap_token_def(name: string, expression: ts.Expression) {
+	return ts.createVariableStatement(
+		undefined, ts.createVariableDeclarationList([
+			ts.createVariableDeclaration(
+				ts.createIdentifier(name), undefined,
+				ts.createCall(ts.createIdentifier('Token'), undefined, [
+					ts.createStringLiteral(name),
+					expression,
+				]),
+			)], ts.NodeFlags.Const,
+		),
+	)
+}
+
+
+function render_macro(macro: Macro) {
+	// the macro arguments are always going to be represented at runtime as ParseEntity
+	const lockers = (macro.locking_args !== undefined ? macro.locking_args.values() : []).map(render_locking_arg)
+	return ts.createFunctionDeclaration(
+		undefined, undefined, undefined,
+		// function name
+		ts.createIdentifier(macro.name),
+		// generics
+		macro.args.values().map(arg => ts.createTypeParameterDeclaration(
+			ts.createIdentifier(arg.name.toUpperCase()),
+			ts.createTypeReferenceNode(ts.createIdentifier('ParseEntity'), undefined), undefined,
+		)),
+		// actual args
+		macro.args.values().map(arg => ts.createParameter(
+			undefined, undefined, undefined,
+			ts.createIdentifier(arg.name), undefined,
+			ts.createTypeReferenceNode(ts.createIdentifier(arg.name.toUpperCase()), undefined), undefined,
+		)),
+		undefined,
+		// render_definition has to return ts.createExpressionStatement[]
+		ts.createBlock([...lockers, ...render_definition(macro.definition as Definition)], true),
+	)
+}
+
+function render_rule(rule: Rule) {
+	// rules are always just functions that at least initially take no parameters
+	const lockers = (rule.locking_args !== undefined ? rule.locking_args.values() : []).map(render_locking_arg)
+	return ts.createFunctionDeclaration(
+		undefined, undefined, undefined,
+		ts.createIdentifier(rule.name),
+		[], [], undefined,
+		ts.createBlock([...lockers, ...render_definition(rule.definition)], true),
+	)
+}
+
+function render_locking_arg(arg: LockingArg) {
 	return ts.createVariableStatement(
 		undefined,
 		ts.createVariableDeclarationList([
 			ts.createVariableDeclaration(
-				ts.createIdentifier('tok'), undefined,
-				ts.createCall(ts.createIdentifier('Tokens'), undefined, [
-					ts.createObjectLiteral(token_defs.map(render_token_def), false),
+				ts.createIdentifier(arg.name), undefined,
+				ts.createCall(ts.createIdentifier('lock'), undefined, [
+					ts.createIdentifier(arg.token_name),
 				]),
 			),
 		], ts.NodeFlags.Const),
@@ -447,163 +470,178 @@ function render_token_defs(token_defs: TokenDef[]) {
 
 
 
+function render_definition(definition: Definition) {
+	// each node in a definition needs to simply be createExpressionStatement, since it does nothing at first
+	// some of those nodes require function calls, and their arguments are ParseEntities,
+	// which require a special render in either atom or spread style
+
+	const rendered = [] as ts.ExpressionStatement[]
+	for (let node_index = 0; node_index < definition.length; node_index++) {
+		const node = definition[node_index]
+		const next = definition.slice(node_index + 1)
+		// rendered.push(render_node(node, next))
+		rendered.push(ts.createExpressionStatement(render_node(node, next)))
+	}
+
+	return rendered
+}
+
+function render_arrow(definition: Definition) {
+	return ts.createArrowFunction(
+		undefined, undefined, [], undefined,
+		ts.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+		ts.createBlock(render_definition(definition), true),
+	)
+}
+
+let global_lookaheads = [] as ReturnType<typeof ts.createCall>[]
+
+function render_global_lookaheads() {
+	return ts.createVariableStatement(
+		undefined, ts.createVariableDeclarationList(
+		[ts.createVariableDeclaration(
+			ts.createArrayBindingPattern(global_lookaheads.map((_lookahead, index) => ts.createBindingElement(
+				undefined, undefined,
+				ts.createIdentifier(`_${index}`), undefined,
+			))),
+			undefined,
+			ts.createArrayLiteral(global_lookaheads, false),
+		)], ts.NodeFlags.Const),
+	)
+}
+
+function render_entity<B extends boolean>(
+	target: Definition[] | Subrule | MacroCall,
+	input_next: Definition,
+	gather_more: boolean,
+	atom_style: B
+): B extends true ? Call : ts.Expression[] {
+	if (Array.isArray(target) && target[0]!.length === 1 && target[0][0].type === 'Consume') {
+		const c = target[0][0]
+		return atom_style
+			? ts.createCall(
+				ts.createIdentifier('t'), undefined,
+				c.token_names.map(ts.createIdentifier),
+			) as B extends true ? Call : ts.Expression[]
+			: c.token_names.map(ts.createIdentifier) as unknown as B extends true ? Call : ts.Expression[]
+	}
+
+	const next = input_next.slice()
+	const [current, rendered_entity, rendered_args] = Array.isArray(target)
+		? t(target, render_arrow(target[0]), [])
+		: target.type === 'Subrule'
+			? t([resolve_rule(target.rule_name)], ts.createIdentifier(target.rule_name), [])
+			: t(
+				[resolve_macro(target.macro_name, target.args)],
+				ts.createIdentifier(target.macro_name),
+				target.args.values().map(arg => render_entity([arg], [] as Definition, false, true)),
+			)
+
+	const final = gather_more
+		? gather_branches(current, next)
+		: current
+
+	const decidable = compute_decidable(final[0], final.slice(1))
+	const lookahead_definition = render_decidable(decidable)
+	const lookahead_number = global_lookaheads.length
+	global_lookaheads.push(lookahead_definition)
+	const lookahead_ident = ts.createIdentifier(`_${lookahead_number}`)
+
+	return atom_style
+		? ts.createCall(
+			ts.createIdentifier('f'), undefined,
+			[rendered_entity, lookahead_ident, ...rendered_args],
+		) as B extends true ? Call : ts.Expression[]
+		: [rendered_entity, lookahead_ident, ...rendered_args] as unknown as B extends true ? Call : ts.Expression[]
+}
 
 
+type Call = ReturnType<typeof ts.createCall>
+
+function render_decidable(decidable: AstDecidable): Call {
+	switch (decidable.type) {
+	case 'AstDecisionPath':
+		return ts.createCall(
+			ts.createIdentifier('path'), undefined,
+			decidable.path.map(item =>
+				Array.isArray(item)
+					? item.map(token_def => ts.createIdentifier(token_def.name))
+					: render_decidable(item)
+			) as ts.Expression[],
+		)
+	case 'AstDecisionBranch':
+		return ts.createCall(
+			ts.createIdentifier('branch'), undefined,
+			decidable.paths.map(render_decidable) as ts.Expression[],
+		)
+	}
+}
 
 
-// // let global_lookaheads = [] as (ReturnType<typeof ts.createVariableDeclarationList>)[]
-// let global_lookaheads = [] as (ReturnType<typeof ts.createCall>)[]
+function render_node(
+	node: Node,
+	next: Node[],
+	required = true,
+): ts.Expression {
+	switch (node.type) {
+	case 'Or':
+		const choices = [] as ts.Expression[]
+		for (let choice_index = 0; choice_index < node.choices.length; choice_index++) {
+			const choice = node.choices[choice_index]
+			const main = [choice].concat(node.choices.slice(choice_index + 1))
+			choices.push(render_entity(main, next, !required, true))
+		}
+		return ts.createCall(
+			ts.createIdentifier(required ? 'or' : 'maybe_or'), undefined, choices,
+		)
 
-// function render_global_lookaheads() {
-// 	return ts.createVariableStatement(
-// 		undefined,
-// 		ts.createVariableDeclarationList(
-// 			[
-// 				ts.createVariableDeclaration(
-// 					ts.createArrayBindingPattern(global_lookaheads.map((_lookahead, index) => ts.createBindingElement(
-// 						undefined, undefined,
-// 						ts.createIdentifier(`_${index}`),
-// 						undefined,
-// 					))),
-// 					undefined,
-// 					ts.createArrayLiteral(
-// 						global_lookaheads,
-// 						false,
-// 					),
-// 				),
-// 			],
-// 			ts.NodeFlags.Const,
-// 		),
-// 	)
-// }
+	case 'Maybe':
+		if (node.definition.length === 1)
+			return render_node(node.definition[0], next, false)
 
-// function render(definition: Definition, variation: 'atom' | 'spread') {
-// 	if (definition.length === 1) {
-// 		//
-// 	}
+		return ts.createCall(
+			ts.createIdentifier('maybe'), undefined,
+			render_entity([node.definition], next, true, false),
+		)
 
-// 	// this is the only function that actually has to use ts.createExpressionStatement
+	case 'Many':
+		return ts.createCall(
+			ts.createIdentifier(required ? 'many' : 'maybe_many'), undefined,
+			render_entity([node.definition], next, !required, false),
+		)
 
-// 	switch (variation) {
-// 	case 'atom':
-// 		return ts.createCall(ts.createIdentifier(is_consume ? 't' : 'f'), undefined, [])
-// 	case 'spread':
-// 		return ts.createCall(ts.createIdentifier(is_consume ? 't' : 'f'), undefined, [])
-// 	}
-// }
+	case 'Subrule':
+		return required
+			? ts.createCall(ts.createIdentifier(node.rule_name), undefined, [])
+			: ts.createCall(
+				ts.createIdentifier('maybe'), undefined,
+				render_entity(node, next, true, false),
+			)
 
+	case 'MacroCall':
+		return required
+			? ts.createCall(
+				ts.createIdentifier(node.macro_name), undefined,
+				node.args.values().map(arg => render_entity([arg], [] as Definition, false, true)),
+			)
+			: ts.createCall(
+				ts.createIdentifier('maybe'), undefined,
+				render_entity(node, next, true, false),
+			)
 
-// function render_lookahead(current: Node[][], next: Node[]) {
-// 	const builder = new DecidableBuilder()
-// 	builder.push(current)
+	case 'Consume':
+		return ts.createCall(
+			ts.createIdentifier(required ? 'consume' : 'maybe'), undefined,
+			node.token_names.map(ts.createIdentifier)
+		)
 
-// 	const nodes = next.slice()
-// 	let node
-// 	while (node = nodes.shift()) {
-// 		if (node.type === 'Or')
-// 			builder.push(found_branch.choices)
-// 		else if (node.type === 'Maybe')
-// 			builder.push([found_branch.definition])
-// 		// else if (node.type === 'Many')
-// 		// 	builder.push(found_branch.definition)
-// 		else
-// 			break
-// 	}
+	case 'Var':
+		return ts.createCall(ts.createIdentifier('arg'), undefined, [ts.createIdentifier(node.arg_name)])
+	case 'LockingVar':
+		return ts.createCall(ts.createIdentifier(node.locking_arg_name), undefined, [])
+	}
+}
 
-// 	const lookahead_definition = builder.try_build(node)
-// 	const lookahead_number = global_lookaheads.length
-// 	global_lookaheads.push(lookahead_definition)
-
-// 	// ts.createVariableStatement(
-// 	// 	undefined,
-// 	// 	ts.createVariableDeclarationList(
-// 	// 		[
-// 	// 			ts.createVariableDeclaration(
-// 	// 				ts.createIdentifier('a'),
-// 	// 				undefined,
-// 	// 				ts.createNew(ts.createIdentifier('DecisionPath'), undefined, [
-// 	// 					ts.createArrayLiteral([ts.createIdentifier('Whitespace')], false),
-// 	// 				]),
-// 	// 			),
-// 	// 		],
-// 	// 		ts.NodeFlags.Const,
-// 	// 	),
-// 	// )
-
-// 	return ts.createIdentifier(`_${lookahead_number}`)
-// 	// return ts.createExpressionStatement(ts.createCall(
-// 	// 	ts.createIdentifier('f'), undefined,
-// 	// 	[render(current[0]!), ts.createIdentifier(lookahead_ident)],
-// 	// ))
-// }
-
-// function render_node(
-// 	node: Node,
-// 	next: Node[],
-// 	required = true,
-// ) {
-// 	switch (node.type) {
-// 	case 'Or':
-// 		const choices = []
-// 		for (let choice_index = 0; choice_index < node.choices.length; choice_index++) {
-// 			const choice = node.choices[choice_index]
-// 			// in this case we need both the rendered definition and the lookahead for each one
-// 			const rendered = render_with_lookahead([choice].concat(node.choices.slice(choice_index + 1)), next)
-// 			choices.push(rendered)
-// 		}
-// 		return ts.createExpressionStatement(ts.createCall(
-// 			ts.createIdentifier(required ? 'or' : 'maybe_or'), undefined, choices,
-// 		))
-
-// 	case 'Maybe':
-// 		if (node.definition.length === 1)
-// 			return render_node(node.definition, next, false)
-
-// 		return render_with_lookahead([node.definition], next)
-
-// 	case 'Many':
-// 		const [spread, lookahead] = render(node.definition, next, 'spread')
-// 		const many = ts.createCall(
-// 			ts.createIdentifier(required ? 'many' : 'maybe_many'), undefined, spread,
-// 		)
-// 		return wrap_function_maybe(required, many, node, next, lookahead)
-
-// 	case 'Subrule':
-// 		const subrule = ts.createCall(
-// 			ts.createIdentifier(node.rule_name), undefined, [],
-// 		)
-// 		return wrap_function_maybe(required, subrule, node, next)
-
-// 	case 'MacroCall':
-// 		const macro_call = ts.createCall(
-// 			ts.createIdentifier(node.macro_name), undefined,
-// 			node.args.map(render),
-// 		)
-// 		return wrap_function_maybe(required, macro_call, node, next)
-
-// 	case 'Consume':
-// 		return ts.createExpressionStatement(ts.createCall(
-// 			ts.createIdentifier(required ? 'maybe' : 'consume'), undefined,
-// 			node.token_names.map(token_name => ts.createIdentifier(token_name))
-// 		))
-// 	}
-// }
-
-// function wrap_function_maybe(
-// 	required: boolean,
-// 	wrapping: ReturnType<typeof ts.createCall>,
-// 	node: Node,
-// 	next: Node[],
-// 	already_rendered_lookahead?: ReturnType<typeof ts.createIdentifier> = undefined,
-// ) {
-// 	const item = required
-// 		? wrapping
-// 		: ts.createCall(
-// 			ts.createIdentifier('maybe'), undefined,
-// 			[wrapping, already_rendered_lookahead || render_lookahead([node.definition], next)],
-// 		)
-// 	return ts.createExpressionStatement(item)
-// }
 
 
 

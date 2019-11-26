@@ -12,6 +12,9 @@ export function Parser(...lexer_args: Parameters<Lexer['reset']>) {
 		reset(...args: Parameters<Lexer['reset']>) {
 			lexer.reset(...args)
 		},
+		arg<E extends ParseEntity>(entity: E) {
+			return perform_entity(lexer, entity)
+		},
 		lock(token_definition: RawTokenDefinition) {
 			return lock(lexer, token_definition)
 		},

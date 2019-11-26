@@ -8,18 +8,18 @@ import {
 	TokenDef, Arg, Var, Rule, Macro, Subrule, Maybe, Many, Or, MacroCall, Consume, Node, Definition,
 } from './ast'
 
-function gather_branches(current: Definition[], next: Definition) {
+export function gather_branches(current: Definition[], next: Definition) {
 	const branches = current.slice()
 
 	let node
 	while (node = next.shift()) switch (node.type) {
-	case 'Or':
-		branches.push_all(node.choices)
-		continue
 	case 'Maybe':
 		branches.push(node.definition)
 		continue
 
+	case 'Or':
+		branches.push_all(node.choices)
+		break
 	case 'Consume':
 		branches.push([node as Node])
 		break
