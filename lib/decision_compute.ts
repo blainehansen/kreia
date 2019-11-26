@@ -2,11 +2,10 @@ import '@ts-std/extensions/dist/array'
 import { tuple as t } from '@ts-std/types'
 
 import { PathBuilder } from './decision'
-import { TokenDefinition } from './lexer'
 import { Data, exhaustive, IterWrapper } from './utils'
 import {
 	registered_tokens, registered_rules, resolve_rule, resolve_macro,
-	Arg, Var, Rule, Macro, Subrule, Maybe, Many, Or, MacroCall, Consume, Node, Definition,
+	TokenDef, Arg, Var, Rule, Macro, Subrule, Maybe, Many, Or, MacroCall, Consume, Node, Definition,
 } from './ast'
 
 function gather_branches(current: Definition[], next: Definition) {
@@ -50,12 +49,12 @@ const Continue = Data((continue_definition: Definition) => {
 })
 type Continue = ReturnType<typeof Continue>
 
-function is_continue(item: TokenDefinition | Continue): item is Continue {
+function is_continue(item: TokenDef | Continue): item is Continue {
 	return 'type' in item && item.type === 'Continue'
 }
 
 
-type AstIterItem = TokenDefinition | Definition[] | Continue
+type AstIterItem = TokenDef | Definition[] | Continue
 type AstIter = IterWrapper<AstIterItem>
 
 function* iterate_definition(definition: Definition): Generator<AstIterItem, void, undefined> {

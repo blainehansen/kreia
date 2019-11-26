@@ -9,7 +9,7 @@ import {
 	register_tokens, register_rules, register_macros,
 	resolve_macro, resolve_rule, check_left_recursive, validate_references,
 	render_grammar,
-	Rule, Macro, MacroCall, Subrule, Arg, Var, Node, Definition, Maybe, Many, Or, Consume, LockingVar, LockingArg
+	TokenDef, Rule, Macro, MacroCall, Subrule, Arg, Var, Node, Definition, Maybe, Many, Or, Consume, LockingVar, LockingArg
 } from './ast'
 
 
@@ -24,7 +24,17 @@ const _F = UserToken('F', 'F')
 const _G = UserToken('G', 'G')
 const _H = UserToken('H', 'H')
 
-register_tokens([_A, _B, _C, _D, _E, _F, _G, _H])
+const token_defs = [
+	TokenDef('A', { type: 'string', value: 'A' }),
+	TokenDef('B', { type: 'string', value: 'B' }),
+	TokenDef('C', { type: 'string', value: 'C' }),
+	TokenDef('D', { type: 'string', value: 'D' }),
+	TokenDef('E', { type: 'string', value: 'E' }),
+	TokenDef('F', { type: 'string', value: 'F' }),
+	TokenDef('G', { type: 'string', value: 'G' }),
+	TokenDef('H', { type: 'string', value: 'H' }),
+]
+register_tokens(token_defs)
 
 const A = 'A'
 const B = 'B'
@@ -297,7 +307,7 @@ describe('resolve_macro', () => {
 		register_macros([
 			Macro(
 				'many_separated',
-				OrderedDict.create_unique('name', [Arg('body_rule'), Arg('separator_rule')]).expect(''),
+				OrderedDict.create_unique('name', [Arg('body_rule'), Arg('separator_rule')]).unwrap(),
 				[Var('body_rule'), Maybe([Many([Var('separator_rule'), Var('body_rule')])])],
 			),
 		])
@@ -306,7 +316,7 @@ describe('resolve_macro', () => {
 			OrderedDict.create_unique(
 				(_arg, index) => index === 0 ? 'body_rule' : 'separator_rule',
 				[[Consume([A])], [Consume([B])]],
-			).expect(''),
+			).unwrap(),
 		)
 		expect(resolved).eql(
 			[Consume([A]), Maybe([Many([Consume([B]), Consume([A])])])],
@@ -320,7 +330,7 @@ describe('resolve_rule', () => {
 			Rule(
 				'one',
 				[LockingVar('sigil'), Many([Consume(['B']), LockingVar('sigil')])],
-				OrderedDict.create_unique<LockingArg>('name', [LockingArg('sigil', 'A')],).expect(''),
+				OrderedDict.create_unique<LockingArg>('name', [LockingArg('sigil', 'A')],).unwrap(),
 			),
 		])
 
@@ -455,7 +465,7 @@ describe('validate_references', () => {
 
 		const m = Macro(
 			'm',
-			OrderedDict.create_unique('name', [Arg('thing')]).expect(''),
+			OrderedDict.create_unique('name', [Arg('thing')]).unwrap(),
 			[Consume([A]), Var('thing')],
 		)
 		expect(validate_references(
@@ -465,7 +475,7 @@ describe('validate_references', () => {
 		expect(validate_references(
 			Macro(
 				'bad',
-				OrderedDict.create_unique('name', [Arg('thing')]).expect(''),
+				OrderedDict.create_unique('name', [Arg('thing')]).unwrap(),
 				[Var('nope')],
 			)
 		).length).eql(1)
@@ -473,26 +483,26 @@ describe('validate_references', () => {
 		register_macros([m])
 		expect(validate_references(
 			Rule('one', [MacroCall(
-				'm', OrderedDict.create_unique('name', [Arg('thing')]).expect('').map(() => [Consume([A])]),
+				'm', OrderedDict.create_unique('name', [Arg('thing')]).unwrap().map(() => [Consume([A])]),
 			)]),
 		).length).eql(0)
 
 		expect(validate_references(
 			Rule('one', [MacroCall(
-				'm', OrderedDict.create_unique('name', [Arg('thing'), Arg('extra')]).expect('').map(() => [Consume([A])]),
+				'm', OrderedDict.create_unique('name', [Arg('thing'), Arg('extra')]).unwrap().map(() => [Consume([A])]),
 			)])
 		).length).eql(1)
 
 		expect(validate_references(
 			Rule('one', [MacroCall(
-				'm', OrderedDict.create_unique('name', [Arg('extra')]).expect('').map(() => [Consume([A])]),
+				'm', OrderedDict.create_unique('name', [Arg('extra')]).unwrap().map(() => [Consume([A])]),
 			)])
 		).length).eql(1)
 
 
 		expect(validate_references(
 			Rule('one', [MacroCall(
-				'm', OrderedDict.create_unique('name', [] as Arg[]).expect('').map(() => [Consume([A])]),
+				'm', OrderedDict.create_unique('name', [] as Arg[]).unwrap().map(() => [Consume([A])]),
 			)])
 		).length).eql(1)
 	})
@@ -504,7 +514,7 @@ describe('validate_references', () => {
 describe('render_grammar', () => {
 	it('works', () => {
 		render_grammar([
-			_A, _B, _C, _D, _E, _F, _G, _H,
+			...token_defs,
 			Rule('something', [] as Definition),
 		])
 	})

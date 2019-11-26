@@ -42,7 +42,7 @@
   "dependencies": {
     "@ts-std/collections": "^1.0.6",
     "@ts-std/extensions": "^1.0.10",
-    "@ts-std/monads": "^1.0.2",
+    "@ts-std/monads": "^1.0.4",
     "kreia-moo": "^0.4.8"
   }
 }

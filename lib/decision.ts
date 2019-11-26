@@ -44,6 +44,26 @@ export class PathBuilder {
 	}
 }
 
+export const AstDecisionPath = Data((path: (TokenDef[] | AstDecisionBranch)[]) => {
+	return { path, test_length: compute_path_test_length(path) }
+})
+export const AstDecisionBranch = Data((paths: AstDecisionPath[]) => {
+	const is_optional = paths.length === 1
+	const test_length = Math.max(...paths.map(p => p.test_length))
+	return { is_optional, paths: paths.slice(), test_length }
+})
+
+interface HasTestLength {
+	readonly test_length: number
+}
+function compute_path_test_length<T>(path: (T[] | HasTestLength)[]) {
+	return path.map(
+		item => Array.isArray(item)
+			? item.length
+			: item.test_length
+	).sum()
+}
+
 
 export function path(...path: (TokenDefinition[] | DecisionBranch)[]) {
 	return new DecisionPath(path)
@@ -55,11 +75,7 @@ class DecisionPath extends Decidable {
 		readonly path: readonly (TokenDefinition[] | DecisionBranch)[],
 	) {
 		super()
-		this.test_length = path.map(
-			item => Array.isArray(item)
-				? item.length
-				: item.test_length
-		).sum()
+		this.test_length = compute_path_test_length(path)
 	}
 
 	test<V extends Dict<any>>(

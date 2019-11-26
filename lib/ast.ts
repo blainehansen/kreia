@@ -3,8 +3,7 @@ import '@ts-std/extensions/dist/array'
 import '@ts-std/collections/dist/impl.Hashable.string'
 import { OrderedDict, UniqueDict, HashSet } from '@ts-std/collections'
 
-
-import { TokenDefinition } from './lexer'
+import { TokenOptions } from './lexer'
 import { Data, exhaustive } from './utils'
 
 
@@ -12,6 +11,23 @@ import { Data, exhaustive } from './utils'
 // 	return { type: 'VirtualLexerDirective' as const,  }
 // })
 
+
+type RegexSpec =
+	| { type: 'regex', source: string }
+	| { type: 'string', value: string }
+
+type MatchSpec =
+	| RegexSpec
+	| { type: 'array', items: RegexSpec[] }
+
+type TokenSpec =
+	| MatchSpec
+	| { type: 'options', match: MatchSpec } & TokenOptions
+
+export const TokenDef = Data((name: string, def: TokenSpec) => {
+	return { type: 'TokenDef' as const, name, def }
+})
+export type TokenDef = ReturnType<typeof TokenDef>
 
 export const Arg = Data((name: string) => {
 	return { type: 'Arg' as const, name }
@@ -89,19 +105,19 @@ export type Node =
 export interface Definition extends Array<Node> {}
 
 export type GrammarItem =
-	| TokenDefinition
+	| TokenDef
 	| Rule
 	| Macro
 
 export type Grammar = GrammarItem[]
 
 
-export let registered_tokens = {} as Dict<TokenDefinition>
+export let registered_tokens = {} as Dict<TokenDef>
 export let registered_rules = {} as Dict<Rule>
 export let registered_macros = {} as Dict<Macro>
 
-export function register_tokens(token_definitions: TokenDefinition[]) {
-	registered_tokens = token_definitions.unique_index_by('name').expect('')
+export function register_tokens(token_defs: TokenDef[]) {
+	registered_tokens = token_defs.unique_index_by('name').expect('')
 }
 export function register_rules(rules: Rule[]) {
 	registered_rules = rules.unique_index_by('name').expect('')
@@ -157,8 +173,6 @@ function _resolve(
 	return resolved
 }
 
-
-// import ts = require('typescript')
 
 export function check_left_recursive(thing: Rule | Macro) {
 	const seen_rules = {} as Dict<true>
@@ -292,8 +306,10 @@ export function validate_references(thing: Rule | Macro) {
 }
 
 
+import ts = require('typescript')
+
 export function render_grammar(grammar: Grammar) {
-	const token_definitions = new UniqueDict<TokenDefinition>()
+	const token_defs = new UniqueDict<TokenDef>()
 	const rules = new UniqueDict<Rule>()
 	const macros = new UniqueDict<Macro>()
 	macros.set('many_separated', Macro(
@@ -310,8 +326,8 @@ export function render_grammar(grammar: Grammar) {
 
 	const conflict_errors = grammar.filter_map(grammar_item => {
 		switch (grammar_item.type) {
-		case 'Token':
-			return token_definitions.set(grammar_item.name, grammar_item).match(matcher)
+		case 'TokenDef':
+			return token_defs.set(grammar_item.name, grammar_item).match(matcher)
 		case 'Rule':
 			return rules.set(grammar_item.name, grammar_item).match(matcher)
 		case 'Macro':
@@ -322,7 +338,7 @@ export function render_grammar(grammar: Grammar) {
 	if (conflict_errors.length > 0)
 		throw new Error(conflict_errors.join('\n\n'))
 
-	registered_tokens = token_definitions.into_dict()
+	registered_tokens = token_defs.into_dict()
 	registered_rules = rules.into_dict()
 	registered_macros = macros.into_dict()
 
@@ -337,24 +353,7 @@ export function render_grammar(grammar: Grammar) {
 	if (left_recursive_rules.length > 0)
 		throw new Error(`There are left recursive rules: ${left_recursive_rules.join('\n\n')}`)
 
-	// const rendered_tokens = token_definitions.values().map(token_definition => {
-	// 	return ts.createExpressionStatement(
-	// 		ts.createCall(ts.createIdentifier('Token'), undefined, [
-	// 			ts.createStringLiteral(token_definition.name),
-	// 			// ts.createRegularExpressionLiteral('/\\s+/'),
-	// 			ts.createRegularExpressionLiteral(token_definition.regex.source),
-	// 			ts.createObjectLiteral(
-	// 				[
-	// 					ts.createPropertyAssignment(
-	// 						ts.createIdentifier('ignore'),
-	// 						ts.createTrue(),
-	// 					),
-	// 				],
-	// 				false,
-	// 			),
-	// 		]),
-	// 	)
-	// })
+	const rendered_tokens = token_defs.values().map(render_token_defs)
 
 	// const rendered_macros = macros.values.map(macro => {
 	// 	// the macro arguments are always going to be represented at runtime as ParseEntity
@@ -389,6 +388,62 @@ export function render_grammar(grammar: Grammar) {
 	// 	)
 	// })
 }
+
+function render_regex_spec(regex_spec: RegexSpec) {
+	switch (regex_spec.type) {
+	case 'regex':
+		return ts.createRegularExpressionLiteral(`/${token_def.def.source}/`)
+	case 'string':
+		return ts.createStringLiteral(token_def.value)
+	}
+}
+
+function render_match_spec(match_spec: MatchSpec) {
+	switch (match_spec.type) {
+	case 'array':
+		return ts.createArrayLiteral(match_spec.items.map(render_regex_spec), false)
+	default:
+		return render_regex_spec(match_spec)
+	}
+}
+
+function render_token_def(token_def: TokenDef) {
+	switch (token_def.def.type) {
+	case 'options': {
+		const body = ts.createObjectLiteral([
+			ts.createPropertyAssignment(
+				ts.createIdentifier('match'),
+				render_match_spec(token_def.def.match),
+			),
+			token_def.def.ignore ? ts.createPropertyAssignment(
+				ts.createIdentifier('ignore'),
+				ts.createTrue(),
+			) : undefined,
+		], false)
+		return ts.createPropertyAssignment(ts.createIdentifier(token_def.name), body)
+	}
+	default:
+		const body = render_match_spec(token_def.def)
+		return ts.createPropertyAssignment(ts.createIdentifier(token_def.name), body)
+	}
+}
+
+function render_token_defs(token_defs: TokenDef[]) {
+	return ts.createVariableStatement(
+		undefined,
+		ts.createVariableDeclarationList([
+			ts.createVariableDeclaration(
+				ts.createIdentifier('tok'), undefined,
+				ts.createCall(ts.createIdentifier('Tokens'), undefined, [
+					ts.createObjectLiteral(token_defs.map(render_token_def), false),
+				]),
+			),
+		], ts.NodeFlags.Const),
+	)
+}
+
+
+
 
 
 

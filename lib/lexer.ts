@@ -344,7 +344,7 @@ export function match_and_trim(tokens: Token[], token_definitions: TokenDefiniti
 }
 
 
-type TokenOptions = { ignore?: true }
+export type TokenOptions = { ignore?: true }
 type BaseTokenSpec = RegExp | string | (RegExp | string)[]
 type TokenSpec = BaseTokenSpec | { match: BaseTokenSpec } & TokenOptions
 
@@ -371,6 +371,16 @@ export function make_regex(regex: BaseTokenSpec) {
 	if (final_regex.test(''))
 		throw new Error(`attempted to create a token that matches the empty string ${regex}`)
 	return final_regex
+}
+
+export function Tokens<D extends Dict<TokenSpec>>(
+	tokens: D,
+): { [K in keyof D]: UserRawTokenDefinition } {
+	const give = {} as { [K in keyof D]: UserRawTokenDefinition }
+	for (const key in tokens) {
+		give[key] = UserToken(key, tokens[key])
+	}
+	return give
 }
 
 
