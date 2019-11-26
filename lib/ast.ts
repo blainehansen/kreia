@@ -353,7 +353,7 @@ export function render_grammar(grammar: Grammar) {
 	if (left_recursive_rules.length > 0)
 		throw new Error(`There are left recursive rules: ${left_recursive_rules.join('\n\n')}`)
 
-	const rendered_tokens = token_defs.values().map(render_token_defs)
+	const rendered_tokens = render_token_defs(token_defs.values())
 
 	// const rendered_macros = macros.values.map(macro => {
 	// 	// the macro arguments are always going to be represented at runtime as ParseEntity
@@ -392,9 +392,9 @@ export function render_grammar(grammar: Grammar) {
 function render_regex_spec(regex_spec: RegexSpec) {
 	switch (regex_spec.type) {
 	case 'regex':
-		return ts.createRegularExpressionLiteral(`/${token_def.def.source}/`)
+		return ts.createRegularExpressionLiteral(`/${regex_spec.source}/`)
 	case 'string':
-		return ts.createStringLiteral(token_def.value)
+		return ts.createStringLiteral(regex_spec.value)
 	}
 }
 
@@ -410,16 +410,19 @@ function render_match_spec(match_spec: MatchSpec) {
 function render_token_def(token_def: TokenDef) {
 	switch (token_def.def.type) {
 	case 'options': {
-		const body = ts.createObjectLiteral([
+		const assigments = [
 			ts.createPropertyAssignment(
 				ts.createIdentifier('match'),
 				render_match_spec(token_def.def.match),
 			),
-			token_def.def.ignore ? ts.createPropertyAssignment(
+		]
+		if (token_def.def.ignore)
+			assigments.push(ts.createPropertyAssignment(
 				ts.createIdentifier('ignore'),
 				ts.createTrue(),
-			) : undefined,
-		], false)
+			))
+
+		const body = ts.createObjectLiteral(assigments, false)
 		return ts.createPropertyAssignment(ts.createIdentifier(token_def.name), body)
 	}
 	default:

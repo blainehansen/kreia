@@ -1,6 +1,8 @@
 import '@ts-std/extensions/dist/array'
 import { Dict } from '@ts-std/types'
 
+import { Data } from './utils'
+import { TokenDef } from './ast'
 import { Lexer, LexerState, TokenDefinition, Token, match_and_trim } from './lexer'
 
 export abstract class Decidable {
@@ -11,47 +13,55 @@ export abstract class Decidable {
 	): [Token[], LexerState<V>] | undefined
 }
 
-export function is_branch(item: TokenDefinition[] | TokenDefinition | DecisionBranch): item is DecisionBranch {
-	return !Array.isArray(item) && 'type' in item && item.type === 'DecisionBranch'
-}
+// function is_branch(item: TokenDefinition[] | TokenDefinition | DecisionBranch): item is DecisionBranch {
+// 	return !Array.isArray(item) && 'type' in item && item.type === 'DecisionBranch'
+// }
 
 export class PathBuilder {
-	private items = [] as (TokenDefinition[] | DecisionBranch)[]
+	// private items = [] as (TokenDefinition[] | DecisionBranch)[]
+	private items = [] as (TokenDef[] | AstDecisionBranch)[]
 
-	push_branch(paths: DecisionPath[]) {
-		this.items.push(new DecisionBranch(
-			paths.filter(path => path.test_length > 0)
+	// push_branch(paths: DecisionPath[]) {
+	push_branch(paths: AstDecisionPath[]) {
+		// this.items.push(new DecisionBranch(
+		this.items.push(AstDecisionBranch(
+			...paths.filter(path => path.test_length > 0)
 		))
 	}
 
-	push(def: TokenDefinition) {
+	// push(def: TokenDefinition) {
+	push(def: TokenDef) {
 		const last_index = this.items.length - 1
 		const last = this.items[last_index]
-		if (this.items.length === 0 || is_branch(last)) {
+		if (this.items.length === 0 || !Array.isArray(last)) {
 			this.items.push([def])
 			return
 		}
 		last.push(def)
 	}
 
-	build(): DecisionPath {
+	build() {
 		const last_index = this.items.length - 1
 		const last = this.items[last_index]
-		if (is_branch(last) && (last as DecisionBranch).is_optional)
+		if (!Array.isArray(last) && (last as AstDecisionBranch).is_optional)
 			this.items.splice(last_index, 1)
 
-		return new DecisionPath(this.items)
+		// return new DecisionPath(this.items)
+		return AstDecisionPath(...this.items)
 	}
 }
 
-export const AstDecisionPath = Data((path: (TokenDef[] | AstDecisionBranch)[]) => {
+export const AstDecisionPath = Data((...path: (TokenDef[] | AstDecisionBranch)[]) => {
 	return { path, test_length: compute_path_test_length(path) }
 })
-export const AstDecisionBranch = Data((paths: AstDecisionPath[]) => {
+export type AstDecisionPath = Readonly<{ path: (TokenDef[] | AstDecisionBranch)[], test_length: number }>
+
+export const AstDecisionBranch = Data((...paths: AstDecisionPath[]) => {
 	const is_optional = paths.length === 1
 	const test_length = Math.max(...paths.map(p => p.test_length))
 	return { is_optional, paths: paths.slice(), test_length }
 })
+export type AstDecisionBranch = Readonly<{ is_optional: boolean, paths: AstDecisionPath[], test_length: number }>
 
 interface HasTestLength {
 	readonly test_length: number
@@ -75,7 +85,7 @@ class DecisionPath extends Decidable {
 		readonly path: readonly (TokenDefinition[] | DecisionBranch)[],
 	) {
 		super()
-		this.test_length = compute_path_test_length(path)
+		this.test_length = compute_path_test_length(path as (TokenDefinition[] | HasTestLength)[])
 	}
 
 	test<V extends Dict<any>>(

@@ -3,8 +3,9 @@ import { expect } from 'chai'
 import { OrderedDict } from '@ts-std/collections'
 
 import { UserToken } from './lexer'
-import { path, branch } from './decision'
+// import { path, branch } from './decision'
 import { compute_decidable } from './decision_compute'
+import { AstDecisionPath as path, AstDecisionBranch as branch } from './decision'
 import {
 	register_tokens, register_rules, register_macros,
 	resolve_macro, resolve_rule, check_left_recursive, validate_references,
@@ -15,14 +16,23 @@ import {
 
 import { log } from './utils'
 
-const _A = UserToken('A', 'A')
-const _B = UserToken('B', 'B')
-const _C = UserToken('C', 'C')
-const _D = UserToken('D', 'D')
-const _E = UserToken('E', 'E')
-const _F = UserToken('F', 'F')
-const _G = UserToken('G', 'G')
-const _H = UserToken('H', 'H')
+// const _A = UserToken('A', 'A')
+// const _B = UserToken('B', 'B')
+// const _C = UserToken('C', 'C')
+// const _D = UserToken('D', 'D')
+// const _E = UserToken('E', 'E')
+// const _F = UserToken('F', 'F')
+// const _G = UserToken('G', 'G')
+// const _H = UserToken('H', 'H')
+
+const _A = TokenDef('A', { type: 'string', value: 'A' })
+const _B = TokenDef('B', { type: 'string', value: 'B' })
+const _C = TokenDef('C', { type: 'string', value: 'C' })
+const _D = TokenDef('D', { type: 'string', value: 'D' })
+const _E = TokenDef('E', { type: 'string', value: 'E' })
+const _F = TokenDef('F', { type: 'string', value: 'F' })
+const _G = TokenDef('G', { type: 'string', value: 'G' })
+const _H = TokenDef('H', { type: 'string', value: 'H' })
 
 const token_defs = [
 	TokenDef('A', { type: 'string', value: 'A' }),
