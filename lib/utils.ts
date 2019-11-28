@@ -1,11 +1,11 @@
 import * as util from 'util'
 import { Result, Ok, Err } from '@ts-std/monads'
 
-export function to_string(obj: any) {
-	return util.inspect(obj, { depth: null, colors: true })
+export function debug(obj: any, depth = 3 as number | null) {
+	return util.inspect(obj, { depth, colors: true })
 }
 export function log(obj: any) {
-	console.log(to_string(obj))
+	console.log(debug(obj))
 }
 
 

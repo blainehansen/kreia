@@ -12,8 +12,10 @@ export function Parser(...lexer_args: Parameters<Lexer['reset']>) {
 		reset(...args: Parameters<Lexer['reset']>) {
 			lexer.reset(...args)
 		},
-		arg<E extends ParseEntity>(entity: E) {
-			return perform_entity(lexer, entity)
+		arg<A extends ParseArg>(arg: A, ...arg_args: A extends Func ? Parameters<A> : []): ArgReturn<A> {
+			return Array.isArray(arg)
+				? lexer.require(arg) as ArgReturn<A>
+				: arg(...arg_args)
 		},
 		lock(token_definition: RawTokenDefinition) {
 			return lock(lexer, token_definition)
@@ -66,6 +68,12 @@ export function f<F extends Func>(
 }
 
 export type ParseEntity = DecidableFunc<Func> | TokenDefinition[]
+export type ParseArg = Func | TokenDefinition[]
+type ArgReturn<A extends ParseArg> =
+	A extends TokenDefinition[] ? TokensForDefinitions<A>
+	: A extends Func ? ReturnType<A>
+	: never : never
+
 
 type EntityReturn<E extends ParseEntity> =
 	E extends TokenDefinition[] ? TokensForDefinitions<E>

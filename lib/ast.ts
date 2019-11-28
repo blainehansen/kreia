@@ -4,7 +4,7 @@ import '@ts-std/collections/dist/impl.Hashable.string'
 import { OrderedDict, UniqueDict, HashSet } from '@ts-std/collections'
 
 import { TokenOptions } from './lexer'
-import { Data, exhaustive } from './utils'
+import { Data, exhaustive, debug } from './utils'
 
 import { AstDecidable } from './decision'
 import { gather_branches, compute_decidable } from './decision_compute'
@@ -120,51 +120,60 @@ export let registered_rules = {} as Dict<Rule>
 export let registered_macros = {} as Dict<Macro>
 
 export function register_tokens(token_defs: TokenDef[]) {
-	registered_tokens = token_defs.unique_index_by('name').expect('')
+	registered_tokens = token_defs.unique_index_by('name').unwrap()
 }
 export function register_rules(rules: Rule[]) {
-	registered_rules = rules.unique_index_by('name').expect('')
+	registered_rules = rules.unique_index_by('name').unwrap()
 }
 export function register_macros(macros: Macro[]) {
-	registered_macros = macros.unique_index_by('name').expect('')
+	registered_macros = macros.unique_index_by('name').unwrap()
 }
 
 const empty_ordered_dict = OrderedDict.create<any>(t => '', [])
 export function resolve_rule(rule_name: string) {
 	const rule = registered_rules[rule_name]!
-	return _resolve(empty_ordered_dict, rule.locking_args || empty_ordered_dict, rule.definition)
+	return _resolve(empty_ordered_dict, rule.locking_args || empty_ordered_dict, rule.definition, false)
 }
-
-export function resolve_macro(macro_name: string, args: OrderedDict<Definition>) {
+export function resolve_macro(macro_name: string, args: OrderedDict<Definition>, vars_allowed = false) {
 	const macro = registered_macros[macro_name]!
-	return _resolve(args, macro.locking_args || empty_ordered_dict, macro.definition)
+	return _resolve(args, macro.locking_args || empty_ordered_dict, macro.definition, vars_allowed)
 }
 function _resolve(
 	args: OrderedDict<Definition>,
 	locking_args: OrderedDict<LockingArg>,
 	definition: Definition,
+	vars_allowed: boolean,
 ) {
 	const resolved = [] as Definition
+	// const resolved: Definition = definition.flat_map(node => { return switch(node.type) {
+
+	// }})
+
 	for (const node of definition) switch (node.type) {
 	case 'Var':
-		const arg_def = args.get_by_name(node.arg_name).to_undef()!
-		resolved.push_all(arg_def)
+		const arg_def = args.get_by_name(node.arg_name).to_undef()
+		if (arg_def !== undefined)
+			resolved.push_all(arg_def)
+		else if (vars_allowed)
+			resolved.push(node)
+		else
+			throw new Error(`unresolvable Var: ${debug(node)}`)
 		continue
 	case 'LockingVar':
 		const locking_arg_def = locking_args.get_by_name(node.locking_arg_name).to_undef()!
 		resolved.push(Consume([locking_arg_def.token_name]))
 		continue
 	case 'Or':
-		resolved.push(Or(node.choices.map(choice => _resolve(args, locking_args, choice))))
+		resolved.push(Or(node.choices.map(choice => _resolve(args, locking_args, choice, vars_allowed))))
 		continue
 	case 'Maybe':
-		resolved.push(Maybe(_resolve(args, locking_args, node.definition)))
+		resolved.push(Maybe(_resolve(args, locking_args, node.definition, vars_allowed)))
 		continue
 	case 'Many':
-		resolved.push(Many(_resolve(args, locking_args, node.definition)))
+		resolved.push(Many(_resolve(args, locking_args, node.definition, vars_allowed)))
 		continue
 	case 'MacroCall':
-		const new_args = node.args.map(arg_def => _resolve(args, locking_args, arg_def))
+		const new_args = node.args.map(arg_def => _resolve(args, locking_args, arg_def, vars_allowed))
 		resolved.push(MacroCall(node.macro_name, new_args))
 		continue
 	// Consume, Subrule
@@ -317,9 +326,9 @@ export function render_grammar(grammar: Grammar) {
 	const macros = new UniqueDict<Macro>()
 	macros.set('many_separated', Macro(
 		'many_separated',
-		OrderedDict.create_unique('name', [Arg('body_rule'), Arg('separator_rule')]).expect(''),
+		OrderedDict.create_unique('name', [Arg('body_rule'), Arg('separator_rule')]).unwrap(),
 		[Var('body_rule'), Maybe([Many([Var('separator_rule'), Var('body_rule')])])],
-	)).expect('')
+	)).unwrap()
 
 	const matcher = {
 		ok: () => undefined,
@@ -356,9 +365,9 @@ export function render_grammar(grammar: Grammar) {
 	if (left_recursive_rules.length > 0)
 		throw new Error(`There are left recursive rules: ${left_recursive_rules.join('\n\n')}`)
 
-	const rendered_tokens = token_defs.values().map(token_def => render_token_def(token_def))
-	const rendered_macros = macros.values().map(macro => render_macro(macro))
-	const rendered_rules = rules.values().map(rule => render_rule(rule))
+	const rendered_tokens = token_defs.values().map(render_token_def)
+	const rendered_macros = macros.values().filter_map(render_macro)
+	const rendered_rules = rules.values().map(render_rule)
 }
 
 
@@ -419,38 +428,56 @@ function wrap_token_def(name: string, expression: ts.Expression) {
 }
 
 
+type MacroContext =
+	| { type: 'definition', count: number }
+	| { type: 'call', args: OrderedDict<Definition>, decidables: AstDecidable[] }
+
 function render_macro(macro: Macro) {
-	// the macro arguments are always going to be represented at runtime as ParseEntity
+	if (macro.name === 'many_separated')
+		return undefined
+
 	const lockers = (macro.locking_args !== undefined ? macro.locking_args.values() : []).map(render_locking_arg)
+	const args = macro.args.values()
+
+	const unlocked_definition = resolve_macro(macro.name, empty_ordered_dict, true)
+	const macro_context: MacroContext = { type; 'definition', count: 0 }
+	const rendered_definition = render_definition(unlocked_definition, macro_context)
+
 	return ts.createFunctionDeclaration(
 		undefined, undefined, undefined,
-		// function name
 		ts.createIdentifier(macro.name),
 		// generics
-		macro.args.values().map(arg => ts.createTypeParameterDeclaration(
+		args.map(arg => ts.createTypeParameterDeclaration(
 			ts.createIdentifier(arg.name.toUpperCase()),
-			ts.createTypeReferenceNode(ts.createIdentifier('ParseEntity'), undefined), undefined,
+			ts.createTypeReferenceNode(ts.createIdentifier('ArgBody'), undefined), undefined,
 		)),
 		// actual args
-		macro.args.values().map(arg => ts.createParameter(
-			undefined, undefined, undefined,
-			ts.createIdentifier(arg.name), undefined,
-			ts.createTypeReferenceNode(ts.createIdentifier(arg.name.toUpperCase()), undefined), undefined,
-		)),
+		[
+			...args.map(arg => ts.createParameter(
+				undefined, undefined, undefined,
+				ts.createIdentifier(arg.name), undefined,
+				ts.createTypeReferenceNode(ts.createIdentifier(arg.name.toUpperCase()), undefined), undefined,
+			)),
+			...Array.from({ length: macro_context.count }).map((_, index) => ts.createParameter(
+				undefined, undefined, undefined,
+				ts.createIdentifier(`_d${index + 1}`), undefined,
+				ts.createTypeReferenceNode(ts.createIdentifier('Decidable'), undefined), undefined,
+			))),
+		],
 		undefined,
-		// render_definition has to return ts.createExpressionStatement[]
-		ts.createBlock([...lockers, ...render_definition(macro.definition as Definition)], true),
+		ts.createBlock([...lockers, ...rendered_definition], true),
 	)
 }
 
 function render_rule(rule: Rule) {
 	// rules are always just functions that at least initially take no parameters
 	const lockers = (rule.locking_args !== undefined ? rule.locking_args.values() : []).map(render_locking_arg)
+	const rendered_definition = render_definition(resolve_rule(rule.name))
 	return ts.createFunctionDeclaration(
 		undefined, undefined, undefined,
 		ts.createIdentifier(rule.name),
 		[], [], undefined,
-		ts.createBlock([...lockers, ...render_definition(rule.definition)], true),
+		ts.createBlock([...lockers, ...rendered_definition], true),
 	)
 }
 
@@ -470,17 +497,12 @@ function render_locking_arg(arg: LockingArg) {
 
 
 
-function render_definition(definition: Definition) {
-	// each node in a definition needs to simply be createExpressionStatement, since it does nothing at first
-	// some of those nodes require function calls, and their arguments are ParseEntities,
-	// which require a special render in either atom or spread style
-
+function render_definition(definition: Definition, macro_context?: MacroContext) {
 	const rendered = [] as ts.ExpressionStatement[]
 	for (let node_index = 0; node_index < definition.length; node_index++) {
 		const node = definition[node_index]
 		const next = definition.slice(node_index + 1)
-		// rendered.push(render_node(node, next))
-		rendered.push(ts.createExpressionStatement(render_node(node, next)))
+		rendered.push(ts.createExpressionStatement(render_node(node, next, macro_context)))
 	}
 
 	return rendered
@@ -494,18 +516,27 @@ function render_arrow(definition: Definition) {
 	)
 }
 
-let global_lookaheads = [] as ReturnType<typeof ts.createCall>[]
+let global_decidables = [] as ReturnType<typeof ts.createCall>[]
 
-function render_global_lookaheads() {
+function generate_decidable(main: Definition, against: Definition[]) {
+	const decidable = compute_decidable(main, against)
+	const lookahead_definition = render_decidable(decidable)
+	const lookahead_number = global_decidables.length
+	global_decidables.push(lookahead_definition)
+	const lookahead_ident = ts.createIdentifier(`_${lookahead_number}`)
+	return lookahead_ident
+}
+
+function render_global_decidables() {
 	return ts.createVariableStatement(
 		undefined, ts.createVariableDeclarationList(
 		[ts.createVariableDeclaration(
-			ts.createArrayBindingPattern(global_lookaheads.map((_lookahead, index) => ts.createBindingElement(
+			ts.createArrayBindingPattern(global_decidables.map((_lookahead, index) => ts.createBindingElement(
 				undefined, undefined,
 				ts.createIdentifier(`_${index}`), undefined,
 			))),
 			undefined,
-			ts.createArrayLiteral(global_lookaheads, false),
+			ts.createArrayLiteral(global_decidables, false),
 		)], ts.NodeFlags.Const),
 	)
 }
@@ -516,7 +547,11 @@ function render_entity<B extends boolean>(
 	gather_more: boolean,
 	atom_style: B
 ): B extends true ? Call : ts.Expression[] {
-	if (Array.isArray(target) && target[0]!.length === 1 && target[0][0].type === 'Consume') {
+	if (
+		Array.isArray(target)
+		&& target[0]!.length === 1
+		&& target[0][0].type === 'Consume'
+	) {
 		const c = target[0][0]
 		return atom_style
 			? ts.createCall(
@@ -525,6 +560,16 @@ function render_entity<B extends boolean>(
 			) as B extends true ? Call : ts.Expression[]
 			: c.token_names.map(ts.createIdentifier) as unknown as B extends true ? Call : ts.Expression[]
 	}
+
+	if (
+		Array.isArray(target)
+		&& target[0]!.length === 1
+		&& (
+			target[0][0].type === 'Subrule'
+			|| target[0][0].type === 'MacroCall'
+		)
+	)
+		return render_entity(target[0][0], input_next, gather_more, atom_style)
 
 	const next = input_next.slice()
 	const [current, rendered_entity, rendered_args] = Array.isArray(target)
@@ -541,11 +586,7 @@ function render_entity<B extends boolean>(
 		? gather_branches(current, next)
 		: current
 
-	const decidable = compute_decidable(final[0], final.slice(1))
-	const lookahead_definition = render_decidable(decidable)
-	const lookahead_number = global_lookaheads.length
-	global_lookaheads.push(lookahead_definition)
-	const lookahead_ident = ts.createIdentifier(`_${lookahead_number}`)
+	const lookahead_ident = generate_decidable(final[0], final.slice(1))
 
 	return atom_style
 		? ts.createCall(
@@ -554,6 +595,7 @@ function render_entity<B extends boolean>(
 		) as B extends true ? Call : ts.Expression[]
 		: [rendered_entity, lookahead_ident, ...rendered_args] as unknown as B extends true ? Call : ts.Expression[]
 }
+
 
 
 type Call = ReturnType<typeof ts.createCall>
@@ -581,7 +623,8 @@ function render_decidable(decidable: AstDecidable): Call {
 function render_node(
 	node: Node,
 	next: Node[],
-	required = true,
+	macro_context?: MacroContext,
+	wrapping_function_name?: 'maybe' | 'many' | 'maybe_many',
 ): ts.Expression {
 	switch (node.type) {
 	case 'Or':
@@ -589,15 +632,21 @@ function render_node(
 		for (let choice_index = 0; choice_index < node.choices.length; choice_index++) {
 			const choice = node.choices[choice_index]
 			const main = [choice].concat(node.choices.slice(choice_index + 1))
-			choices.push(render_entity(main, next, !required, true))
+			// these choice decidables should never gather_more
+			// once we've entered the many or maybe or maybe_many that may be wrapping this or,
+			// the choice has already been made to enter, with a decidable that has that higher viewpoint
+			choices.push(render_entity(main, next, false, true))
 		}
 		return ts.createCall(
-			ts.createIdentifier(required ? 'or' : 'maybe_or'), undefined, choices,
+			ts.createIdentifier(wrapping_function_name === 'maybe' ? 'maybe_or' : 'or'), undefined, choices,
 		)
 
 	case 'Maybe':
-		if (node.definition.length === 1)
-			return render_node(node.definition[0], next, false)
+		if (node.definition.length === 1) {
+			if (wrapping_function_name !== undefined)
+				throw new Error(`a Maybe is the only child of something`)
+			return render_node(node.definition[0], next, macro_context, 'maybe')
+		}
 
 		return ts.createCall(
 			ts.createIdentifier('maybe'), undefined,
@@ -605,38 +654,93 @@ function render_node(
 		)
 
 	case 'Many':
+		if (node.definition.length === 1) {
+			const lone = node.definition[0]
+			switch (wrapping_function_name) {
+			case 'maybe':
+				return render_node(lone, next, macro_context, 'maybe_many')
+			case undefined:
+				return render_node(lone, next, macro_context, 'many')
+			default:
+				throw new Error(`you have a Many as the only child of a Many ${wrapping_function_name}`)
+			}
+		}
+
+		if (wrapping_function_name === 'many' || wrapping_function_name 'maybe_many')
+			throw new Error('a Many is nested directly inside another Many or a Maybe then a Many')
+
 		return ts.createCall(
-			ts.createIdentifier(required ? 'many' : 'maybe_many'), undefined,
-			render_entity([node.definition], next, !required, false),
+			ts.createIdentifier(wrapping_function_name === 'maybe' ? 'maybe_many' : 'many'), undefined,
+			// Many always needs to be able to distinguish between continuing and stopping
+			render_entity([node.definition], next, true, false),
 		)
 
 	case 'Subrule':
-		return required
+		return wrapping_function_name === undefined
 			? ts.createCall(ts.createIdentifier(node.rule_name), undefined, [])
 			: ts.createCall(
-				ts.createIdentifier('maybe'), undefined,
+				ts.createIdentifier(wrapping_function_name), undefined,
 				render_entity(node, next, true, false),
 			)
 
 	case 'MacroCall':
-		return required
+		// we can call render_definition with the resolved definition,
+		// but first pushing an extra ident container onto the macro stack
+		// once it returns we can pop that stack?
+		// and that should contain all the lookahead_idents generated while traversing the tree
+
+		// we need to render the args after _resolve? they might have the current Macro's args in them
+
+		const resolved_call = resolve_macro(node.macro_name, node.args)
+		const new_args = node.args
+			.map(arg_def => _resolve(macro_context.args || empty_ordered_dict, empty_ordered_dict, arg_def))
+		const call_macro_context: MacroContext = { type: 'call', args: new_args, decidables: [] }
+
+		const rendered_definition = render_definition(resolved_call, call_macro_context)
+		new_args.map(arg_def => render_definition(arg_def, ghgd))
+
+		return wrapping_function_name === undefined
 			? ts.createCall(
 				ts.createIdentifier(node.macro_name), undefined,
-				node.args.values().map(arg => render_entity([arg], [] as Definition, false, true)),
+				// node.args.values().map(arg => render_entity([arg], [] as Definition, false, true)),
+				[...call_macro_context],
 			)
 			: ts.createCall(
-				ts.createIdentifier('maybe'), undefined,
+				ts.createIdentifier(wrapping_function_name), undefined,
 				render_entity(node, next, true, false),
 			)
 
 	case 'Consume':
 		return ts.createCall(
-			ts.createIdentifier(required ? 'consume' : 'maybe'), undefined,
-			node.token_names.map(ts.createIdentifier)
+			ts.createIdentifier(wrapping_function_name || 'consume'), undefined,
+			node.token_names.map(ts.createIdentifier),
 		)
 
 	case 'Var':
-		return ts.createCall(ts.createIdentifier('arg'), undefined, [ts.createIdentifier(node.arg_name)])
+		if (wrapping_function_name === undefined)
+			return ts.createCall(ts.createIdentifier('arg'), undefined, [ts.createIdentifier(node.arg_name)])
+
+		switch (macro_context.type) {
+		case 'definition':
+			macro_context.count++
+		case 'call':
+			const arg_definition = macro_context.args.get_by_name(node.arg_name).unwrap()
+			const var_main = [arg_definition]
+			const decidable = generate_decidable(var_main, gather_branches(var_main, next.slice()))
+			macro_context.decidables.push(decidable)
+		}
+
+		return wrapping_function_name === undefined
+			?
+			: ts.createCall(
+				ts.createIdentifier(wrapping_function_name), undefined,
+				// what's really going on is we have two kinds of stack or context
+				// one is for rendering the macro itself, and there we only need to count how many the current macro has seen
+				// the other is for rendering the call. in that case we need access to the args of the enclosing MacroCall,
+				// so we can compute_decidable against next after resolving
+				[ts.createSpread(ts.createIdentifier(node.arg_name))],
+			)
+
 	case 'LockingVar':
 		return ts.createCall(ts.createIdentifier(node.locking_arg_name), undefined, [])
 	}

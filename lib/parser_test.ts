@@ -19,43 +19,81 @@ const Comma = UserToken('Comma', ',')
 const Whitespace = UserToken('Whitespace', { match: /\s+/, ignore: true })
 
 const {
-	reset,
+	reset, arg,
 	consume, maybe,
 	or, maybe_or,
 	many, maybe_many,
 	many_separated, maybe_many_separated,
 } = Parser({}, [Whitespace], source)
 
-const _0 = path([LeftParen])
-const _1 = branch(path([Num]), path([Nil]))
-const _2 = branch(_0, path(_1))
+// const Delimited = Macro(
+// 	'delimited', [Arg('item'), Arg('delimiter')],
+// 	Maybe(Var('delimiter')),
+// 	Var('item'),
+// 	Maybe(Many(Var('delimiter'), Var('item'))),
+// 	Maybe(Var('delimiter')),
+// )
 
-function lists() {
-	return many(parenthesized_number_list, _0)
+// function delimited<ITEM extends ParseEntity, DELIMITER extends ParseEntity>(
+function delimited<ITEM extends ParseBody, DELIMITER extends ParseBody>(
+	item: ITEM, delimiter: DELIMITER, _d1: D, _d2: D, _d3: D,
+) {
+	maybe(item, _d1)
+	arg(item)
+	maybe_many(() => {
+		arg(delimiter)
+		arg(item)
+	}, _d2)
+	maybe(delimiter, _d3)
 }
 
-function parenthesized_number_list() {
-	consume(LeftParen)
-	const list = maybe(number_list, _2)
-	consume(RightParen)
-	return list
-}
+
+// const Enclosed = Macro(
+// 	'enclosed', [Arg('begin'), Arg('middle'), Arg('end')],
+// 	Var('begin'),
+// 	MacroCall('many_separated', [Var('middle')], [Consume('Comma')])
+// 	Var('end'),
+// )
+
+// function enclosed<BEGIN extends ParseEntity, MIDDLE extends ParseEntity, END extends ParseEntity>(
+// 	begin: BEGIN, middle: MIDDLE, end: END,
+// ) {
+// 	arg(begin)
+// 	many_separated(middle, t(Comma))
+// 	arg(end)
+// }
 
 
-function number_list() {
-	return many_separated(
-		f(() => or(
-			f(parenthesized_number_list, _0),
-			f(() => or(
-				t(Num),
-				t(Nil),
-			), _1),
-		), _0),
-		t(Comma),
-	)
-}
+// const _0 = path([LeftParen])
+// const _1 = branch(path([Num]), path([Nil]))
+// const _2 = branch(_0, path(_1))
 
-log(lists())
+// function lists() {
+// 	return many(parenthesized_number_list, _0)
+// }
+
+// function parenthesized_number_list() {
+// 	consume(LeftParen)
+// 	const list = maybe(number_list, _2)
+// 	consume(RightParen)
+// 	return list
+// }
+
+
+// function number_list() {
+// 	return many_separated(
+// 		f(() => or(
+// 			f(parenthesized_number_list, _0),
+// 			f(() => or(
+// 				t(Num),
+// 				t(Nil),
+// 			), _1),
+// 		), _0),
+// 		t(Comma),
+// 	)
+// }
+
+// log(lists())
 
 
 // postgres_string<$sigil = %ident> =
