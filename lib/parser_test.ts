@@ -47,6 +47,16 @@ function delimited<ITEM extends ParseBody, DELIMITER extends ParseBody>(
 	maybe(delimiter, _d3)
 }
 
+function r() {
+	consume(LeftParen)
+	delimited(() => {
+		consume(Num)
+		maybe(LeftParen, RightParen)
+		consume(Num)
+	}, Comma, _5, _6, _7)
+	consume(RightParen)
+}
+
 
 // const Enclosed = Macro(
 // 	'enclosed', [Arg('begin'), Arg('middle'), Arg('end')],

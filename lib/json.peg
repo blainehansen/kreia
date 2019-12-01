@@ -76,7 +76,7 @@ json_entity =
 	| object
 	| atomicEntity
 
-@separated_by_commas[$rule] = ($rule (%Comma $rule)*)?
+@separated_by_commas[$rule] = $rule (%Comma $rule)*
 
 array =
 	%LeftBracket

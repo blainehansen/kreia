@@ -8,6 +8,15 @@ export function log(obj: any) {
 	console.log(debug(obj))
 }
 
+export function ex<F extends () => any>(fn: F): ReturnType<F> {
+	return fn()
+}
+
+export function array_of(length: number): undefined[] {
+	return Array.from({ length })
+}
+
+export const empty_ordered_dict = OrderedDict.create<any>(t => '', [])
 
 // export interface NiceGenerator<T> {
 // 	next(): T | undefined

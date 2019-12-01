@@ -2,10 +2,11 @@ import '@ts-std/extensions/dist/array'
 import { tuple as t } from '@ts-std/types'
 
 import { PathBuilder } from './decision'
-import { Data, exhaustive, IterWrapper } from './utils'
+import { Data, exhaustive, IterWrapper, empty_ordered_dict } from './utils'
 import {
 	registered_tokens, registered_rules, resolve_rule, resolve_macro,
 	TokenDef, Arg, Var, Rule, Macro, Subrule, Maybe, Many, Or, MacroCall, Consume, Node, Definition,
+	Scope, empty_scope, IterableDefinition, DefinitionTuple,
 } from './ast'
 
 export function gather_branches(current: Definition[], next: Definition) {
@@ -20,32 +21,19 @@ export function gather_branches(current: Definition[], next: Definition) {
 	case 'Or':
 		branches.push_all(node.choices)
 		break
-	case 'Consume':
-		branches.push([node as Node])
-		break
 	case 'Many':
 		branches.push(node.definition)
 		break
-	case 'Subrule':
-		const rule_definition = resolve_rule(node.rule_name)
-		branches.push(rule_definition)
+	default:
+		branches.push([node as Node])
 		break
-	case 'MacroCall':
-		const call_definition = resolve_macro(node.macro_name, node.args)
-		branches.push(call_definition)
-		break
-	case 'Var':
-		throw new Error(`unexpected Var: ${node}`)
-	case 'LockingVar':
-		throw new Error(`unexpected LockingVar: ${node}`)
-	default: return exhaustive(node)
 	}
 
 	return branches
 }
 
-const Continue = Data((continue_definition: Definition) => {
-	return { type: 'Continue' as const, continue_definition }
+const Continue = Data((...definition_tuple: DefinitionTuple) => {
+	return { type: 'Continue' as const, definition_tuple }
 })
 type Continue = ReturnType<typeof Continue>
 
@@ -53,51 +41,62 @@ function is_continue(item: TokenDef | Continue): item is Continue {
 	return 'type' in item && item.type === 'Continue'
 }
 
-
-type AstIterItem = TokenDef | Definition[] | Continue
+type AstIterItem = TokenDef | DefinitionTuple[] | Continue
 type AstIter = IterWrapper<AstIterItem>
 
-function* iterate_definition(definition: Definition): Generator<AstIterItem, void, undefined> {
+function* iterate_definition(
+	...[definition, current_scope, parent_scope]: DefinitionTuple
+): Generator<AstIterItem, void, undefined> {
 	const nodes_to_visit = definition.slice()
 	let node
 	while (node = nodes_to_visit.shift()) switch (node.type) {
 	case 'Or':
 		yield node.choices
+			.map(choice => t(choice, current_scope, parent_scope))
 		continue
 	case 'Maybe':
 		yield gather_branches([node.definition], nodes_to_visit)
+			.map(branch => t(branch, current_scope, parent_scope))
 		continue
 	case 'Many':
-		yield* iterate_definition(node.definition)
-		yield Continue(node.definition)
+		yield* iterate_definition(node.definition, current_scope, parent_scope)
+		yield Continue(node.definition, current_scope, parent_scope)
 		continue
 	case 'Consume':
 		yield* node.token_names.map(token_name => registered_tokens[token_name]!)
 		continue
+
 	case 'Subrule':
-		const rule_definition = resolve_rule(node.rule_name)
-		yield* iterate_definition(rule_definition)
+		const rule = get_rule(node.rule_name)
+		yield* iterate_definition(rule.definition, rule.locking_args || empty_ordered_dict, empty_scope)
 		continue
 	case 'MacroCall':
-		const call_definition = resolve_macro(node.macro_name, node.args)
-		yield* iterate_definition(call_definition)
+		const macro = get_macro(node.macro_name)
+		yield* iterate_definition(macro.definition, Scope(macro.locking_args, node.args), current_scope)
 		continue
 	case 'Var':
-		throw new Error(`unexpected Var ${node}`)
+		// Vars use the parent_scope
+		const arg_definition = current_scope.args.get_by_name(node.arg_name).unwrap()
+		// yield* iterate_definition(arg_definition, parent_scope, empty_scope)
+		yield* iterate_definition(arg_definition, parent_scope, current_scope)
+
 	case 'LockingVar':
-		throw new Error(`unexpected LockingVar ${node}`)
+		const locking_arg = current_scope.locking_args.get_by_name(node.locking_arg_name).unwrap()
+		yield registered_tokens[locking_arg.token_name]!
+
 	default: return exhaustive(node)
 	}
 }
 
-function AstIter(definition: Definition): AstIter {
-	return IterWrapper.create(() => iterate_definition(definition))
+function AstIter(definition_tuple: DefinitionTuple): AstIter {
+	return IterWrapper.create(() => iterate_definition(...definition_tuple))
 }
-function EternalAstIter(definition: Definition): AstIter {
-	return IterWrapper.create_eternal(() => iterate_definition(definition))
+function EternalAstIter(definition_tuple: DefinitionTuple): AstIter {
+	return IterWrapper.create_eternal(() => iterate_definition(...definition_tuple))
 }
 
-export function compute_decidable(main: Definition, against: Definition[]) {
+// export function compute_decidable(main: Definition, against: Definition[]) {
+export function compute_decidable(main: DefinitionTuple, against: DefinitionTuple[]) {
 	const [path, _] = _compute_decidable(
 		AstIter(main),
 		against.map(AstIter),
@@ -137,14 +136,14 @@ function _compute_decidable(
 			const new_against = [] as AstIter[]
 			const decision_paths = []
 
-			for (const definition of item) {
+			for (const definition_tuple of item) {
 				// console.log('recursing on item')
 				// console.log(item)
 				// console.log()
 				// it seems that *all* the exit states of the clone against iters of each definition
 				// must be added to the new list of against
 				const [decision_path, continued_against] = _compute_decidable(
-					AstIter(definition),
+					AstIter(definition_tuple),
 					against.map(a => a.clone()),
 					new PathBuilder(),
 				)
@@ -182,9 +181,8 @@ function _compute_decidable(
 				continue
 
 			if (Array.isArray(against_item)) {
-				// const child_iters = against_item.map(AstIter)
 				const child_iters = against_item.map(
-					definition => IterWrapper.chain_iters(AstIter(definition), against_iter.clone()),
+					definition_tuple => IterWrapper.chain_iters(AstIter(definition_tuple), against_iter.clone()),
 				)
 				against_iters.push_all(child_iters)
 				continue
@@ -193,8 +191,7 @@ function _compute_decidable(
 			if (is_continue(against_item)) {
 				// we'll just keep cycling this iterator over and over
 				// that's a safe choice since the main loop will die if it also has one
-				// new_against.push(EternalAstIter(against_item.continue_definition))
-				against_iters.push(EternalAstIter(against_item.continue_definition))
+				against_iters.push(EternalAstIter(against_item.definition_tuple))
 				continue
 			}
 
