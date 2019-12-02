@@ -8,7 +8,7 @@
     "main": "ts-node lib/IndentationLexer.ts",
     "preversion": "npm test",
     "finalize-version": "git push origin master && git push origin master --tags && npm publish",
-    "test": "mocha -r ts-node/register lib/ast/render.spec.ts",
+    "test": "mocha -r ts-node/register lib/ast/ast.spec.ts",
     "ts:ast": "ts-creator lib/ast/render_from.ts --use-tabs true --trailing-comma 'all' -o lib/ast/render_to.ts"
   },
   "keywords": [
