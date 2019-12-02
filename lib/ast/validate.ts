@@ -1,55 +1,68 @@
+import { Dict } from '@ts-std/types'
 import { HashSet } from '@ts-std/collections'
-import { Rule, Macro, Definition } from './ast'
+import { exhaustive } from '../utils'
+
+import {
+	Rule, Macro, Definition, get_token, get_rule, get_macro,
+	visit_definition, VisitingFunctions,
+	Scope, ScopeStack, push_scope, pop_scope,
+} from './ast'
 
 export function check_left_recursive(thing: Rule | Macro) {
 	const seen_rules = {} as Dict<true>
 	const seen_macros = {} as Dict<true>
 	const one_to_add = thing.type === 'Rule' ? seen_rules : seen_macros
 	one_to_add[thing.name] = true
-	return _check_left_recursive(seen_rules, seen_macros, thing.definition)
+	const scope = { current: Scope(thing.locking_args, undefined), previous: [] }
+	return _check_left_recursive(seen_rules, seen_macros, thing.definition, scope)
 }
 function _check_left_recursive(
 	seen_rules: Dict<true>,
 	seen_macros: Dict<true>,
 	definition: Definition,
+	scope: ScopeStack,
 ): boolean {
 	for (const node of definition) switch (node.type) {
 	case 'Consume':
 		return false
 	case 'Maybe':
-		if (_check_left_recursive(seen_rules, seen_macros, node.definition))
+		if (_check_left_recursive(seen_rules, seen_macros, node.definition, scope))
 			return true
 		continue
 	case 'Or':
 		for (const choice of node.choices)
-			if (_check_left_recursive(seen_rules, seen_macros, choice))
+			if (_check_left_recursive(seen_rules, seen_macros, choice, scope))
 				return true
 		return false
 	case 'Many':
-		if (_check_left_recursive(seen_rules, seen_macros, node.definition))
+		if (_check_left_recursive(seen_rules, seen_macros, node.definition, scope))
 			return true
 		return false
 
 	case 'Subrule':
 		if (seen_rules[node.rule_name])
 			return true
-		const subrule = registered_rules[node.rule_name]!
-		if (_check_left_recursive({ [node.rule_name]: true, ...seen_rules }, seen_macros, subrule.definition))
+		const subrule = get_rule(node.rule_name).unwrap()
+		if (_check_left_recursive({ [node.rule_name]: true, ...seen_rules }, seen_macros, subrule.definition, scope))
 			return true
 		return false
 
 	case 'MacroCall':
 		if (seen_macros[node.macro_name])
 			return true
-		const call_definition = resolve_macro(node.macro_name, node.args)
-		if (_check_left_recursive(seen_rules, { [node.macro_name]: true, ...seen_macros }, call_definition))
+		const macro = get_macro(node.macro_name).unwrap()
+		const call_scope = push_scope(scope, macro.locking_args, node.args)
+		if (_check_left_recursive(seen_rules, { [node.macro_name]: true, ...seen_macros }, macro.definition, call_scope))
 			return true
 		return false
 
 	case 'Var':
+		const var_definition = scope.current.args.get_by_name(node.arg_name).unwrap()
+		const var_scope = pop_scope(scope)
+		if (_check_left_recursive(seen_rules, seen_macros, var_definition, var_scope))
 		continue
 	case 'LockingVar':
-		continue
+		return false
 
 	default: return exhaustive(node)
 	}
@@ -57,6 +70,18 @@ function _check_left_recursive(
 	return false
 }
 
+
+// let validation_errors = [] as string[]
+// const validate_references_visiting_functions: VisitingFunctions<void> = {
+// 	//
+// }
+
+// export function validate_references(thing: Rule | Macro) {
+// 	validation_errors = []
+// 	const scope = { current: Scope(thing.locking_args, undefined), previous: [] }
+// 	visit_definition(validate_references_visiting_functions, thing.definition, [], scope, undefined)
+// 	return validation_errors
+// }
 
 // TODO this needs to also check that Maybes/Manys etc aren't erroneously nested within one another
 // and that definitions don't contain only optional stuff
@@ -76,24 +101,24 @@ export function validate_references(thing: Rule | Macro) {
 
 	case 'Consume':
 		for (const token_name of node.token_names)
-			if (!(token_name in registered_tokens))
+			if (get_token(token_name).is_none())
 				validation_errors.push(`Token ${token_name} couldn't be found.`)
 		continue
 
 	case 'Subrule':
-		if (!(node.rule_name in registered_rules))
+		if (get_rule(node.rule_name).is_none())
 			validation_errors.push(`Rule ${node.rule_name} couldn't be found.`)
 		continue
 
 	case 'MacroCall':
-		const macro = registered_macros[node.macro_name]
+		const macro = get_macro(node.macro_name).to_undef()
 		if (macro === undefined) {
 			validation_errors.push(`Macro ${node.macro_name} couldn't be found.`)
 			continue
 		}
 
-		const macro_keys = HashSet.from(macro.args.keys())
-		const node_keys = HashSet.from(node.args.keys())
+		const macro_keys = HashSet.from_strings(macro.args.keys())
+		const node_keys = HashSet.from_strings(node.args.keys())
 		if (!macro_keys.equal(node_keys)) {
 			validation_errors.push(`Macro ${node.macro_name} called with invalid arguments: ${node_keys.values().join(', ')}`)
 			continue
@@ -124,7 +149,7 @@ export function validate_references(thing: Rule | Macro) {
 			validation_errors.push(`locking variable ${node.locking_arg_name} is invalid in this rule`)
 			continue
 		}
-		if(!(locking_arg.value.token_name in registered_tokens))
+		if (get_token(locking_arg.value.token_name).is_none())
 			validation_errors.push(`Token ${locking_arg.value.token_name} couldn't be found.`)
 		continue
 

@@ -1,15 +1,15 @@
 import 'mocha'
 import { expect } from 'chai'
+import { tuple as t } from '@ts-std/types'
 import { OrderedDict } from '@ts-std/collections'
 
 import { UserToken } from '../lexer'
-// import { path, branch } from './decision'
 import { compute_decidable } from './decision_compute'
 import { AstDecisionPath as path, AstDecisionBranch as branch } from './decision'
+import { render_grammar } from './render'
+import { check_left_recursive, validate_references } from './validate'
 import {
-	register_tokens, register_rules, register_macros,
-	resolve_macro, resolve_rule, check_left_recursive, validate_references,
-	render_grammar,
+	register_tokens, register_rules, register_macros, Scope,
 	TokenDef, Rule, Macro, MacroCall, Subrule, Arg, Var, Node, Definition, Maybe, Many, Or, Consume, LockingVar, LockingArg
 } from './ast'
 
@@ -46,6 +46,12 @@ const token_defs = [
 ]
 register_tokens(token_defs)
 
+const empty_scope = Scope(undefined, undefined)
+const empty_stack = { current: empty_scope, previous: [] }
+function d(...nodes: Node[]) {
+	return t(nodes as Definition, empty_stack)
+}
+
 const A = 'A'
 const B = 'B'
 const C = 'C'
@@ -58,44 +64,44 @@ const H = 'H'
 describe('compute_decidable', () => {
 	it('simple linear tokens', () => {
 		expect(compute_decidable(
-			[Consume([A])],
+			d(Consume([A])),
 			[
-			[Consume([B])],
-			[Consume([C])],
+			d(Consume([B])),
+			d(Consume([C])),
 		])).eql(
 			path([_A]),
 		)
 
 		expect(compute_decidable(
-			[Consume([A, B, C])],
+			d(Consume([A, B, C])),
 			[
-			[Consume([A, B, C, D, E])],
+			d(Consume([A, B, C, D, E])),
 		])).eql(
 			path([_A, _B, _C]),
 		)
 
 		expect(compute_decidable(
-			[Consume([A, B, A])],
+			d(Consume([A, B, A])),
 			[
-			[Consume([A, C, A])],
+			d(Consume([A, C, A])),
 		])).eql(
 			path([_A, _B]),
 		)
 
 		expect(compute_decidable(
-			[Consume([A, C, B, A, C])],
+			d(Consume([A, C, B, A, C])),
 			[
-			[Consume([A, C, D, A])],
-			[Consume([A, C, B, A, E, A])],
+			d(Consume([A, C, D, A])),
+			d(Consume([A, C, B, A, E, A])),
 		])).eql(
 			path([_A, _C, _B, _A, _C]),
 		)
 
 		expect(compute_decidable(
-			[Consume([A, C, B, A, C, E])],
+			d(Consume([A, C, B, A, C, E])),
 			[
-			[Consume([A, C, D, A])],
-			[Consume([A, C, B, A, E, A])],
+			d(Consume([A, C, D, A])),
+			d(Consume([A, C, B, A, E, A])),
 		])).eql(
 			path([_A, _C, _B, _A, _C]),
 		)
@@ -103,50 +109,50 @@ describe('compute_decidable', () => {
 
 	it('simple branches', () => {
 		expect(compute_decidable(
-			[Consume([A, B, C])],
+			d(Consume([A, B, C])),
 			[
-			[Consume([A]), Maybe([Consume([D, F])])],
+			d(Consume([A]), Maybe([Consume([D, F])])),
 		])).eql(
 			path([_A, _B]),
 		)
 
 		expect(compute_decidable(
-			[Consume([A, B, C])],
+			d(Consume([A, B, C])),
 			[
-			[Consume([A]), Maybe([Consume([B, F])])],
+			d(Consume([A]), Maybe([Consume([B, F])])),
 		])).eql(
 			path([_A, _B, _C]),
 		)
 
 		expect(compute_decidable(
-			[Consume([A, B, C])],
+			d(Consume([A, B, C])),
 			[
-			[Consume([A]), Maybe([Consume([E])]), Consume([B])],
+			d(Consume([A]), Maybe([Consume([E])]), Consume([B])),
 		])).eql(
 			path([_A, _B, _C]),
 		)
 
 		expect(compute_decidable(
-			[Consume([A, B]), Maybe([Consume([F, G])])],
+			d(Consume([A, B]), Maybe([Consume([F, G])])),
 			[
-			[Consume([A, B, E])],
+			d(Consume([A, B, E])),
 		])).eql(
 			path([_A, _B]),
 		)
 
 		expect(compute_decidable(
-			[Consume([A, B]), Maybe([Consume([F, G])]), Consume([C, E])],
+			d(Consume([A, B]), Maybe([Consume([F, G])]), Consume([C, E])),
 			[
-			[Consume([A, B, C, D])],
+			d(Consume([A, B, C, D])),
 		])).eql(
 			path([_A, _B], branch(path([_F]), path([_C, _E]))),
 		)
 
 		expect(compute_decidable(
-			[Consume([A, B]), Maybe([Consume([C, D])]), Consume([E, F, A, B, C])],
+			d(Consume([A, B]), Maybe([Consume([C, D])]), Consume([E, F, A, B, C])),
 			[
-			[Consume([A, B, E, G])],
-			[Consume([A, B, C, D, E, H])],
+			d(Consume([A, B, E, G])),
+			d(Consume([A, B, C, D, E, H])),
 		])).eql(
 			path([_A, _B], branch(path([_C, _D]), path([_E, _F])))
 		)
@@ -154,33 +160,33 @@ describe('compute_decidable', () => {
 
 	it('unambiguous many', () => {
 		expect(compute_decidable(
-			[Many([Consume([A, B, C])])],
+			d(Many([Consume([A, B, C])])),
 			[
-			[Consume([A, B, D])],
+			d(Consume([A, B, D])),
 		])).eql(
 			path([_A, _B, _C]),
 		)
 
 		expect(compute_decidable(
-			[Consume([A, B, D])],
+			d(Consume([A, B, D])),
 			[
-			[Many([Consume([A, B, C])])],
+			d(Many([Consume([A, B, C])])),
 		])).eql(
 			path([_A, _B, _D]),
 		)
 
 		expect(compute_decidable(
-			[Consume([A, B, A, B, A, B, C])],
+			d(Consume([A, B, A, B, A, B, C])),
 			[
-			[Many([Consume([A, B])]), Consume([C])],
+			d(Many([Consume([A, B])]), Consume([C])),
 		])).eql(
 			path([_A, _B, _A, _B, _A, _B, _C]),
 		)
 
 		expect(compute_decidable(
-			[Consume([A, B, A, B, C])],
+			d(Consume([A, B, A, B, C])),
 			[
-			[Many([Consume([A, B])]), Consume([C])],
+			d(Many([Consume([A, B])]), Consume([C])),
 		])).eql(
 			path([_A, _B, _A, _B, _C]),
 		)
@@ -188,33 +194,33 @@ describe('compute_decidable', () => {
 
 	it('decidable many against many', () => {
 		expect(compute_decidable(
-			[Many([Consume([A])])],
+			d(Many([Consume([A])])),
 			[
-			[Many([Consume([B])])],
+			d(Many([Consume([B])])),
 		])).eql(
 			path([_A]),
 		)
 
 		expect(compute_decidable(
-			[Many([Consume([A, B])])],
+			d(Many([Consume([A, B])])),
 			[
-			[Many([Consume([A, C])])],
+			d(Many([Consume([A, C])])),
 		])).eql(
 			path([_A, _B]),
 		)
 
 		expect(compute_decidable(
-			[Many([Consume([A, B, C])])],
+			d(Many([Consume([A, B, C])])),
 			[
-			[Consume([A, B]), Many([Consume([D, A, B, C])])],
+			d(Consume([A, B]), Many([Consume([D, A, B, C])])),
 		])).eql(
 			path([_A, _B, _C]),
 		)
 
 		expect(compute_decidable(
-			[Many([Consume([A, B, D, E])])],
+			d(Many([Consume([A, B, D, E])])),
 			[
-			[Consume([A, B]), Many([Consume([D, A, B, C])])],
+			d(Consume([A, B]), Many([Consume([D, A, B, C])])),
 		])).eql(
 			path([_A, _B, _D, _E]),
 		)
@@ -222,39 +228,39 @@ describe('compute_decidable', () => {
 
 	it('undecidable many', () => {
 		expect(() => compute_decidable(
-			[Many([Consume([A, B, C])])],
+			d(Many([Consume([A, B, C])])),
 			[
 			// the problem here is that the many will always eat into this,
 			// and prevent it from ever happening
 			// they need to restructure their grammar
-			[Consume([A, B, C, D])],
+			d(Consume([A, B, C, D])),
 		])).throw('undecidable')
 
 		expect(() => compute_decidable(
-			[Many([Consume([A, B, C])])],
+			d(Many([Consume([A, B, C])])),
 			[
-			[Consume([A, B]), Many([Consume([C, A, B])])],
+			d(Consume([A, B]), Many([Consume([C, A, B])])),
 		])).throw('undecidable')
 	})
 
 	it('complex branches', () => {
 		expect(compute_decidable(
-			[
+			d(
 				Consume([A, B]),
 				Or([
 					[Consume([C, D, E])],
 					[Consume([D])],
 				]),
 				Consume([A, C, A])
-			],
+			),
 			[
-			[
+			d(
 				Consume([A]),
 				Or([
 					[Consume([B, D])],
 					[Consume([B, C])],
 				]),
-			],
+			),
 		])).eql(
 			path(
 				[_A, _B],
@@ -267,16 +273,16 @@ describe('compute_decidable', () => {
 		)
 
 		expect(compute_decidable(
-			[
+			d(
 				Consume([A, B]),
 				Or([
 					[Consume([C, D, E])],
 					[Consume([D])],
 				]),
-				Consume([A, C, A])
-			],
+				Consume([A, C, A]),
+			),
 			[
-			[
+			d(
 				Or([
 					[Consume([A, B]), Or([
 						[Consume([C, A])],
@@ -284,7 +290,7 @@ describe('compute_decidable', () => {
 					])],
 					[Consume([A, B, E]), Maybe([Consume([A, C, A])])],
 				]),
-			],
+			),
 		])).eql(
 			path(
 				[_A, _B],
@@ -297,9 +303,9 @@ describe('compute_decidable', () => {
 		)
 
 		expect(compute_decidable(
-			[Many([Maybe([Consume([D])]), Consume([B, C, E])])],
+			d(Many([Maybe([Consume([D])]), Consume([B, C, E])])),
 			[
-			[Many([Consume([B]), Maybe([Consume([C])]), Consume([A])])],
+			d(Many([Consume([B]), Maybe([Consume([C])]), Consume([A])])),
 		])).eql(
 			path(
 				branch(
@@ -307,45 +313,6 @@ describe('compute_decidable', () => {
 					path([_B, _C, _E]),
 				),
 			)
-		)
-	})
-})
-
-
-describe('resolve_macro', () => {
-	it('works', () => {
-		register_macros([
-			Macro(
-				'many_separated',
-				OrderedDict.create_unique('name', [Arg('body_rule'), Arg('separator_rule')]).unwrap(),
-				[Var('body_rule'), Maybe([Many([Var('separator_rule'), Var('body_rule')])])],
-			),
-		])
-		const resolved = resolve_macro(
-			'many_separated',
-			OrderedDict.create_unique(
-				(_arg, index) => index === 0 ? 'body_rule' : 'separator_rule',
-				[[Consume([A])], [Consume([B])]],
-			).unwrap(),
-		)
-		expect(resolved).eql(
-			[Consume([A]), Maybe([Many([Consume([B]), Consume([A])])])],
-		)
-	})
-})
-
-describe('resolve_rule', () => {
-	it('works', () => {
-		register_rules([
-			Rule(
-				'one',
-				[LockingVar('sigil'), Many([Consume(['B']), LockingVar('sigil')])],
-				OrderedDict.create_unique<LockingArg>('name', [LockingArg('sigil', 'A')],).unwrap(),
-			),
-		])
-
-		expect(resolve_rule('one')).eql(
-			[Consume(['A']), Many([Consume(['B']), Consume(['A'])])],
 		)
 	})
 })

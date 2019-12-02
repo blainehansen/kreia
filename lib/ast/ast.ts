@@ -10,15 +10,15 @@ import { AstDecidable } from './decision'
 import { gather_branches, compute_decidable } from './decision_compute'
 
 
-type RegexSpec =
+export type RegexSpec =
 	| { type: 'regex', source: string }
 	| { type: 'string', value: string }
 
-type MatchSpec =
+export type MatchSpec =
 	| RegexSpec
 	| { type: 'array', items: RegexSpec[] }
 
-type TokenSpec =
+export type TokenSpec =
 	| MatchSpec
 	| { type: 'options', match: MatchSpec } & TokenOptions
 
@@ -112,11 +112,20 @@ export type GrammarItem =
 
 export type Grammar = GrammarItem[]
 
-export let registered_tokens = {} as Dict<TokenDef>
-export let registered_rules = {} as Dict<Rule>
-export let registered_macros = {} as Dict<Macro>
+let registered_tokens = {} as Dict<TokenDef>
+export function set_registered_tokens(new_registered_tokens: Dict<TokenDef>) {
+	registered_tokens = new_registered_tokens
+}
+let registered_rules = {} as Dict<Rule>
+export function set_registered_rules(new_registered_rules: Dict<Rule>) {
+	registered_rules = new_registered_rules
+}
+let registered_macros = {} as Dict<Macro>
+export function set_registered_macros(new_registered_macros: Dict<Macro>) {
+	registered_macros = new_registered_macros
+}
 
-export function get_token(token_name: string): Option<Rule> {
+export function get_token(token_name: string): Option<TokenDef> {
 	return Option.from_nillable(registered_tokens[token_name])
 }
 export function get_rule(rule_name: string): Option<Rule> {
@@ -139,7 +148,7 @@ export function register_macros(macros: Macro[]) {
 
 export type Scope = Readonly<{ locking_args: OrderedDict<LockingArg>, args: OrderedDict<Definition> }>
 export function Scope(locking_args: OrderedDict<LockingArg> | undefined, args: OrderedDict<Definition> | undefined): Scope {
-	return { locking_args: locking_args || empty_ordered_dict, args: args: || empty_ordered_dict }
+	return { locking_args: locking_args || empty_ordered_dict, args: args || empty_ordered_dict }
 }
 
 export type ScopeStack = { current: Scope, previous: Scope[] }
@@ -155,10 +164,10 @@ export function pop_scope({ current, previous }: ScopeStack): ScopeStack {
 
 export type DefinitionTuple = [Definition, ScopeStack]
 
-type VisitorParams = [Node[], ScopeStack, ('maybe' | 'many' | 'maybe_many')?]
-type VisitingFunctions<T> = { [K in keyof NodesManifest]: (node: NodesManifest[K], ...args: VisitorParams) => T }
+export type VisitorParams = [Node[], ScopeStack, ('maybe' | 'many' | 'maybe_many')?]
+export type VisitingFunctions<T> = { [K in keyof NodesManifest]: (node: NodesManifest[K], ...args: VisitorParams) => T }
 
-function visit_definition<T>(
+export function visit_definition<T>(
 	node_visitors: VisitingFunctions<T>,
 	definition: Definition,
 	...[next, scope, wrapping_function_name]: VisitorParams
@@ -171,7 +180,7 @@ function visit_definition<T>(
 	return results
 }
 
-function visit_node<T>(
+export function visit_node<T>(
 	node_visitors: VisitingFunctions<T>,
 	node: Node,
 	...[next, scope, wrapping_function_name]: VisitorParams

@@ -1,9 +1,9 @@
 import '@ts-std/extensions/dist/array'
 import { Dict } from '@ts-std/types'
+import { Data } from '../utils'
 
-import { Data } from './utils'
 import { TokenDef } from './ast'
-import { Lexer, LexerState, TokenDefinition, Token, match_and_trim } from './lexer'
+import { Lexer, LexerState, TokenDefinition, Token, match_and_trim } from '../lexer'
 
 export abstract class Decidable {
 	abstract readonly test_length: number
@@ -13,23 +13,15 @@ export abstract class Decidable {
 	): [Token[], LexerState<V>] | undefined
 }
 
-// function is_branch(item: TokenDefinition[] | TokenDefinition | DecisionBranch): item is DecisionBranch {
-// 	return !Array.isArray(item) && 'type' in item && item.type === 'DecisionBranch'
-// }
-
 export class PathBuilder {
-	// private items = [] as (TokenDefinition[] | DecisionBranch)[]
 	private items = [] as (TokenDef[] | AstDecisionBranch)[]
 
-	// push_branch(paths: DecisionPath[]) {
 	push_branch(paths: AstDecisionPath[]) {
-		// this.items.push(new DecisionBranch(
 		this.items.push(AstDecisionBranch(
 			...paths.filter(path => path.test_length > 0)
 		))
 	}
 
-	// push(def: TokenDefinition) {
 	push(def: TokenDef) {
 		const last_index = this.items.length - 1
 		const last = this.items[last_index]
@@ -46,7 +38,6 @@ export class PathBuilder {
 		if (!Array.isArray(last) && (last as AstDecisionBranch).is_optional)
 			this.items.splice(last_index, 1)
 
-		// return new DecisionPath(this.items)
 		return AstDecisionPath(...this.items)
 	}
 }
@@ -114,7 +105,6 @@ class DecisionPath extends Decidable {
 
 
 
-const EMPTY_PATH = new DecisionPath([])
 export function branch(...paths: DecisionPath[]) {
 	return new DecisionBranch(paths)
 }

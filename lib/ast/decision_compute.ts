@@ -1,17 +1,15 @@
 import '@ts-std/extensions/dist/array'
 import { tuple as t } from '@ts-std/types'
+import { Data, exhaustive, IterWrapper } from '../utils'
 
 import { PathBuilder } from './decision'
-import { Data, exhaustive, IterWrapper, empty_ordered_dict } from './utils'
 import {
-	registered_tokens, registered_rules, resolve_rule, resolve_macro,
+	get_token, get_rule, get_macro,
 	TokenDef, Arg, Var, Rule, Macro, Subrule, Maybe, Many, Or, MacroCall, Consume, Node, Definition,
-	Scope, empty_scope, DefinitionTuple, push_scope, pop_scope
+	Scope, DefinitionTuple, push_scope, pop_scope,
 } from './ast'
 
-// export function gather_branches(current: Definition[], next: Definition) {
 export function gather_branches(next: Definition) {
-	// const branches = current.slice()
 	const branches = []
 
 	let node
@@ -65,16 +63,16 @@ function* iterate_definition(
 		yield Continue(node.definition, scope)
 		continue
 	case 'Consume':
-		yield* node.token_names.map(token_name => registered_tokens[token_name]!)
+		yield* node.token_names.map(token_name => get_token(token_name).unwrap())
 		continue
 
 	case 'Subrule':
-		const rule = get_rule(node.rule_name)
+		const rule = get_rule(node.rule_name).unwrap()
 		const rule_scope = { current: Scope(rule.locking_args, undefined), previous: [] }
 		yield* iterate_definition(rule.definition, rule_scope)
 		continue
 	case 'MacroCall':
-		const macro = get_macro(node.macro_name)
+		const macro = get_macro(node.macro_name).unwrap()
 		const macro_scope = push_scope(scope, macro.locking_args, node.args)
 		yield* iterate_definition(macro.definition, macro_scope)
 		continue
@@ -83,10 +81,12 @@ function* iterate_definition(
 		const arg_definition = scope.current.args.get_by_name(node.arg_name).unwrap()
 		const var_scope = pop_scope(scope)
 		yield* iterate_definition(arg_definition, var_scope)
+		continue
 
 	case 'LockingVar':
 		const locking_arg = scope.current.locking_args.get_by_name(node.locking_arg_name).unwrap()
-		yield registered_tokens[locking_arg.token_name]!
+		yield get_token(locking_arg.token_name).unwrap()
+		continue
 
 	default: return exhaustive(node)
 	}
@@ -99,7 +99,6 @@ function EternalAstIter(definition_tuple: DefinitionTuple): AstIter {
 	return IterWrapper.create_eternal(() => iterate_definition(...definition_tuple))
 }
 
-// export function compute_decidable(main: Definition, against: Definition[]) {
 export function compute_decidable(main: DefinitionTuple, against: DefinitionTuple[]) {
 	const [path, _] = _compute_decidable(
 		AstIter(main),

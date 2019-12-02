@@ -2,13 +2,25 @@
 // https://github.com/HearTao/ts-creator
 
 import ts = require('typescript')
-import { Dict } from '@ts-std/types'
-import { Maybe as Option } from '@ts-std/monads'
+import { Dict, tuple as t } from '@ts-std/types'
+// import { Maybe as Option } from '@ts-std/monads'
+import { UniqueDict, OrderedDict } from '@ts-std/collections'
 
 import { Data, exhaustive, debug, exec, array_of, empty_ordered_dict } from '../utils'
 
 import { AstDecidable } from './decision'
 import { gather_branches, compute_decidable } from './decision_compute'
+
+import { check_left_recursive, validate_references } from './validate'
+
+import {
+	RegexSpec, MatchSpec, TokenSpec, Node, Definition, Grammar, get_token, get_rule, get_macro,
+	Rule, Macro, LockingArg, TokenDef,
+	Scope, ScopeStack, push_scope, pop_scope, DefinitionTuple,
+	VisitingFunctions, VisitorParams, visit_definition,
+	set_registered_tokens, set_registered_rules, set_registered_macros,
+	Arg, Maybe, Many, Var,
+} from './ast'
 
 type Call = ReturnType<typeof ts.createCall>
 
@@ -23,7 +35,6 @@ type Call = ReturnType<typeof ts.createCall>
 
 // when counting decision points to render a macro definition, you don't have to iterate vars and macro calls, because in fact you can't. in fact you shouldn't recurse beyond the current definition at all. when gathering the finalized decision points at render time, the same is true that you don't recurse beyond the macro definition as you gather them, but you will have to recurse beyond in order to compute the decision points. you do have to render the provided vars themselves though
 
-// type MacroRenderContext = { count: number }
 type MacroRenderContext =
 	| { type: 'definition', count: number }
 	| { type: 'call', decidables: ts.Identifier[] }
@@ -42,45 +53,26 @@ let global_decidables = [] as ReturnType<typeof ts.createCall>[]
 function generate_decidable(
 	wrapping_function_name: VisitorParams[2],
 	main: DefinitionTuple, against: DefinitionTuple[]
-): ts.Identifier | undefined {
-	if (global_macro_render_context === undefined)
-		return undefined
-
-	switch (global_macro_render_context.type) {
-	case 'definition':
+): ts.Identifier {
+	if (global_macro_render_context !== undefined && global_macro_render_context.type === 'definition') {
 		global_macro_render_context.count++
 		return ts.createIdentifier(`_d${global_macro_render_context.count}`)
-
-	case 'call':
-		const decidable = compute_decidable(main, against)
-		const lookahead_definition = render_decidable(decidable)
-		const lookahead_number = global_decidables.length
-		global_decidables.push(lookahead_definition)
-		const lookahead_ident = ts.createIdentifier(`_${lookahead_number}`)
-		global_macro_render_context.decidables.push(lookahead_ident)
-		return lookahead_ident
-
-	default:
-		return exhaustive(global_macro_render_context)
 	}
+
+	const decidable = compute_decidable(main, against)
+	const lookahead_definition = render_decidable(decidable)
+	const lookahead_number = global_decidables.length
+	global_decidables.push(lookahead_definition)
+	const lookahead_ident = ts.createIdentifier(`_${lookahead_number}`)
+
+	if (global_macro_render_context !== undefined && global_macro_render_context.type === 'call')
+		global_macro_render_context.decidables.push(lookahead_ident)
+
+	return lookahead_ident
 }
 
-// function render_global_decidables() {
-// 	return ts.createVariableStatement(
-// 		undefined, ts.createVariableDeclarationList(
-// 		[ts.createVariableDeclaration(
-// 			ts.createArrayBindingPattern(array_of(global_decidables.length).map((_, index) => ts.createBindingElement(
-// 				undefined, undefined,
-// 				ts.createIdentifier(`_${index}`), undefined,
-// 			))),
-// 			undefined,
-// 			ts.createArrayLiteral(global_decidables, false),
-// 		)], ts.NodeFlags.Const),
-// 	)
-// }
 
-
-const render_visiting_functions: VisitingFunctions<ts.Expression> = {
+const render_visiting_functions: VisitingFunctions<Call> = {
 	Or(or, next, scope, wrapping_function_name) {
 		const choices = [] as ts.Expression[]
 		for (let choice_index = 0; choice_index < or.choices.length; choice_index++) {
@@ -119,7 +111,7 @@ const render_visiting_functions: VisitingFunctions<ts.Expression> = {
 			? ts.createCall(locker_identifier, undefined, [])
 			: ts.createCall(
 				ts.createIdentifier(wrapping_function_name), undefined,
-				render_entity([locking_var], gather_branches(next.slice()), false, next, scope, wrapping_function_name),
+				render_entity([locking_var as Node], gather_branches(next.slice()), false, next, scope, wrapping_function_name),
 			)
 	},
 	Subrule(subrule, next, scope, wrapping_function_name) {
@@ -136,17 +128,17 @@ const render_visiting_functions: VisitingFunctions<ts.Expression> = {
 		return ts.createCall(ts.createIdentifier(wrapping_function_name), undefined, [rule_identifier, entity_decidable])
 	},
 	MacroCall(macro_call, next, scope, wrapping_function_name) {
-		const macro = get_macro(macro_call.macro_name)
+		const macro = get_macro(macro_call.macro_name).unwrap()
 		const pushed_scope = push_scope(scope, macro.locking_args, macro_call.args)
 
-		const gathered_decidables = { type: 'call', decidables: [] }
+		const gathered_decidables: MacroRenderContext = { type: 'call', decidables: [] }
 		with_macro_render_context(gathered_decidables, () => {
 			render_definition(macro.definition, pushed_scope)
 		})
 
 		// all of these args are rendered in the current scope (we haven't already pushed the macro's args)
 		const rendered_args = macro_call.args.to_array().map(arg_definition => {
-			return render_definition(arg_definition, scope)
+			return render_arrow(arg_definition, scope)
 		})
 		const macro_identifier = ts.createIdentifier(macro_call.macro_name)
 		const macro_args = [...rendered_args, ...gathered_decidables.decidables]
@@ -219,26 +211,22 @@ function render_entity<B extends boolean>(
 		const entity_args = exec(() => {
 			switch (entity.type) {
 			case 'Subrule':
-				return render_visiting_functions.Subrule(entity, next, scope, 'maybe').argumentsArray
+				return render_visiting_functions.Subrule(entity, next, scope, 'maybe').arguments
 			case 'MacroCall':
-				return render_visiting_functions.MacroCall(entity, next, scope, 'maybe').argumentsArray
+				return render_visiting_functions.MacroCall(entity, next, scope, 'maybe').arguments
 			case 'Var':
-				return render_visiting_functions.Var(entity, next, scope, 'maybe').argumentsArray
+				return render_visiting_functions.Var(entity, next, scope, 'maybe').arguments
 			default:
 				return exhaustive(entity)
 			}
 		})
 
 		return atom_style
-			? ts.createCall(ts.createIdentifier('f'), undefined, entity_args)
-			: entity_args
+			? ts.createCall(ts.createIdentifier('f'), undefined, entity_args) as B extends true ? Call : ts.Expression[]
+			: entity_args as unknown as B extends true ? Call : ts.Expression[]
 	}
 
-	const rendered_entity = return ts.createArrowFunction(
-		undefined, undefined, [], undefined,
-		ts.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
-		ts.createBlock(render_definition(target, scope), true),
-	)
+	const rendered_entity = render_arrow(target, scope)
 
 	const overall_decidable = generate_decidable(
 		wrapping_function_name,
@@ -253,6 +241,13 @@ function render_entity<B extends boolean>(
 		: [rendered_entity, overall_decidable] as unknown as B extends true ? Call : ts.Expression[]
 }
 
+function render_arrow(...[definition, scope]: DefinitionTuple) {
+	return ts.createArrowFunction(
+		undefined, undefined, [], undefined,
+		ts.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+		ts.createBlock(render_definition(definition, scope), true),
+	)
+}
 
 function render_macro(macro: Macro) {
 	if (macro.name === 'many_separated')
@@ -261,7 +256,7 @@ function render_macro(macro: Macro) {
 	const lockers = (macro.locking_args !== undefined ? macro.locking_args.to_array() : []).map(render_locking_arg)
 	const args = macro.args.to_array()
 
-	const macro_render_context = { type: 'definition', count: 0 }
+	const macro_render_context: MacroRenderContext = { type: 'definition', count: 0 }
 	const starting_scope = { current: Scope(macro.locking_args, undefined), previous: [] }
 	const rendered_definition = with_macro_render_context(macro_render_context, () => {
 		return render_definition(macro.definition, starting_scope)
@@ -286,7 +281,7 @@ function render_macro(macro: Macro) {
 				undefined, undefined, undefined,
 				ts.createIdentifier(`_d${index + 1}`), undefined,
 				ts.createTypeReferenceNode(ts.createIdentifier('Decidable'), undefined), undefined,
-			))),
+			)),
 		],
 		undefined,
 		ts.createBlock([...lockers, ...rendered_definition], true),
@@ -326,9 +321,9 @@ export function render_grammar(grammar: Grammar) {
 	if (conflict_errors.length > 0)
 		throw new Error(conflict_errors.join('\n\n'))
 
-	registered_tokens = token_defs.into_dict()
-	registered_rules = rules.into_dict()
-	registered_macros = macros.into_dict()
+	set_registered_tokens(token_defs.into_dict())
+	set_registered_rules(rules.into_dict())
+	set_registered_macros(macros.into_dict())
 
 	const rules_macros: (Rule | Macro)[] = [...rules.values(), ...macros.values()]
 	const validation_errors = rules_macros
@@ -344,6 +339,27 @@ export function render_grammar(grammar: Grammar) {
 	const rendered_tokens = token_defs.values().map(render_token_def)
 	const rendered_macros = macros.values().filter_map(render_macro)
 	const rendered_rules = rules.values().map(render_rule)
+
+	const rendered_decidables = ts.createVariableStatement(
+		undefined, ts.createVariableDeclarationList(
+		[ts.createVariableDeclaration(
+			ts.createArrayBindingPattern(array_of(global_decidables.length).map((_, index) => ts.createBindingElement(
+				undefined, undefined,
+				ts.createIdentifier(`_${index}`), undefined,
+			))),
+			undefined,
+			ts.createArrayLiteral(global_decidables, false),
+		)], ts.NodeFlags.Const),
+	)
+
+	return [
+		// need all the imports
+		// as well as the setting up of the parser
+		...rendered_tokens,
+		...rendered_macros,
+		...rendered_rules,
+		rendered_decidables,
+	]
 }
 
 function render_regex_spec(regex_spec: RegexSpec) {
