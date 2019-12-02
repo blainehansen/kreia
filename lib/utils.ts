@@ -8,8 +8,8 @@ export function log(obj: any) {
 	console.log(debug(obj))
 }
 
-export function ex<F extends () => any>(fn: F): ReturnType<F> {
-	return fn()
+export function exec<F extends (...args: any[]) => any>(fn: F, ...args: Parameters<F>): ReturnType<F> {
+	return fn(...args)
 }
 
 export function array_of(length: number): undefined[] {

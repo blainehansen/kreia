@@ -2,7 +2,7 @@ import 'mocha'
 import { expect } from 'chai'
 import { OrderedDict } from '@ts-std/collections'
 
-import { UserToken } from './lexer'
+import { UserToken } from '../lexer'
 // import { path, branch } from './decision'
 import { compute_decidable } from './decision_compute'
 import { AstDecisionPath as path, AstDecisionBranch as branch } from './decision'
@@ -14,7 +14,7 @@ import {
 } from './ast'
 
 
-import { log } from './utils'
+import { log } from '../utils'
 
 // const _A = UserToken('A', 'A')
 // const _B = UserToken('B', 'B')

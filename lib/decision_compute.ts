@@ -6,11 +6,13 @@ import { Data, exhaustive, IterWrapper, empty_ordered_dict } from './utils'
 import {
 	registered_tokens, registered_rules, resolve_rule, resolve_macro,
 	TokenDef, Arg, Var, Rule, Macro, Subrule, Maybe, Many, Or, MacroCall, Consume, Node, Definition,
-	Scope, empty_scope, IterableDefinition, DefinitionTuple,
+	Scope, empty_scope, DefinitionTuple, push_scope, pop_scope
 } from './ast'
 
-export function gather_branches(current: Definition[], next: Definition) {
-	const branches = current.slice()
+// export function gather_branches(current: Definition[], next: Definition) {
+export function gather_branches(next: Definition) {
+	// const branches = current.slice()
+	const branches = []
 
 	let node
 	while (node = next.shift()) switch (node.type) {
@@ -45,22 +47,22 @@ type AstIterItem = TokenDef | DefinitionTuple[] | Continue
 type AstIter = IterWrapper<AstIterItem>
 
 function* iterate_definition(
-	...[definition, current_scope, parent_scope]: DefinitionTuple
+	...[definition, scope]: DefinitionTuple
 ): Generator<AstIterItem, void, undefined> {
 	const nodes_to_visit = definition.slice()
 	let node
 	while (node = nodes_to_visit.shift()) switch (node.type) {
 	case 'Or':
 		yield node.choices
-			.map(choice => t(choice, current_scope, parent_scope))
+			.map(choice => t(choice, scope))
 		continue
 	case 'Maybe':
-		yield gather_branches([node.definition], nodes_to_visit)
-			.map(branch => t(branch, current_scope, parent_scope))
+		yield [node.definition, ...gather_branches(nodes_to_visit)]
+			.map(branch => t(branch, scope))
 		continue
 	case 'Many':
-		yield* iterate_definition(node.definition, current_scope, parent_scope)
-		yield Continue(node.definition, current_scope, parent_scope)
+		yield* iterate_definition(node.definition, scope)
+		yield Continue(node.definition, scope)
 		continue
 	case 'Consume':
 		yield* node.token_names.map(token_name => registered_tokens[token_name]!)
@@ -68,20 +70,22 @@ function* iterate_definition(
 
 	case 'Subrule':
 		const rule = get_rule(node.rule_name)
-		yield* iterate_definition(rule.definition, rule.locking_args || empty_ordered_dict, empty_scope)
+		const rule_scope = { current: Scope(rule.locking_args, undefined), previous: [] }
+		yield* iterate_definition(rule.definition, rule_scope)
 		continue
 	case 'MacroCall':
 		const macro = get_macro(node.macro_name)
-		yield* iterate_definition(macro.definition, Scope(macro.locking_args, node.args), current_scope)
+		const macro_scope = push_scope(scope, macro.locking_args, node.args)
+		yield* iterate_definition(macro.definition, macro_scope)
 		continue
 	case 'Var':
 		// Vars use the parent_scope
-		const arg_definition = current_scope.args.get_by_name(node.arg_name).unwrap()
-		// yield* iterate_definition(arg_definition, parent_scope, empty_scope)
-		yield* iterate_definition(arg_definition, parent_scope, current_scope)
+		const arg_definition = scope.current.args.get_by_name(node.arg_name).unwrap()
+		const var_scope = pop_scope(scope)
+		yield* iterate_definition(arg_definition, var_scope)
 
 	case 'LockingVar':
-		const locking_arg = current_scope.locking_args.get_by_name(node.locking_arg_name).unwrap()
+		const locking_arg = scope.current.locking_args.get_by_name(node.locking_arg_name).unwrap()
 		yield registered_tokens[locking_arg.token_name]!
 
 	default: return exhaustive(node)

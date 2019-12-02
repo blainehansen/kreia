@@ -58,6 +58,8 @@ function _check_left_recursive(
 }
 
 
+// TODO this needs to also check that Maybes/Manys etc aren't erroneously nested within one another
+// and that definitions don't contain only optional stuff
 export function validate_references(thing: Rule | Macro) {
 	const validation_errors = [] as string[]
 
