@@ -102,7 +102,7 @@ const render_visiting_functions: VisitingFunctions<Call> = {
 	Consume(consume, next, scope, wrapping_function_name) {
 		return ts.createCall(
 			ts.createIdentifier(wrapping_function_name || 'consume'), undefined,
-			consume.token_names.map(ts.createIdentifier),
+			consume.token_names.map(token_name => ts.createIdentifier(token_name)),
 		)
 	},
 	LockingVar(locking_var, next, scope, wrapping_function_name) {
@@ -167,7 +167,7 @@ const render_visiting_functions: VisitingFunctions<Call> = {
 }
 function render_definition(definition: Definition, scope: ScopeStack) {
 	return visit_definition(render_visiting_functions, definition, [], scope, undefined)
-		.map(ts.createExpressionStatement)
+		.map(rendered => ts.createExpressionStatement(rendered))
 }
 
 
@@ -453,7 +453,7 @@ function render_decidable(decidable: AstDecidable): Call {
 	}
 }
 
-function render_rule(rule: Rule) {
+export function render_rule(rule: Rule) {
 	const lockers = (rule.locking_args !== undefined ? rule.locking_args.to_array() : []).map(render_locking_arg)
 
 	if (global_macro_render_context !== undefined)
@@ -477,13 +477,7 @@ function render_rule(rule: Rule) {
 // 	/*setParentNodes*/ false,
 // 	ts.ScriptKind.TS,
 // )
-// const printer = ts.createPrinter({
-// 	newLine: ts.NewLineKind.LineFeed
-// })
-// const result = printer.printNode(
-// 	ts.EmitHint.Unspecified,
-// 	f(),
-// 	resultFile,
-// )
+// const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed })
+// const result = printer.printNode(ts.EmitHint.Unspecified, r, resultFile)
 
 // console.log(result)
