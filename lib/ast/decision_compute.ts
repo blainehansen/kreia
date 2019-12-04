@@ -124,9 +124,6 @@ function _compute_decidable(
 		// console.log('against.length')
 		// console.log(against.length)
 
-		if (against.length === 0)
-			break
-
 		// this next call will already mutate the underlying definition in gather_branches
 		// so we could have entered this iteration of the loop with many things ahead
 		// but the next will have none left
@@ -211,7 +208,10 @@ function _compute_decidable(
 		// 	throw new Error("all branches have the same stem")
 
 		builder.push(item)
+		if (against.length === 0)
+			break
 	}
+
 
 	// against.length being non-zero here means that we exhausted the main branch before the others
 	// we could choose to make that an error condition, but it seems too picky

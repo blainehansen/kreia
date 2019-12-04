@@ -24,7 +24,7 @@ type IndentationStateWithRawBlock =
 
 export const IndentationLexerWithRawBlock: VirtualLexer<IndentationStateWithRawBlock> = {
 	use() {
-		return [indent, deindent, indent_continue, raw_block_begin, raw_block_content, raw_block_end]
+		return { indent, deindent, indent_continue, raw_block_begin, raw_block_content, raw_block_end }
 	},
 	initialize() {
 		return { in_block: false, indentation_state: { type: 'unbuffered', indentation: 0 } }

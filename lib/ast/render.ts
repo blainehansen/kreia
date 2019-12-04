@@ -3,7 +3,6 @@
 
 import ts = require('typescript')
 import { Dict, tuple as t } from '@ts-std/types'
-// import { Maybe as Option } from '@ts-std/monads'
 import { UniqueDict, OrderedDict } from '@ts-std/collections'
 
 import { Data, exhaustive, debug, exec, array_of, empty_ordered_dict } from '../utils'
@@ -131,6 +130,24 @@ const render_visiting_functions: VisitingFunctions<Call> = {
 		const macro = get_macro(macro_call.macro_name).unwrap()
 		const pushed_scope = push_scope(scope, macro.locking_args, macro_call.args)
 
+		if (macro_call.macro_name === 'many_separated') {
+			const body_rule = macro_call.args.get_by_name('body_rule').unwrap()
+			const separator_rule = macro_call.args.get_by_name('separator_rule').unwrap()
+
+			const body_decidable =
+				render_entity_decidable(macro.definition, pushed_scope, next, scope, wrapping_function_name)
+			const separator_decidable =
+				render_entity_decidable([...separator_rule, ...body_rule], pushed_scope, next, scope, wrapping_function_name)
+
+			return ts.createCall(
+				ts.createIdentifier(wrapping_function_name === 'maybe' ? 'maybe_many_separated' : 'many_separated'), undefined,
+				[
+					ts.createCall(ts.createIdentifier('f'), undefined, [render_arrow(body_rule, scope), body_decidable]),
+					ts.createCall(ts.createIdentifier('f'), undefined, [render_arrow(separator_rule, scope), separator_decidable]),
+				],
+			)
+		}
+
 		const gathered_decidables: MacroRenderContext = { type: 'call', decidables: [] }
 		with_macro_render_context(gathered_decidables, () => {
 			render_definition(macro.definition, pushed_scope)
@@ -249,7 +266,7 @@ function render_arrow(...[definition, scope]: DefinitionTuple) {
 	)
 }
 
-function render_macro(macro: Macro) {
+export function render_macro(macro: Macro) {
 	if (macro.name === 'many_separated')
 		return undefined
 
@@ -356,9 +373,9 @@ export function render_grammar(grammar: Grammar) {
 		// need all the imports
 		// as well as the setting up of the parser
 		...rendered_tokens,
+		rendered_decidables,
 		...rendered_macros,
 		...rendered_rules,
-		rendered_decidables,
 	]
 }
 
@@ -439,16 +456,16 @@ function render_decidable(decidable: AstDecidable): Call {
 	case 'AstDecisionPath':
 		return ts.createCall(
 			ts.createIdentifier('path'), undefined,
-			decidable.path.map(item =>
+			decidable.path.flat_map(item =>
 				Array.isArray(item)
-					? item.map(token_def => ts.createIdentifier(token_def.name))
-					: render_decidable(item)
-			) as ts.Expression[],
+					? item.map(token_def => ts.createIdentifier(token_def.name)) as ts.Expression[]
+					: [render_decidable(item)] as ts.Expression[]
+			),
 		)
 	case 'AstDecisionBranch':
 		return ts.createCall(
 			ts.createIdentifier('branch'), undefined,
-			decidable.paths.map(render_decidable) as ts.Expression[],
+			decidable.paths.map(path => render_decidable(path)) as ts.Expression[],
 		)
 	}
 }

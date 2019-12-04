@@ -34,8 +34,8 @@ export class PathBuilder {
 
 	build() {
 		const last_index = this.items.length - 1
-		const last = this.items[last_index]
-		if (!Array.isArray(last) && (last as AstDecisionBranch).is_optional)
+		const last = this.items.maybe_get(-1)
+		if (last.is_some() && !Array.isArray(last.value) && last.value.is_optional)
 			this.items.splice(last_index, 1)
 
 		return AstDecisionPath(...this.items)

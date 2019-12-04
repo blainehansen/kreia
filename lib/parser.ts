@@ -2,13 +2,21 @@ import { Dict, Cast, tuple as t } from '@ts-std/types'
 import { Maybe, Some, None } from '@ts-std/monads'
 
 import { Decidable } from './decision'
-import { Lexer as _Lexer, match_tokens, TokenDefinition, RawTokenDefinition, Token, RawToken, VirtualToken } from './lexer'
+import { Lexer as _Lexer, Tokens, TokenDefinition, RawTokenDefinition, Token, RawToken, VirtualToken } from './lexer'
 
 type Lexer = _Lexer<Dict<unknown>>
 
-export function Parser(...lexer_args: Parameters<Lexer['reset']>) {
-	const lexer = new _Lexer(...lexer_args)
+// export function Parser(...lexer_args: Parameters<Lexer['reset']>) {
+export function Parser<V extends Dict<any>, D extends Dict<TokenSpec>>(
+	tokens: D, raw_virtual_lexers?: VirtualLexerDict<V>,
+) {
+	// const lexer = new _Lexer(...lexer_args)
+	// const tok = Tokens(tokens)
+	// const lexer = new _Lexer(Object.values(tok), raw_virtual_lexers || {})
+	const [tok, lexer] = _Lexer.create(tokens, raw_virtual_lexers)
+
 	return {
+		tok,
 		reset(...args: Parameters<Lexer['reset']>) {
 			lexer.reset(...args)
 		},

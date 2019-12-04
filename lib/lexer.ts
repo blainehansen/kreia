@@ -88,8 +88,8 @@ export type Token =
 	| RawToken
 	| VirtualToken
 
-export type VirtualLexer<S, A extends any[] = []> = Readonly<{
-	use(...args: A): (ExposedRawTokenDefinition | VirtualTokenDefinition)[],
+export type VirtualLexer<S, T extends Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, A extends any[] = []> = Readonly<{
+	use(...args: A): T,
 	initialize(): S,
 	request(
 		virtual_token: VirtualTokenDefinition,
@@ -126,25 +126,17 @@ export type LexerState<V extends Dict<any>> = Readonly<{
 type NonEmpty<T> = [T, ...T[]]
 
 export class Lexer<V extends Dict<any>> {
+	private readonly ignored_token_definitions: RawTokenDefinition[]
 	constructor(
-		raw_virtual_lexers: VirtualLexerDict<V>,
-		ignored_token_definitions: RawTokenDefinition[],
-		source: string, filename?: string,
+		token_definitions: UserRawTokenDefinition[],
+		private readonly raw_virtual_lexers: VirtualLexerDict<V>,
 	) {
-		this.reset(raw_virtual_lexers, ignored_token_definitions, source, filename)
-	}
+		const ignored_token_definitions = [] as RawTokenDefinition[]
+		for (const token_definition of token_definitions) {
+			if (token_definition.ignore)
+				ignored_token_definitions.push(token_definition)
+		}
 
-	private file!: SourceFile
-	private state!: LexerState<V>
-	private ignored_token_definitions!: RawTokenDefinition[]
-	reset(
-		raw_virtual_lexers: VirtualLexerDict<V>,
-		input_ignored_token_definitions: RawTokenDefinition[],
-		source: string, filename?: string,
-	) {
-		this.file = { source, filename }
-
-		const ignored_token_definitions = input_ignored_token_definitions.slice()
 		const virtual_lexers = {} as VirtualLexerStateDict<V>
 		for (const virtual_lexer_name in raw_virtual_lexers) {
 			const virtual_lexer = raw_virtual_lexers[virtual_lexer_name]
@@ -158,7 +150,18 @@ export class Lexer<V extends Dict<any>> {
 		}
 
 		this.ignored_token_definitions = ignored_token_definitions
+	}
 
+	private file: SourceFile | undefined
+	private state: LexerState<V> | undefined
+	reset(source: string, filename?: string) {
+		const virtual_lexers = {} as VirtualLexerStateDict<V>
+		for (const virtual_lexer_name in this.raw_virtual_lexers) {
+			const virtual_lexer = this.raw_virtual_lexers[virtual_lexer_name]
+			virtual_lexers[virtual_lexer_name] = { virtual_lexer, state: virtual_lexer.initialize() }
+		}
+
+		this.file = { source, filename }
 		this.state = {
 			source_state: { source, index: 0, line: 1, column: 1 },
 			virtual_lexers,
@@ -286,6 +289,11 @@ export class Lexer<V extends Dict<any>> {
 		token_definitions: TokenDefinition[],
 		input_lexer_state?: LexerState<V>,
 	): [NonEmpty<Token>, LexerState<V>] | undefined {
+		if (this.file === undefined)
+			throw new Error()
+		if (this.state === undefined)
+			throw new Error()
+
 		return Lexer.request(
 			token_definitions, input_lexer_state || this.state,
 			this.file, this.ignored_token_definitions,
@@ -293,6 +301,11 @@ export class Lexer<V extends Dict<any>> {
 	}
 
 	require(token_definitions: TokenDefinition[]): Token[] {
+		if (this.file === undefined)
+			throw new Error()
+		if (this.state === undefined)
+			throw new Error()
+
 		const attempt = Lexer.request(
 			token_definitions, this.state,
 			this.file, this.ignored_token_definitions,
@@ -305,17 +318,16 @@ export class Lexer<V extends Dict<any>> {
 		return attempt[0]
 	}
 
-	// this would turn off ignore
-	// require_all() {
-	// }
-
 	exit() {
+		if (this.file === undefined)
+			throw new Error()
+		if (this.state === undefined)
+			throw new Error()
+
 		if (this.state.source_state.source.length !== 0)
 			throw new Error("the source wasn't entirely consumed")
 	}
 }
-
-
 
 
 export function match_token(token: Token | undefined, token_definition: TokenDefinition): boolean {

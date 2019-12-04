@@ -18,7 +18,7 @@ export type IndentationState =
 
 export const IndentationLexer: VirtualLexer<IndentationState> = {
 	use() {
-		return [indent, deindent, indent_continue]
+		return { indent, deindent, indent_continue }
 	},
 	initialize() {
 		return { type: 'unbuffered', indentation: 0 }
