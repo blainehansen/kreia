@@ -3,11 +3,11 @@ import { Dict } from '@ts-std/types'
 import { Data } from '../utils'
 
 import { TokenDef } from './ast'
-import { Lexer, LexerState, TokenDefinition, Token, match_and_trim } from '../lexer'
+import { Lexer, LexerState, VirtualLexers, TokenDefinition, Token, match_and_trim } from '../lexer'
 
 export abstract class Decidable {
 	abstract readonly test_length: number
-	abstract test<V extends Dict<any>>(
+	abstract test<V extends VirtualLexers>(
 		lexer: Lexer<V>,
 		lexer_state?: LexerState<V>,
 	): [Token[], LexerState<V>] | undefined
@@ -80,7 +80,7 @@ class DecisionPath extends Decidable {
 		this.test_length = compute_path_test_length(path as (TokenDefinition[] | HasTestLength)[])
 	}
 
-	test<V extends Dict<any>>(
+	test<V extends VirtualLexers>(
 		lexer: Lexer<V>,
 		input_lexer_state?: LexerState<V>,
 	): [Token[], LexerState<V>] | undefined {
@@ -125,7 +125,7 @@ class DecisionBranch extends Decidable {
 		this.test_length = Math.max(...paths.map(p => p.test_length))
 	}
 
-	test<V extends Dict<any>>(
+	test<V extends VirtualLexers>(
 		lexer: Lexer<V>,
 		lexer_state?: LexerState<V>,
 	): [Token[], LexerState<V>] | undefined {

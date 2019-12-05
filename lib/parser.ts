@@ -1,18 +1,16 @@
 import { Dict, Cast, tuple as t } from '@ts-std/types'
 import { Maybe, Some, None } from '@ts-std/monads'
 
-import { Decidable } from './decision'
-import { Lexer as _Lexer, Tokens, TokenDefinition, RawTokenDefinition, Token, RawToken, VirtualToken } from './lexer'
+import { Decidable } from './ast/decision'
+import {
+	Lexer as _Lexer, Tokens, TokenDefinition, RawTokenDefinition, Token, RawToken, VirtualLexers, VirtualToken, TokenSpec,
+} from './lexer'
 
-type Lexer = _Lexer<Dict<unknown>>
+type Lexer = _Lexer<VirtualLexers>
 
-// export function Parser(...lexer_args: Parameters<Lexer['reset']>) {
-export function Parser<V extends Dict<any>, D extends Dict<TokenSpec>>(
-	tokens: D, raw_virtual_lexers?: VirtualLexerDict<V>,
+export function Parser<V extends VirtualLexers, D extends Dict<TokenSpec>>(
+	tokens: D, raw_virtual_lexers: V,
 ) {
-	// const lexer = new _Lexer(...lexer_args)
-	// const tok = Tokens(tokens)
-	// const lexer = new _Lexer(Object.values(tok), raw_virtual_lexers || {})
 	const [tok, lexer] = _Lexer.create(tokens, raw_virtual_lexers)
 
 	return {
@@ -20,10 +18,10 @@ export function Parser<V extends Dict<any>, D extends Dict<TokenSpec>>(
 		reset(...args: Parameters<Lexer['reset']>) {
 			lexer.reset(...args)
 		},
-		arg<A extends ParseArg>(arg: A, ...arg_args: A extends Func ? Parameters<A> : []): ArgReturn<A> {
-			return Array.isArray(arg)
-				? lexer.require(arg) as ArgReturn<A>
-				: arg(...arg_args)
+		arg<A extends ParseArg>(parse_arg: A, ...arg_args: A extends Func ? Parameters<A> : []): ArgReturn<A> {
+			return Array.isArray(parse_arg)
+				? lexer.require(parse_arg) as ArgReturn<A>
+				: (parse_arg as Func)(...arg_args)
 		},
 		lock(token_definition: RawTokenDefinition) {
 			return lock(lexer, token_definition)
@@ -80,7 +78,7 @@ export type ParseArg = Func | TokenDefinition[]
 type ArgReturn<A extends ParseArg> =
 	A extends TokenDefinition[] ? TokensForDefinitions<A>
 	: A extends Func ? ReturnType<A>
-	: never : never
+	: never
 
 
 type EntityReturn<E extends ParseEntity> =

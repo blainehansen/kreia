@@ -1,5 +1,5 @@
 import '@ts-std/extensions/dist/array'
-import { Dict, tuple as t } from '@ts-std/types'
+import { Dict, tuple as t, UnionToIntersection } from '@ts-std/types'
 
 
 export type UserRawTokenDefinition = {
@@ -100,16 +100,23 @@ export type VirtualLexer<S, T extends Dict<ExposedRawTokenDefinition | VirtualTo
 	notify(token: RawToken, state: S): S,
 }>
 
-// type VirtualLexers = Dict<VirtualLexer<any, any[]>>
-type VirtualLexerDict<V extends Dict<any>> =
-	{ [K in keyof V]: VirtualLexer<V[K]> }
 
-type VirtualLexerState<S> =
-	{ readonly virtual_lexer: VirtualLexer<S>, state: S }
+export type VirtualLexers =
+	Dict<VirtualLexer<any, Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, any[]>>
 
-type VirtualLexerStateDict<V extends Dict<any>> = {
-	[K in keyof V]: VirtualLexerState<V[K]>
+type VirtualLexerState<S, T extends Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, A extends any[]> =
+	{ readonly virtual_lexer: VirtualLexer<S, T, A>, state: S }
+
+type VirtualLexerStateDict<V extends VirtualLexers> = {
+	[K in keyof V]: V[K] extends VirtualLexer<infer S, infer T, infer A>
+		? VirtualLexerState<S, T, A>
+		: never
 }
+
+
+type TokensForVirtualLexers<V extends VirtualLexers> = UnionToIntersection<{
+	[K in keyof V]: V[K] extends VirtualLexer<any, infer T> ? T : never
+}[keyof V]>
 
 
 export type SourceState = Readonly<{
@@ -117,19 +124,18 @@ export type SourceState = Readonly<{
 	line: number, column: number,
 }>
 
-export type LexerState<V extends Dict<any>> = Readonly<{
+export type LexerState<V extends VirtualLexers> = Readonly<{
 	source_state: SourceState,
 	virtual_lexers: VirtualLexerStateDict<V>,
 }>
-// type UnknownLexerState = LexerState<Dict<unknown>>
 
 type NonEmpty<T> = [T, ...T[]]
 
-export class Lexer<V extends Dict<any>> {
+export class Lexer<V extends VirtualLexers> {
 	private readonly ignored_token_definitions: RawTokenDefinition[]
-	constructor(
+	private constructor(
 		token_definitions: UserRawTokenDefinition[],
-		private readonly raw_virtual_lexers: VirtualLexerDict<V>,
+		private readonly raw_virtual_lexers: V,
 	) {
 		const ignored_token_definitions = [] as RawTokenDefinition[]
 		for (const token_definition of token_definitions) {
@@ -140,16 +146,33 @@ export class Lexer<V extends Dict<any>> {
 		const virtual_lexers = {} as VirtualLexerStateDict<V>
 		for (const virtual_lexer_name in raw_virtual_lexers) {
 			const virtual_lexer = raw_virtual_lexers[virtual_lexer_name]
-			virtual_lexers[virtual_lexer_name] = { virtual_lexer, state: virtual_lexer.initialize() }
+			;(virtual_lexers as any)[virtual_lexer_name] = { virtual_lexer, state: virtual_lexer.initialize() }
 
-			for (const tok of virtual_lexer.use()) {
-				if (tok.is_virtual || !tok.ignore)
+			for (const token of Object.values(virtual_lexer.use())) {
+				if (token.is_virtual || !token.ignore)
 					continue
-				ignored_token_definitions.push(tok)
+				ignored_token_definitions.push(token)
 			}
 		}
 
 		this.ignored_token_definitions = ignored_token_definitions
+	}
+
+	static create<D extends Dict<TokenSpec>, V extends VirtualLexers>(
+		tokens: D, raw_virtual_lexers: V,
+	): [TokensForSpecs<D> & TokensForVirtualLexers<V>, Lexer<V>] {
+		const user_toks = Tokens(tokens)
+
+		const tok = { ...user_toks } as TokensForSpecs<D> & TokensForVirtualLexers<V>
+		for (const virtual_lexer_key in raw_virtual_lexers) {
+			const virtual_lexer = raw_virtual_lexers[virtual_lexer_key]
+			const toks = virtual_lexer.use()
+			for (const key in toks)
+				(tok as any)[key] = toks[key]
+		}
+		const lexer = new Lexer(Object.values(user_toks), raw_virtual_lexers)
+
+		return t(tok, lexer)
 	}
 
 	private file: SourceFile | undefined
@@ -158,7 +181,7 @@ export class Lexer<V extends Dict<any>> {
 		const virtual_lexers = {} as VirtualLexerStateDict<V>
 		for (const virtual_lexer_name in this.raw_virtual_lexers) {
 			const virtual_lexer = this.raw_virtual_lexers[virtual_lexer_name]
-			virtual_lexers[virtual_lexer_name] = { virtual_lexer, state: virtual_lexer.initialize() }
+			;(virtual_lexers as any)[virtual_lexer_name] = { virtual_lexer, state: virtual_lexer.initialize() }
 		}
 
 		this.file = { source, filename }
@@ -215,7 +238,7 @@ export class Lexer<V extends Dict<any>> {
 		return t(token, new_source_state)
 	}
 
-	protected static request<V extends Dict<any>>(
+	protected static request<V extends VirtualLexers>(
 		token_definitions: TokenDefinition[],
 		input_state: LexerState<V>,
 		file: SourceFile,
@@ -358,7 +381,7 @@ export function match_and_trim(tokens: Token[], token_definitions: TokenDefiniti
 
 export type TokenOptions = { ignore?: true }
 type BaseTokenSpec = RegExp | string | (RegExp | string)[]
-type TokenSpec = BaseTokenSpec | { match: BaseTokenSpec } & TokenOptions
+export type TokenSpec = BaseTokenSpec | { match: BaseTokenSpec } & TokenOptions
 
 function source_regex(def: RegExp | string) {
 	return typeof def === 'string'
@@ -387,14 +410,15 @@ export function make_regex(regex: BaseTokenSpec) {
 
 export function Tokens<D extends Dict<TokenSpec>>(
 	tokens: D,
-): { [K in keyof D]: UserRawTokenDefinition } {
-	const give = {} as { [K in keyof D]: UserRawTokenDefinition }
+): TokensForSpecs<D> {
+	const give = {} as TokensForSpecs<D>
 	for (const key in tokens) {
 		give[key] = UserToken(key, tokens[key])
 	}
 	return give
 }
-
+type TokensForSpecs<D extends Dict<TokenSpec>> =
+	{ [K in keyof D]: UserRawTokenDefinition }
 
 export function UserToken(name: string, spec: TokenSpec) {
 	const [regex, { ignore }] = denature_spec(spec)

@@ -2,11 +2,11 @@ import '@ts-std/extensions/dist/array'
 import { Dict, tuple as t } from '@ts-std/types'
 import {
 	Lexer, SourceState, VirtualLexer, make_regex, ContentVirtualToken,
-	UserToken, HiddenToken, VirtualToken, ExposedToken,
+	UserToken, HiddenToken, VirtualToken, ExposedToken, VirtualTokenDefinition, ExposedTokenDefinition,
 } from './lexer'
 import {
 	IndentationLexer, IndentationState, make_indents,
-	any_non_whitespace, indent, deindent, indent_continue, newline, tab,
+	any_non_whitespace, indent, deindent, indent_continue, tab,
 } from './IndentationLexer'
 
 const need_tab_tester = make_regex(/\t/)
@@ -22,7 +22,11 @@ type IndentationStateWithRawBlock =
 	| { in_block: true, block_indentation: number }
 
 
-export const IndentationLexerWithRawBlock: VirtualLexer<IndentationStateWithRawBlock> = {
+type Toks = {
+	indent: VirtualTokenDefinition, deindent: VirtualTokenDefinition, indent_continue: VirtualTokenDefinition,
+	raw_block_begin: ExposedTokenDefinition, raw_block_content: VirtualTokenDefinition, raw_block_end: VirtualTokenDefinition,
+}
+export const IndentationLexerWithRawBlock: VirtualLexer<IndentationStateWithRawBlock, Toks> = {
 	use() {
 		return { indent, deindent, indent_continue, raw_block_begin, raw_block_content, raw_block_end }
 	},

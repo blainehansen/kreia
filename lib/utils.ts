@@ -2,7 +2,7 @@ import * as util from 'util'
 import { Result, Ok, Err } from '@ts-std/monads'
 import { OrderedDict } from '@ts-std/collections'
 
-export function debug(obj: any, depth = 3 as number | null) {
+export function debug(obj: any, depth = null as number | null) {
 	return util.inspect(obj, { depth, colors: true })
 }
 export function log(obj: any) {
