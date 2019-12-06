@@ -60,6 +60,11 @@ export const Macro = Data((name: string, args: OrderedDict<Arg>, definition: Def
 export type Macro = ReturnType<typeof Macro>
 
 
+export const VirtualLexerUsage = Data((virtual_lexer_name: string, args: TokenSpec[], exposed_tokens: Dict<string>) => {
+	return { type: 'VirtualLexerUsage' as const, virtual_lexer_name, args, exposed_tokens }
+})
+export type VirtualLexerUsage = ReturnType<typeof VirtualLexerUsage>
+
 export const Subrule = Data((rule_name: string): Node => {
 	return { type: 'Subrule' as const, rule_name }
 })
@@ -107,6 +112,7 @@ export interface Definition extends Array<Node> {}
 
 export type GrammarItem =
 	| TokenDef
+	| VirtualLexerUsage
 	| Rule
 	| Macro
 
@@ -115,6 +121,10 @@ export type Grammar = GrammarItem[]
 let registered_tokens = {} as Dict<TokenDef>
 export function set_registered_tokens(new_registered_tokens: Dict<TokenDef>) {
 	registered_tokens = new_registered_tokens
+}
+let registered_virtual_lexers = {} as Dict<VirtualLexerUsage>
+export function set_registered_tokens(new_registered_virtual_lexers: Dict<VirtualLexerUsage>) {
+	registered_virtual_lexers = new_registered_virtual_lexers
 }
 let registered_rules = {} as Dict<Rule>
 export function set_registered_rules(new_registered_rules: Dict<Rule>) {
@@ -125,8 +135,18 @@ export function set_registered_macros(new_registered_macros: Dict<Macro>) {
 	registered_macros = new_registered_macros
 }
 
-export function get_token(token_name: string): Option<TokenDef> {
-	return Option.from_nillable(registered_tokens[token_name])
+export function get_token(token_name: string): Option<void> {
+	// const token = Option.from_nillable(registered_tokens[token_name])
+	// if (token.is_some())
+	// 	return token
+	if (token_name in registered_tokens)
+		return Some(undefined as void)
+
+	for (const virtual_lexer of Object.values(registered_virtual_lexers))
+		if (token_name in virtual_lexer.exposed_tokens)
+			return Some(undefined as void)
+
+	return None
 }
 export function get_rule(rule_name: string): Option<Rule> {
 	return Option.from_nillable(registered_rules[rule_name])
@@ -137,6 +157,9 @@ export function get_macro(macro_name: string): Option<Macro> {
 
 export function register_tokens(token_defs: TokenDef[]) {
 	registered_tokens = token_defs.unique_index_by('name').unwrap()
+}
+export function register_virtual_lexers(virtual_lexers: VirtualLexerUsage[]) {
+	registered_virtual_lexers = virtual_lexers.unique_index_by('virtual_lexer_name').unwrap()
 }
 export function register_rules(rules: Rule[]) {
 	registered_rules = rules.unique_index_by('name').unwrap()

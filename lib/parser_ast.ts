@@ -13,21 +13,7 @@ function sep(def: Definition) {
 	return OrderedDict.create_unique(() => 'thing', [def]).unwrap()
 }
 
-// export type RegexSpec =
-// 	| { type: 'regex', source: string }
-// 	| { type: 'string', value: string }
-
-// export type MatchSpec =
-// 	| RegexSpec
-// 	| { type: 'array', items: RegexSpec[] }
-
-// export type TokenSpec =
-// 	| MatchSpec
-// 	| { type: 'options', match: MatchSpec } & TokenOptions
-
 const JsonGrammar = [
-	// TokenDef('Quote', '"'),
-	// TokenDef('Ident', /([^\"\n]|\".)+/),
 	TokenDef('Str', { type: 'regex', source: /"(?:\\["\\]|[^\n"\\])*"/.source }),
 	TokenDef('Comma', { type: 'string', value: ',' }),
 	TokenDef('Colon', { type: 'string', value: ':' }),
