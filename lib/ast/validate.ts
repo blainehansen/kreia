@@ -10,19 +10,22 @@ import {
 } from './ast'
 
 export function check_left_recursive(thing: Rule | Macro) {
+	if (thing.name !== 'separated_by_commas')
+		return false
+
 	const seen_rules = {} as Dict<true>
 	const seen_macros = {} as Dict<true>
-	const [one_to_add, in_macro_definition] = thing.type === 'Rule' ? t(seen_rules, false) : t(seen_macros, true)
+	const one_to_add = thing.type === 'Rule' ? seen_rules : seen_macros
 	one_to_add[thing.name] = true
+
 	const scope = { current: Scope(thing.locking_args, undefined), previous: [] }
-	return _check_left_recursive(seen_rules, seen_macros, thing.definition, scope, in_macro_definition)
+	return _check_left_recursive(seen_rules, seen_macros, thing.definition, scope)
 }
 function _check_left_recursive(
 	seen_rules: Dict<true>,
 	seen_macros: Dict<true>,
 	definition: Definition,
 	scope: ScopeStack,
-	in_macro_definition: boolean,
 ): boolean {
 	for (const node of definition) switch (node.type) {
 	case 'Consume':
@@ -31,16 +34,16 @@ function _check_left_recursive(
 		return false
 
 	case 'Maybe':
-		if (_check_left_recursive(seen_rules, seen_macros, node.definition, scope, in_macro_definition))
+		if (_check_left_recursive(seen_rules, seen_macros, node.definition, scope))
 			return true
 		continue
 	case 'Or':
 		for (const choice of node.choices)
-			if (_check_left_recursive(seen_rules, seen_macros, choice, scope, in_macro_definition))
+			if (_check_left_recursive(seen_rules, seen_macros, choice, scope))
 				return true
 		return false
 	case 'Many':
-		if (_check_left_recursive(seen_rules, seen_macros, node.definition, scope, in_macro_definition))
+		if (_check_left_recursive(seen_rules, seen_macros, node.definition, scope))
 			return true
 		return false
 
@@ -48,7 +51,7 @@ function _check_left_recursive(
 		if (seen_rules[node.rule_name])
 			return true
 		const subrule = get_rule(node.rule_name).unwrap()
-		if (_check_left_recursive({ [node.rule_name]: true, ...seen_rules }, seen_macros, subrule.definition, scope, false))
+		if (_check_left_recursive({ [node.rule_name]: true, ...seen_rules }, seen_macros, subrule.definition, scope))
 			return true
 		return false
 
@@ -57,16 +60,16 @@ function _check_left_recursive(
 			return true
 		const macro = get_macro(node.macro_name).unwrap()
 		const call_scope = push_scope(scope, macro.locking_args, node.args)
-		if (_check_left_recursive(seen_rules, { [node.macro_name]: true, ...seen_macros }, macro.definition, call_scope, false))
+		if (_check_left_recursive(seen_rules, { [node.macro_name]: true, ...seen_macros }, macro.definition, call_scope))
 			return true
 		return false
 
 	case 'Var':
-		if (in_macro_definition)
+		const var_definition = scope.current.args.get_by_name(node.arg_name).to_undef()
+		if (var_definition === undefined)
 			return false
-		const var_definition = scope.current.args.get_by_name(node.arg_name).unwrap()
 		const var_scope = pop_scope(scope)
-		if (_check_left_recursive(seen_rules, seen_macros, var_definition, var_scope, in_macro_definition))
+		if (_check_left_recursive(seen_rules, seen_macros, var_definition, var_scope))
 			return true
 		return false
 

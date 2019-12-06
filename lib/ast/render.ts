@@ -101,7 +101,8 @@ const render_visiting_functions: VisitingFunctions<Call> = {
 	Consume(consume, next, scope, wrapping_function_name) {
 		return ts.createCall(
 			ts.createIdentifier(wrapping_function_name || 'consume'), undefined,
-			consume.token_names.map(token_name => ts.createIdentifier(token_name)),
+			consume.token_names.map(render_token_reference),
+			// consume.token_names.map(token_name => ts.createIdentifier(token_name)),
 		)
 	},
 	LockingVar(locking_var, next, scope, wrapping_function_name) {
@@ -211,9 +212,9 @@ function render_entity<B extends boolean>(
 		return atom_style
 			? ts.createCall(
 				ts.createIdentifier('t'), undefined,
-				c.token_names.map(ts.createIdentifier),
+				c.token_names.map(render_token_reference),
 			) as B extends true ? Call : ts.Expression[]
-			: c.token_names.map(ts.createIdentifier) as unknown as B extends true ? Call : ts.Expression[]
+			: c.token_names.map(render_token_reference) as unknown as B extends true ? Call : ts.Expression[]
 	}
 
 	if (
@@ -285,7 +286,7 @@ export function render_macro(macro: Macro) {
 		// generics
 		args.map(arg => ts.createTypeParameterDeclaration(
 			ts.createIdentifier(arg.name.toUpperCase()),
-			ts.createTypeReferenceNode(ts.createIdentifier('ArgBody'), undefined), undefined,
+			ts.createTypeReferenceNode(ts.createIdentifier('ParseArg'), undefined), undefined,
 		)),
 		// actual args
 		[
@@ -308,7 +309,7 @@ export function render_macro(macro: Macro) {
 
 
 
-export function render_grammar(grammar: Grammar) {
+export function render_grammar(grammar: Grammar, filename = '') {
 	const token_defs = new UniqueDict<TokenDef>()
 	const rules = new UniqueDict<Rule>()
 	const macros = new UniqueDict<Macro>()
@@ -369,14 +370,36 @@ export function render_grammar(grammar: Grammar) {
 		)], ts.NodeFlags.Const),
 	)
 
-	return [
-		// need all the imports
-		// as well as the setting up of the parser
-		...rendered_tokens,
-		rendered_decidables,
-		...rendered_macros,
-		...rendered_rules,
+	const destructured_parser_names = [
+		'tok', 'reset', 'exit', 'arg', 'maybe', 'consume', 'many', 'maybe_many',
+		'or', 'maybe_or', 'many_separated', 'maybe_many_separated',
 	]
+
+	const parser_statement = ts.createVariableStatement(
+		undefined,
+		ts.createVariableDeclarationList([
+			ts.createVariableDeclaration(ts.createObjectBindingPattern(
+				destructured_parser_names.map(name => ts.createBindingElement(undefined, undefined, ts.createIdentifier(name), undefined))
+			), undefined,
+			ts.createCall(ts.createIdentifier('Parser'), undefined, [
+				ts.createObjectLiteral(rendered_tokens, true),
+				ts.createObjectLiteral([], false),
+			]),
+		)], ts.NodeFlags.Const),
+	)
+
+	const resultFile =
+		ts.createSourceFile(filename, '', ts.ScriptTarget.Latest, false, ts.ScriptKind.TS)
+	const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed, omitTrailingSemicolon: true })
+
+	return [
+		parser_statement,
+		rendered_decidables,
+		...rendered_rules,
+		...rendered_macros,
+	]
+		.map(item => printer.printNode(ts.EmitHint.Unspecified, item, resultFile))
+		.join('\n\n')
 }
 
 function render_regex_spec(regex_spec: RegexSpec) {
@@ -400,19 +423,21 @@ function render_match_spec(match_spec: MatchSpec) {
 function render_token_def(token_def: TokenDef) {
 	switch (token_def.def.type) {
 	case 'options': {
-		const assigments = [
+		const assignments = [
 			ts.createPropertyAssignment(
 				ts.createIdentifier('match'),
 				render_match_spec(token_def.def.match),
 			),
 		]
 		if (token_def.def.ignore)
-			assigments.push(ts.createPropertyAssignment(
+			assignments.push(ts.createPropertyAssignment(
 				ts.createIdentifier('ignore'),
 				ts.createTrue(),
 			))
 
-		const body = ts.createObjectLiteral(assigments, false)
+		// TODO this is where the keyword: true argument would go
+
+		const body = ts.createObjectLiteral(assignments, false)
 		return wrap_token_def(token_def.name, body)
 	}
 	default:
@@ -422,17 +447,18 @@ function render_token_def(token_def: TokenDef) {
 }
 
 function wrap_token_def(name: string, expression: ts.Expression) {
-	return ts.createVariableStatement(
-		undefined, ts.createVariableDeclarationList([
-			ts.createVariableDeclaration(
-				ts.createIdentifier(name), undefined,
-				ts.createCall(ts.createIdentifier('Token'), undefined, [
-					ts.createStringLiteral(name),
-					expression,
-				]),
-			)], ts.NodeFlags.Const,
-		),
-	)
+	return ts.createPropertyAssignment(ts.createIdentifier(name), expression)
+	// return ts.createVariableStatement(
+	// 	undefined, ts.createVariableDeclarationList([
+	// 		ts.createVariableDeclaration(
+	// 			ts.createIdentifier(name), undefined,
+	// 			ts.createCall(ts.createIdentifier('Token'), undefined, [
+	// 				ts.createStringLiteral(name),
+	// 				expression,
+	// 			]),
+	// 		)], ts.NodeFlags.Const,
+	// 	),
+	// )
 }
 
 
@@ -450,16 +476,22 @@ function render_locking_arg(arg: LockingArg) {
 	)
 }
 
+function render_token_reference(token_def: TokenDef | string) {
+	return ts.createPropertyAccess(
+		ts.createIdentifier('tok'),
+		ts.createIdentifier(typeof token_def !== 'string' ? token_def.name : token_def),
+	)
+}
 
 function render_decidable(decidable: AstDecidable): Call {
 	switch (decidable.type) {
 	case 'AstDecisionPath':
 		return ts.createCall(
 			ts.createIdentifier('path'), undefined,
-			decidable.path.flat_map(item =>
+			decidable.path.map(item =>
 				Array.isArray(item)
-					? item.map(token_def => ts.createIdentifier(token_def.name)) as ts.Expression[]
-					: [render_decidable(item)] as ts.Expression[]
+					? ts.createArrayLiteral(item.map(render_token_reference), false)
+					: render_decidable(item)
 			),
 		)
 	case 'AstDecisionBranch':

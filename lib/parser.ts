@@ -3,7 +3,7 @@ import { Maybe, Some, None } from '@ts-std/monads'
 
 import { Decidable } from './ast/decision'
 import {
-	Lexer as _Lexer, Tokens, TokenDefinition, RawTokenDefinition, Token, RawToken, VirtualLexers, VirtualToken, TokenSpec,
+	Lexer as _Lexer, Tokens, TokenDefinition, RawTokenDefinition, TokensForDefinitions, Token, RawToken, VirtualLexers, VirtualToken, TokenSpec,
 } from './lexer'
 
 type Lexer = _Lexer<VirtualLexers>
@@ -18,10 +18,12 @@ export function Parser<V extends VirtualLexers, D extends Dict<TokenSpec>>(
 		reset(...args: Parameters<Lexer['reset']>) {
 			lexer.reset(...args)
 		},
-		arg<A extends ParseArg>(parse_arg: A, ...arg_args: A extends Func ? Parameters<A> : []): ArgReturn<A> {
-			return Array.isArray(parse_arg)
-				? lexer.require(parse_arg) as ArgReturn<A>
-				: (parse_arg as Func)(...arg_args)
+		// arg<A extends ParseArg>(parse_arg: A, ...arg_args: A extends Func ? Parameters<A> : []): ArgReturn<A> {
+		arg<A extends ParseArg>(parse_arg: A): ReturnType<A> {
+			// return Array.isArray(parse_arg)
+			// 	? lexer.require(parse_arg) as ArgReturn<A>
+			// 	: (parse_arg as Func)(...arg_args)
+			return parse_arg()
 		},
 		lock(token_definition: RawTokenDefinition) {
 			return lock(lexer, token_definition)
@@ -50,6 +52,9 @@ export function Parser<V extends VirtualLexers, D extends Dict<TokenSpec>>(
 		maybe_many_separated<B extends ParseEntity, S extends ParseEntity>(body_rule: B, separator_rule: S) {
 			return maybe_many_separated(lexer, body_rule, separator_rule)
 		},
+		exit() {
+			lexer.exit()
+		},
 	}
 }
 
@@ -74,11 +79,12 @@ export function f<F extends Func>(
 }
 
 export type ParseEntity = DecidableFunc<Func> | TokenDefinition[]
-export type ParseArg = Func | TokenDefinition[]
-type ArgReturn<A extends ParseArg> =
-	A extends TokenDefinition[] ? TokensForDefinitions<A>
-	: A extends Func ? ReturnType<A>
-	: never
+export type ParseArg = () => any
+// export type ParseArg = Func | TokenDefinition[]
+// type ArgReturn<A extends ParseArg> =
+// 	A extends TokenDefinition[] ? TokensForDefinitions<A>
+// 	: A extends Func ? ReturnType<A>
+// 	: never
 
 
 type EntityReturn<E extends ParseEntity> =
@@ -89,8 +95,6 @@ type EntityReturn<E extends ParseEntity> =
 	? ReturnType<F>
 	: never : never : never
 
-
-type TokensForDefinitions<L extends TokenDefinition[]> = { [E in keyof L]: Token }
 
 function perform_entity<F extends Func, E extends DecidableFunc<F> | TokenDefinition[]>(
 	lexer: Lexer,

@@ -1,9 +1,9 @@
 import '@ts-std/extensions/dist/array'
 import { Dict, tuple as t, UnionToIntersection } from '@ts-std/types'
 
+import { debug } from './utils'
 
 export type UserRawTokenDefinition = {
-	type: 'Token',
 	name: string,
 	regex: RegExp,
 	ignore?: true,
@@ -18,7 +18,6 @@ export type HiddenTokenDefinition =
 	& { ignore: true }
 
 export type EmptyVirtualTokenDefinition = {
-	type: 'Token',
 	name: string,
 	virtual_lexer_name: string,
 	is_virtual: true,
@@ -87,6 +86,13 @@ export type VirtualToken =
 export type Token =
 	| RawToken
 	| VirtualToken
+
+export type TokensForDefinitions<L extends TokenDefinition[]> = {
+	[K in keyof L]:
+		L[K] extends ContentVirtualTokenDefinition ? ContentVirtualToken
+		: L[K] extends EmptyVirtualTokenDefinition ? EmptyVirtualToken
+		: RawToken
+}
 
 export type VirtualLexer<S, T extends Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, A extends any[] = []> = Readonly<{
 	use(...args: A): T,
@@ -317,10 +323,19 @@ export class Lexer<V extends VirtualLexers> {
 		if (this.state === undefined)
 			throw new Error()
 
-		return Lexer.request(
+		// console.log('test')
+		// console.log('token_definitions', token_definitions)
+		// console.log('input_lexer_state ? input_lexer_state.source_state : undefined', input_lexer_state ? input_lexer_state.source_state : undefined)
+		// console.log('this.state.source_state', this.state.source_state)
+
+		const attempt = Lexer.request(
 			token_definitions, input_lexer_state || this.state,
 			this.file, this.ignored_token_definitions,
 		)
+		// console.log('attempt', attempt)
+		// console.log('exiting test')
+		// console.log()
+		return attempt
 	}
 
 	require(token_definitions: TokenDefinition[]): Token[] {
@@ -329,15 +344,25 @@ export class Lexer<V extends VirtualLexers> {
 		if (this.state === undefined)
 			throw new Error()
 
+		// console.log('require')
+		// console.log('token_definitions', token_definitions)
+		// console.log('this.state.source_state', this.state.source_state)
+
 		const attempt = Lexer.request(
 			token_definitions, this.state,
 			this.file, this.ignored_token_definitions,
 		)
-		if (attempt === undefined)
-			// TODO make nice source frames and everything
-			throw new Error()
+		if (attempt === undefined) {
+			const expected_tokens = debug(token_definitions)
+			const next_source = debug(this.state.source_state.source.slice(0, 10))
+			throw new Error(`expected these tokens:\n${expected_tokens}\n\nbut source had:\n${next_source}`)
+		}
 
 		this.state = attempt[1]
+		// console.log('this.state.source_state', this.state.source_state)
+		// console.log('attempt[0]', attempt[0])
+		// console.log('exiting require')
+		// console.log()
 		return attempt[0]
 	}
 
@@ -347,6 +372,7 @@ export class Lexer<V extends VirtualLexers> {
 		if (this.state === undefined)
 			throw new Error()
 
+		console.log(this.state.source_state.source)
 		if (this.state.source_state.source.length !== 0)
 			throw new Error("the source wasn't entirely consumed")
 	}
@@ -399,7 +425,7 @@ function denature_spec(spec: TokenSpec): [BaseTokenSpec, TokenOptions] {
 
 export function make_regex(regex: BaseTokenSpec) {
 	const base_source = Array.isArray(regex)
-		? regex.map(r => `(?:${source_regex(r)})`).join('|')
+		? `(?:${regex.map(r => `(?:${source_regex(r)})`).join('|')})`
 		: source_regex(regex)
 
 	const final_regex = new RegExp('^' + base_source)
@@ -442,7 +468,7 @@ export function ExposedToken(name: string, virtual_lexer_name: string, spec: Tok
 
 export function VirtualToken(name: string, virtual_lexer_name: string): EmptyVirtualTokenDefinition
 export function VirtualToken(name: string, virtual_lexer_name: string, regex: BaseTokenSpec): ContentVirtualTokenDefinition
-export function VirtualToken(name: string, virtual_lexer_name: string, regex?: BaseTokenSpec) {
+export function VirtualToken(name: string, virtual_lexer_name: string, regex?: BaseTokenSpec): any {
 	const token_definition = { type: 'Token', name, virtual_lexer_name, is_virtual: true }
 	if (regex !== undefined)
 		(token_definition as any).regex = make_regex(regex)
