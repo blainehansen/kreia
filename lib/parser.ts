@@ -78,13 +78,23 @@ export function f<F extends Func>(
 	return [fn, d, ...args] as DecidableFunc<F>
 }
 
+
+// type ArgFunc<F extends Func> =
+// 	((fn: F, ...args: Parameters<F>) => any) extends ((...args: infer R) => any)
+// 	? R
+// 	: never
+
+// export function a<F extends Func>(fn: F, ...args: Parameters<F>): ArgFunc<F> {
+// 	return [fn, ...args] as ArgFunc<F>
+// }
+
 export type ParseEntity = DecidableFunc<Func> | TokenDefinition[]
-export type ParseArg = () => any
-// export type ParseArg = Func | TokenDefinition[]
+// export type ParseArg = ArgFunc<Func> | TokenDefinition[]
 // type ArgReturn<A extends ParseArg> =
 // 	A extends TokenDefinition[] ? TokensForDefinitions<A>
-// 	: A extends Func ? ReturnType<A>
-// 	: never
+// 	:
+export type ParseArg = () => any
+// export type ParseArg = Func | TokenDefinition[]
 
 
 type EntityReturn<E extends ParseEntity> =

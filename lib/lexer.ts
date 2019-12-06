@@ -425,10 +425,10 @@ function denature_spec(spec: TokenSpec): [BaseTokenSpec, TokenOptions] {
 
 export function make_regex(regex: BaseTokenSpec) {
 	const base_source = Array.isArray(regex)
-		? `(?:${regex.map(r => `(?:${source_regex(r)})`).join('|')})`
+		? regex.map(r => `(?:${source_regex(r)})`).join('|')
 		: source_regex(regex)
 
-	const final_regex = new RegExp('^' + base_source)
+	const final_regex = new RegExp(`^(?:${base_source})`)
 	if (final_regex.test(''))
 		throw new Error(`attempted to create a token that matches the empty string ${regex}`)
 	return final_regex
