@@ -14,10 +14,10 @@ import { check_left_recursive, validate_references } from './validate'
 
 import {
 	RegexSpec, MatchSpec, TokenSpec, Node, Definition, Grammar, get_token, get_rule, get_macro,
-	Rule, Macro, LockingArg, TokenDef,
+	Rule, Macro, VirtualLexerUsage, LockingArg, TokenDef,
 	Scope, ScopeStack, push_scope, pop_scope, DefinitionTuple,
 	VisitingFunctions, VisitorParams, visit_definition,
-	set_registered_tokens, set_registered_rules, set_registered_macros,
+	set_registered_tokens, set_registered_virtual_lexers, set_registered_rules, set_registered_macros,
 	Arg, Maybe, Many, Var,
 } from './ast'
 
@@ -102,7 +102,6 @@ const render_visiting_functions: VisitingFunctions<Call> = {
 		return ts.createCall(
 			ts.createIdentifier(wrapping_function_name || 'consume'), undefined,
 			consume.token_names.map(render_token_reference),
-			// consume.token_names.map(token_name => ts.createIdentifier(token_name)),
 		)
 	},
 	LockingVar(locking_var, next, scope, wrapping_function_name) {
@@ -311,6 +310,7 @@ export function render_macro(macro: Macro) {
 
 export function render_grammar(grammar: Grammar, filename = '') {
 	const token_defs = new UniqueDict<TokenDef>()
+	const virtual_lexers = new UniqueDict<VirtualLexerUsage>()
 	const rules = new UniqueDict<Rule>()
 	const macros = new UniqueDict<Macro>()
 	macros.set('many_separated', Macro(
@@ -329,10 +329,19 @@ export function render_grammar(grammar: Grammar, filename = '') {
 		switch (grammar_item.type) {
 		case 'TokenDef':
 			return token_defs.set(grammar_item.name, grammar_item).match(matcher)
+
+		case 'VirtualLexerUsage':
+			for (const exposed_token_name of Object.keys(grammar_item.exposed_tokens))
+				if (token_defs.get(exposed_token_name).is_some())
+					return matcher.err([exposed_token_name, undefined, undefined])
+			return virtual_lexers.set(grammar_item.virtual_lexer_name, grammar_item).match(matcher)
+
 		case 'Rule':
 			return rules.set(grammar_item.name, grammar_item).match(matcher)
+
 		case 'Macro':
 			return macros.set(grammar_item.name, grammar_item).match(matcher)
+
 		}
 	})
 
@@ -340,6 +349,7 @@ export function render_grammar(grammar: Grammar, filename = '') {
 		throw new Error(conflict_errors.join('\n\n'))
 
 	set_registered_tokens(token_defs.into_dict())
+	set_registered_virtual_lexers(virtual_lexers.into_dict())
 	set_registered_rules(rules.into_dict())
 	set_registered_macros(macros.into_dict())
 
@@ -355,6 +365,7 @@ export function render_grammar(grammar: Grammar, filename = '') {
 		throw new Error(`There are left recursive rules: ${left_recursive_rules.join('\n\n')}`)
 
 	const rendered_tokens = token_defs.values().map(render_token_def)
+	const rendered_virtual_lexers = virtual_lexers.values().map(render_virtual_lexer_usage)
 	const rendered_macros = macros.values().filter_map(render_macro)
 	const rendered_rules = rules.values().map(render_rule)
 
@@ -383,7 +394,7 @@ export function render_grammar(grammar: Grammar, filename = '') {
 			), undefined,
 			ts.createCall(ts.createIdentifier('Parser'), undefined, [
 				ts.createObjectLiteral(rendered_tokens, true),
-				ts.createObjectLiteral([], false),
+				ts.createObjectLiteral(rendered_virtual_lexers, false),
 			]),
 		)], ts.NodeFlags.Const),
 	)
@@ -420,16 +431,16 @@ function render_match_spec(match_spec: MatchSpec) {
 	}
 }
 
-function render_token_def(token_def: TokenDef) {
-	switch (token_def.def.type) {
+function render_token_spec(token_spec: TokenSpec) {
+	switch (token_spec.type) {
 	case 'options': {
 		const assignments = [
 			ts.createPropertyAssignment(
 				ts.createIdentifier('match'),
-				render_match_spec(token_def.def.match),
+				render_match_spec(token_spec.match),
 			),
 		]
-		if (token_def.def.ignore)
+		if (token_spec.ignore)
 			assignments.push(ts.createPropertyAssignment(
 				ts.createIdentifier('ignore'),
 				ts.createTrue(),
@@ -437,29 +448,23 @@ function render_token_def(token_def: TokenDef) {
 
 		// TODO this is where the keyword: true argument would go
 
-		const body = ts.createObjectLiteral(assignments, false)
-		return wrap_token_def(token_def.name, body)
+		return ts.createObjectLiteral(assignments, false)
 	}
 	default:
-		const body = render_match_spec(token_def.def)
-		return wrap_token_def(token_def.name, body)
+		return render_match_spec(token_spec)
 	}
 }
 
-function wrap_token_def(name: string, expression: ts.Expression) {
-	return ts.createPropertyAssignment(ts.createIdentifier(name), expression)
-	// return ts.createVariableStatement(
-	// 	undefined, ts.createVariableDeclarationList([
-	// 		ts.createVariableDeclaration(
-	// 			ts.createIdentifier(name), undefined,
-	// 			ts.createCall(ts.createIdentifier('Token'), undefined, [
-	// 				ts.createStringLiteral(name),
-	// 				expression,
-	// 			]),
-	// 		)], ts.NodeFlags.Const,
-	// 	),
-	// )
+function render_token_def(token_def: TokenDef) {
+	return ts.createPropertyAssignment(
+		ts.createIdentifier(token_def.name),
+		render_token_spec(token_def.def),
+	)
 }
+
+// function wrap_token_def(name: string, expression: ts.Expression) {
+// 	return ts.createPropertyAssignment(ts.createIdentifier(name), expression)
+// }
 
 
 function render_locking_arg(arg: LockingArg) {
@@ -476,10 +481,10 @@ function render_locking_arg(arg: LockingArg) {
 	)
 }
 
-function render_token_reference(token_def: TokenDef | string) {
+function render_token_reference(token_name: string) {
 	return ts.createPropertyAccess(
 		ts.createIdentifier('tok'),
-		ts.createIdentifier(typeof token_def !== 'string' ? token_def.name : token_def),
+		ts.createIdentifier(token_name),
 	)
 }
 
@@ -502,6 +507,14 @@ function render_decidable(decidable: AstDecidable): Call {
 	}
 }
 
+function render_virtual_lexer_usage(virtual_lexer: VirtualLexerUsage) {
+	const name = ts.createIdentifier(virtual_lexer.virtual_lexer_name)
+	return ts.createPropertyAssignment(
+		name,
+		ts.createCall(ts.createIdentifier('t'), undefined, [name, ...virtual_lexer.args.map(render_token_spec)]),
+	)
+}
+
 export function render_rule(rule: Rule) {
 	const lockers = (rule.locking_args !== undefined ? rule.locking_args.to_array() : []).map(render_locking_arg)
 
@@ -517,16 +530,3 @@ export function render_rule(rule: Rule) {
 		ts.createBlock([...lockers, ...rendered_definition], true),
 	)
 }
-
-
-// const resultFile = ts.createSourceFile(
-// 	'lib/generated.ts',
-// 	'',
-// 	ts.ScriptTarget.Latest,
-// 	/*setParentNodes*/ false,
-// 	ts.ScriptKind.TS,
-// )
-// const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed })
-// const result = printer.printNode(ts.EmitHint.Unspecified, r, resultFile)
-
-// console.log(result)

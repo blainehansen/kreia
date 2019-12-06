@@ -5,7 +5,7 @@ import { Data, exhaustive, IterWrapper } from '../utils'
 import { PathBuilder } from './decision'
 import {
 	get_token, get_rule, get_macro,
-	TokenDef, Arg, Var, Rule, Macro, Subrule, Maybe, Many, Or, MacroCall, Consume, Node, Definition,
+	Arg, Var, Rule, Macro, Subrule, Maybe, Many, Or, MacroCall, Consume, Node, Definition,
 	Scope, DefinitionTuple, push_scope, pop_scope,
 } from './ast'
 
@@ -37,11 +37,11 @@ const Continue = Data((...definition_tuple: DefinitionTuple) => {
 })
 type Continue = ReturnType<typeof Continue>
 
-function is_continue(item: TokenDef | Continue): item is Continue {
-	return 'type' in item && item.type === 'Continue'
+function is_continue(item: string | Continue): item is Continue {
+	return typeof item !== 'string'
 }
 
-type AstIterItem = TokenDef | DefinitionTuple[] | Continue
+type AstIterItem = string | DefinitionTuple[] | Continue
 type AstIter = IterWrapper<AstIterItem>
 
 function* iterate_definition(
@@ -195,7 +195,8 @@ function _compute_decidable(
 				continue
 			}
 
-			if (item.name !== against_item.name)
+			// if (item.name !== against_item.name)
+			if (item !== against_item)
 				continue
 
 			new_against.push(against_iter)

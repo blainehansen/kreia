@@ -94,7 +94,7 @@ export type TokensForDefinitions<L extends TokenDefinition[]> = {
 		: RawToken
 }
 
-export type VirtualLexer<S, T extends Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, A extends any[] = []> = Readonly<{
+export type VirtualLexer<S, T extends Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, A extends any[]> = Readonly<{
 	use(...args: A): T,
 	initialize(): S,
 	request(
@@ -119,6 +119,11 @@ type VirtualLexerStateDict<V extends VirtualLexers> = {
 		: never
 }
 
+type VirtualLexerWithArgs<V extends VirtualLexers> = {
+	[K in keyof V]: V[K] extends VirtualLexer<any, Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, infer A>
+		? [V[K], A] : never
+}
+
 
 type TokensForVirtualLexers<V extends VirtualLexers> = UnionToIntersection<{
 	[K in keyof V]: V[K] extends VirtualLexer<any, infer T> ? T : never
@@ -141,7 +146,7 @@ export class Lexer<V extends VirtualLexers> {
 	private readonly ignored_token_definitions: RawTokenDefinition[]
 	private constructor(
 		token_definitions: UserRawTokenDefinition[],
-		private readonly raw_virtual_lexers: V,
+		private readonly raw_virtual_lexers: VirtualLexerWithArgs<V>,
 	) {
 		const ignored_token_definitions = [] as RawTokenDefinition[]
 		for (const token_definition of token_definitions) {
@@ -151,10 +156,10 @@ export class Lexer<V extends VirtualLexers> {
 
 		const virtual_lexers = {} as VirtualLexerStateDict<V>
 		for (const virtual_lexer_name in raw_virtual_lexers) {
-			const virtual_lexer = raw_virtual_lexers[virtual_lexer_name]
+			const [virtual_lexer, virtual_lexer_args] = raw_virtual_lexers[virtual_lexer_name]
 			;(virtual_lexers as any)[virtual_lexer_name] = { virtual_lexer, state: virtual_lexer.initialize() }
 
-			for (const token of Object.values(virtual_lexer.use())) {
+			for (const token of Object.values(virtual_lexer.use(...virtual_lexer_args))) {
 				if (token.is_virtual || !token.ignore)
 					continue
 				ignored_token_definitions.push(token)
@@ -171,8 +176,8 @@ export class Lexer<V extends VirtualLexers> {
 
 		const tok = { ...user_toks } as TokensForSpecs<D> & TokensForVirtualLexers<V>
 		for (const virtual_lexer_key in raw_virtual_lexers) {
-			const virtual_lexer = raw_virtual_lexers[virtual_lexer_key]
-			const toks = virtual_lexer.use()
+			const [virtual_lexer, virtual_lexer_args] = raw_virtual_lexers[virtual_lexer_name]
+			const toks = virtual_lexer.use(...virtual_lexer_args)
 			for (const key in toks)
 				(tok as any)[key] = toks[key]
 		}

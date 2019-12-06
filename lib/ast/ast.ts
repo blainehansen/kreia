@@ -1,6 +1,6 @@
 import '@ts-std/extensions/dist/array'
 import { Dict } from '@ts-std/types'
-import { Maybe as Option } from '@ts-std/monads'
+import { Maybe as Option, Some, None } from '@ts-std/monads'
 import { OrderedDict } from '@ts-std/collections'
 
 import { TokenOptions } from '../lexer'
@@ -60,7 +60,7 @@ export const Macro = Data((name: string, args: OrderedDict<Arg>, definition: Def
 export type Macro = ReturnType<typeof Macro>
 
 
-export const VirtualLexerUsage = Data((virtual_lexer_name: string, args: TokenSpec[], exposed_tokens: Dict<string>) => {
+export const VirtualLexerUsage = Data((virtual_lexer_name: string, args: TokenSpec[], exposed_tokens: Dict<true>) => {
 	return { type: 'VirtualLexerUsage' as const, virtual_lexer_name, args, exposed_tokens }
 })
 export type VirtualLexerUsage = ReturnType<typeof VirtualLexerUsage>
@@ -123,7 +123,7 @@ export function set_registered_tokens(new_registered_tokens: Dict<TokenDef>) {
 	registered_tokens = new_registered_tokens
 }
 let registered_virtual_lexers = {} as Dict<VirtualLexerUsage>
-export function set_registered_tokens(new_registered_virtual_lexers: Dict<VirtualLexerUsage>) {
+export function set_registered_virtual_lexers(new_registered_virtual_lexers: Dict<VirtualLexerUsage>) {
 	registered_virtual_lexers = new_registered_virtual_lexers
 }
 let registered_rules = {} as Dict<Rule>
@@ -135,16 +135,13 @@ export function set_registered_macros(new_registered_macros: Dict<Macro>) {
 	registered_macros = new_registered_macros
 }
 
-export function get_token(token_name: string): Option<void> {
-	// const token = Option.from_nillable(registered_tokens[token_name])
-	// if (token.is_some())
-	// 	return token
+export function get_token(token_name: string): Option<string> {
 	if (token_name in registered_tokens)
-		return Some(undefined as void)
+		return Some(token_name)
 
 	for (const virtual_lexer of Object.values(registered_virtual_lexers))
 		if (token_name in virtual_lexer.exposed_tokens)
-			return Some(undefined as void)
+			return Some(token_name)
 
 	return None
 }

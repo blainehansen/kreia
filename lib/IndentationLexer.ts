@@ -20,7 +20,7 @@ export type IndentationState =
 	| { type: 'unbuffered', indentation: number }
 
 type Toks = { indent: VirtualTokenDefinition, deindent: VirtualTokenDefinition, indent_continue: VirtualTokenDefinition }
-export const IndentationLexer: VirtualLexer<IndentationState, Toks> = {
+export const IndentationLexer: VirtualLexer<IndentationState, Toks, []> = {
 	use() {
 		return { indent, deindent, indent_continue }
 	},

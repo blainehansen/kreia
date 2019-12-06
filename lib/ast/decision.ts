@@ -2,7 +2,6 @@ import '@ts-std/extensions/dist/array'
 import { Dict } from '@ts-std/types'
 import { Data } from '../utils'
 
-import { TokenDef } from './ast'
 import { Lexer, LexerState, VirtualLexers, TokenDefinition, Token, match_and_trim } from '../lexer'
 
 export abstract class Decidable {
@@ -14,7 +13,7 @@ export abstract class Decidable {
 }
 
 export class PathBuilder {
-	private items = [] as (TokenDef[] | AstDecisionBranch)[]
+	private items = [] as (string[] | AstDecisionBranch)[]
 
 	push_branch(paths: AstDecisionPath[]) {
 		this.items.push(AstDecisionBranch(
@@ -22,7 +21,7 @@ export class PathBuilder {
 		))
 	}
 
-	push(def: TokenDef) {
+	push(def: string) {
 		const last_index = this.items.length - 1
 		const last = this.items[last_index]
 		if (this.items.length === 0 || !Array.isArray(last)) {
@@ -42,10 +41,10 @@ export class PathBuilder {
 	}
 }
 
-export const AstDecisionPath = Data((...path: (TokenDef[] | AstDecisionBranch)[]): AstDecisionPath => {
+export const AstDecisionPath = Data((...path: (string[] | AstDecisionBranch)[]): AstDecisionPath => {
 	return { type: 'AstDecisionPath' as const, path, test_length: compute_path_test_length(path) }
 })
-export type AstDecisionPath = Readonly<{ type: 'AstDecisionPath', path: (TokenDef[] | AstDecisionBranch)[], test_length: number }>
+export type AstDecisionPath = Readonly<{ type: 'AstDecisionPath', path: (string[] | AstDecisionBranch)[], test_length: number }>
 
 export const AstDecisionBranch = Data((...paths: AstDecisionPath[]): AstDecisionBranch => {
 	const is_optional = paths.length === 1

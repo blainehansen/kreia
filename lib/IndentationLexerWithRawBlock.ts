@@ -26,7 +26,7 @@ type Toks = {
 	indent: VirtualTokenDefinition, deindent: VirtualTokenDefinition, indent_continue: VirtualTokenDefinition,
 	raw_block_begin: ExposedTokenDefinition, raw_block_content: VirtualTokenDefinition, raw_block_end: VirtualTokenDefinition,
 }
-export const IndentationLexerWithRawBlock: VirtualLexer<IndentationStateWithRawBlock, Toks> = {
+export const IndentationLexerWithRawBlock: VirtualLexer<IndentationStateWithRawBlock, Toks, []> = {
 	use() {
 		return { indent, deindent, indent_continue, raw_block_begin, raw_block_content, raw_block_end }
 	},
