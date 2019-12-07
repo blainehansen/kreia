@@ -1,16 +1,21 @@
-import { Dict, Cast, tuple as t } from '@ts-std/types'
 import { Maybe, Some, None } from '@ts-std/monads'
+import { Dict, Cast, tuple as t } from '@ts-std/types'
 
+import { debug } from './utils'
 import { Decidable } from './ast/decision'
 import {
-	Lexer as _Lexer, Tokens, TokenDefinition, RawTokenDefinition, TokensForDefinitions, Token, RawToken, VirtualLexers, VirtualToken, TokenSpec,
+	Lexer as _Lexer,
+	TokenDefinition, RawTokenDefinition, TokensForDefinitions, RawToken, TokenSpec,
+	VirtualLexers, VirtualLexerWithArgs,
+	// TokensForSpecs, TokensForVirtualLexers,
 } from './lexer'
 
 type Lexer = _Lexer<VirtualLexers>
 
-export function Parser<V extends VirtualLexers, D extends Dict<TokenSpec>>(
-	tokens: D, raw_virtual_lexers: V,
+export function Parser<D extends Dict<TokenSpec>, V extends VirtualLexers = {}>(
+	tokens: D, raw_virtual_lexers: VirtualLexerWithArgs<V>,
 ) {
+	// const [tok, lexer] = _Lexer.create(tokens, raw_virtual_lexers) as [TokensForSpecs<D> & TokensForVirtualLexers<V>, Lexer<V>]
 	const [tok, lexer] = _Lexer.create(tokens, raw_virtual_lexers)
 
 	return {
@@ -229,13 +234,14 @@ function _or<C extends ParseEntity[], B extends boolean>(
 		if (!test_entity(lexer, choice))
 			continue
 
-		choice_result = Some(perform_entity(lexer, choice))
+		return Some(perform_entity(lexer, choice)) as Optional<ChoicesReturn<C>, B>
 	}
 
-	return is_optional
-		? choice_result.to_undef()
-		// TODO make this have nice code frames etc
-		: choice_result.expect("no choice taken")
+	if (is_optional)
+		return undefined as Optional<ChoicesReturn<C>, B>
+
+	const next_source = lexer.get_next_source()
+	throw new Error(`expected one of these choices:\n${debug(choices)}\n\nbut got this:\n${next_source}\n`)
 }
 
 

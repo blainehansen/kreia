@@ -399,11 +399,39 @@ export function render_grammar(grammar: Grammar, filename = '') {
 		)], ts.NodeFlags.Const),
 	)
 
+	const import_statement = ts.createImportDeclaration(
+		undefined, undefined,
+		ts.createImportClause(
+			undefined,
+			ts.createNamedImports(
+				['Parser', 'ParseArg', 'Decidable', 'path', 'branch', 't', 'f'].map(i =>
+					ts.createImportSpecifier(undefined, ts.createIdentifier(i)),
+				)
+			),
+		), ts.createStringLiteral('kreia'),
+	)
+
+	const virtual_lexer_imports = virtual_lexers.values().map(virtual_lexer => {
+		return ts.createImportDeclaration(
+			undefined, undefined,
+			ts.createImportClause(
+				undefined,
+				ts.createNamedImports([
+					ts.createImportSpecifier(undefined, ts.createIdentifier(virtual_lexer.virtual_lexer_name))
+				]),
+			), ts.createStringLiteral(virtual_lexer.path),
+		)
+	})
+
 	const resultFile =
 		ts.createSourceFile(filename, '', ts.ScriptTarget.Latest, false, ts.ScriptKind.TS)
 	const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed, omitTrailingSemicolon: true })
 
-	return [
+	const imports = [import_statement, ...virtual_lexer_imports]
+		.map(item => printer.printNode(ts.EmitHint.Unspecified, item, resultFile))
+		.join('\n')
+
+	const rest = [
 		parser_statement,
 		rendered_decidables,
 		...rendered_rules,
@@ -411,6 +439,8 @@ export function render_grammar(grammar: Grammar, filename = '') {
 	]
 		.map(item => printer.printNode(ts.EmitHint.Unspecified, item, resultFile))
 		.join('\n\n')
+
+	return `${imports}\n\n${rest}`
 }
 
 function render_regex_spec(regex_spec: RegexSpec) {
@@ -507,11 +537,16 @@ function render_decidable(decidable: AstDecidable): Call {
 	}
 }
 
+function render_tuple_call(params: ts.Expression[]) {
+	return ts.createCall(ts.createIdentifier('t'), undefined, params)
+}
+
 function render_virtual_lexer_usage(virtual_lexer: VirtualLexerUsage) {
 	const name = ts.createIdentifier(virtual_lexer.virtual_lexer_name)
 	return ts.createPropertyAssignment(
 		name,
-		ts.createCall(ts.createIdentifier('t'), undefined, [name, ...virtual_lexer.args.map(render_token_spec)]),
+		render_tuple_call([name, render_tuple_call(virtual_lexer.args.map(render_token_spec))])
+		// ts.createCall(ts.createIdentifier('t'), undefined, [name, ...virtual_lexer.args.map(render_token_spec)]),
 	)
 }
 

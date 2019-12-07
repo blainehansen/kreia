@@ -117,5 +117,7 @@ export function make_indents(
 		indent_counter--
 		deindents.push(t(indent_counter, { is_virtual: true, type: deindent, span }))
 	}
+	if (source_state.source.length !== 0)
+		deindents.push(t(new_indentation, { is_virtual: true, type: indent_continue, span }))
 	return deindents
 }

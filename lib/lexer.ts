@@ -119,14 +119,14 @@ type VirtualLexerStateDict<V extends VirtualLexers> = {
 		: never
 }
 
-type VirtualLexerWithArgs<V extends VirtualLexers> = {
+export type VirtualLexerWithArgs<V extends VirtualLexers> = {
 	[K in keyof V]: V[K] extends VirtualLexer<any, Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, infer A>
 		? [V[K], A] : never
 }
 
 
 type TokensForVirtualLexers<V extends VirtualLexers> = UnionToIntersection<{
-	[K in keyof V]: V[K] extends VirtualLexer<any, infer T> ? T : never
+	[K in keyof V]: V[K] extends VirtualLexer<any, infer T, any[]> ? T : never
 }[keyof V]>
 
 
@@ -169,13 +169,13 @@ export class Lexer<V extends VirtualLexers> {
 		this.ignored_token_definitions = ignored_token_definitions
 	}
 
-	static create<D extends Dict<TokenSpec>, V extends VirtualLexers>(
-		tokens: D, raw_virtual_lexers: V,
+	static create<D extends Dict<TokenSpec>, V extends VirtualLexers = {}>(
+		tokens: D, raw_virtual_lexers: VirtualLexerWithArgs<V>,
 	): [TokensForSpecs<D> & TokensForVirtualLexers<V>, Lexer<V>] {
 		const user_toks = Tokens(tokens)
 
 		const tok = { ...user_toks } as TokensForSpecs<D> & TokensForVirtualLexers<V>
-		for (const virtual_lexer_key in raw_virtual_lexers) {
+		for (const virtual_lexer_name in raw_virtual_lexers) {
 			const [virtual_lexer, virtual_lexer_args] = raw_virtual_lexers[virtual_lexer_name]
 			const toks = virtual_lexer.use(...virtual_lexer_args)
 			for (const key in toks)
@@ -191,7 +191,7 @@ export class Lexer<V extends VirtualLexers> {
 	reset(source: string, filename?: string) {
 		const virtual_lexers = {} as VirtualLexerStateDict<V>
 		for (const virtual_lexer_name in this.raw_virtual_lexers) {
-			const virtual_lexer = this.raw_virtual_lexers[virtual_lexer_name]
+			const [virtual_lexer, ] = this.raw_virtual_lexers[virtual_lexer_name]
 			;(virtual_lexers as any)[virtual_lexer_name] = { virtual_lexer, state: virtual_lexer.initialize() }
 		}
 
@@ -308,9 +308,6 @@ export class Lexer<V extends VirtualLexers> {
 				}
 			}
 
-			if (token_definition.ignore)
-				continue
-
 			tokens.push(token)
 		}
 
@@ -359,8 +356,8 @@ export class Lexer<V extends VirtualLexers> {
 		)
 		if (attempt === undefined) {
 			const expected_tokens = debug(token_definitions)
-			const next_source = debug(this.state.source_state.source.slice(0, 10))
-			throw new Error(`expected these tokens:\n${expected_tokens}\n\nbut source had:\n${next_source}`)
+			const next_source = this.get_next_source()
+			throw new Error(`expected these tokens:\n${expected_tokens}\n\nbut source had:\n${next_source}\n`)
 		}
 
 		this.state = attempt[1]
@@ -377,9 +374,15 @@ export class Lexer<V extends VirtualLexers> {
 		if (this.state === undefined)
 			throw new Error()
 
-		console.log(this.state.source_state.source)
+		// console.log(this.state.source_state.source)
 		if (this.state.source_state.source.length !== 0)
 			throw new Error("the source wasn't entirely consumed")
+	}
+
+	get_next_source() {
+		if (this.state === undefined)
+			return ''
+		return debug(this.state.source_state.source.slice(0, 30))
 	}
 }
 

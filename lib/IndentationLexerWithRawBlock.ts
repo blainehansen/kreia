@@ -2,7 +2,7 @@ import '@ts-std/extensions/dist/array'
 import { Dict, tuple as t } from '@ts-std/types'
 import {
 	Lexer, SourceState, VirtualLexer, make_regex, ContentVirtualToken,
-	UserToken, HiddenToken, VirtualToken, ExposedToken, VirtualTokenDefinition, ExposedTokenDefinition,
+	UserToken, HiddenToken, VirtualToken, ExposedToken, VirtualTokenDefinition, ExposedRawTokenDefinition,
 } from './lexer'
 import {
 	IndentationLexer, IndentationState, make_indents,
@@ -24,7 +24,7 @@ type IndentationStateWithRawBlock =
 
 type Toks = {
 	indent: VirtualTokenDefinition, deindent: VirtualTokenDefinition, indent_continue: VirtualTokenDefinition,
-	raw_block_begin: ExposedTokenDefinition, raw_block_content: VirtualTokenDefinition, raw_block_end: VirtualTokenDefinition,
+	raw_block_begin: ExposedRawTokenDefinition, raw_block_content: VirtualTokenDefinition, raw_block_end: VirtualTokenDefinition,
 }
 export const IndentationLexerWithRawBlock: VirtualLexer<IndentationStateWithRawBlock, Toks, []> = {
 	use() {

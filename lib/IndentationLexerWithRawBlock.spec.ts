@@ -1,5 +1,6 @@
 import 'mocha'
 import { expect } from 'chai'
+import { tuple as t } from '@ts-std/types'
 
 import { Lexer, UserToken } from './lexer'
 import { IndentationLexerWithRawBlock } from './IndentationLexerWithRawBlock'
@@ -24,13 +25,13 @@ a
 
 describe('IndentationLexerWithRawBlock', () => {
 	it('basically works', () => {
-		const defs = IndentationLexerWithRawBlock.use()
-		if (defs.length !== 6)
-			throw new Error()
-		const [indent, deindent, indent_continue, raw_block_begin, raw_block_content, raw_block_end] = defs
-		const name = UserToken('name', /[a-z]+/)
+		const {
+			indent, deindent, indent_continue, raw_block_begin, raw_block_content, raw_block_end,
+		} = IndentationLexerWithRawBlock.use()
 
-		const lexer = new Lexer({ IndentationLexer: IndentationLexerWithRawBlock }, [], source)
+		const name = UserToken('name', /[a-z]+/)
+		const [, lexer] = Lexer.create({}, { IndentationLexer: t(IndentationLexerWithRawBlock, t()) })
+		lexer.reset(source)
 
 		expect(lexer.test([name, indent_continue])).eql(undefined)
 		expect(lexer.test([name, indent])).not.eql(undefined)

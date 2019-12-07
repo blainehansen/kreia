@@ -60,8 +60,8 @@ export const Macro = Data((name: string, args: OrderedDict<Arg>, definition: Def
 export type Macro = ReturnType<typeof Macro>
 
 
-export const VirtualLexerUsage = Data((virtual_lexer_name: string, args: TokenSpec[], exposed_tokens: Dict<true>) => {
-	return { type: 'VirtualLexerUsage' as const, virtual_lexer_name, args, exposed_tokens }
+export const VirtualLexerUsage = Data((virtual_lexer_name: string, path: string, args: TokenSpec[], exposed_tokens: Dict<true>) => {
+	return { type: 'VirtualLexerUsage' as const, virtual_lexer_name, path, args, exposed_tokens }
 })
 export type VirtualLexerUsage = ReturnType<typeof VirtualLexerUsage>
 
