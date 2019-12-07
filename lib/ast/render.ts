@@ -492,10 +492,6 @@ function render_token_def(token_def: TokenDef) {
 	)
 }
 
-// function wrap_token_def(name: string, expression: ts.Expression) {
-// 	return ts.createPropertyAssignment(ts.createIdentifier(name), expression)
-// }
-
 
 function render_locking_arg(arg: LockingArg) {
 	return ts.createVariableStatement(
@@ -546,7 +542,6 @@ function render_virtual_lexer_usage(virtual_lexer: VirtualLexerUsage) {
 	return ts.createPropertyAssignment(
 		name,
 		render_tuple_call([name, render_tuple_call(virtual_lexer.args.map(render_token_spec))])
-		// ts.createCall(ts.createIdentifier('t'), undefined, [name, ...virtual_lexer.args.map(render_token_spec)]),
 	)
 }
 

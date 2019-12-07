@@ -1,4 +1,4 @@
-import { Maybe, Some, None } from '@ts-std/monads'
+import { Maybe } from '@ts-std/monads'
 import { Dict, Cast, tuple as t } from '@ts-std/types'
 
 import { debug } from './utils'
@@ -7,7 +7,6 @@ import {
 	Lexer as _Lexer,
 	TokenDefinition, RawTokenDefinition, TokensForDefinitions, RawToken, TokenSpec,
 	VirtualLexers, VirtualLexerWithArgs,
-	// TokensForSpecs, TokensForVirtualLexers,
 } from './lexer'
 
 type Lexer = _Lexer<VirtualLexers>
@@ -15,7 +14,6 @@ type Lexer = _Lexer<VirtualLexers>
 export function Parser<D extends Dict<TokenSpec>, V extends VirtualLexers = {}>(
 	tokens: D, raw_virtual_lexers: VirtualLexerWithArgs<V>,
 ) {
-	// const [tok, lexer] = _Lexer.create(tokens, raw_virtual_lexers) as [TokensForSpecs<D> & TokensForVirtualLexers<V>, Lexer<V>]
 	const [tok, lexer] = _Lexer.create(tokens, raw_virtual_lexers)
 
 	return {
@@ -228,13 +226,11 @@ function _or<C extends ParseEntity[], B extends boolean>(
 	is_optional: B,
 	choices: C,
 ): Optional<ChoicesReturn<C>, B> {
-	let choice_result = None
-
 	for (const choice of choices) {
 		if (!test_entity(lexer, choice))
 			continue
 
-		return Some(perform_entity(lexer, choice)) as Optional<ChoicesReturn<C>, B>
+		return perform_entity(lexer, choice) as Optional<ChoicesReturn<C>, B>
 	}
 
 	if (is_optional)
