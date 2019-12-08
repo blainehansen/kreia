@@ -1,0 +1,25 @@
+:html_tag_ident = ['h1', 'h2', 'a', 'p', 'div', 'span']
+:ident = /[\w-]+/
+:open_angle = '<'
+:close_angle = '>'
+:slash = '/'
+:eq = '='
+:str = '/"(?:\\["\\]|[^\n"\\])*"/'
+
+:not_open_angle = [/[^<]/, '\\<']
+
+:whitespace = /\s+/ ignore: true
+
+html_file =
+	html_tag*
+
+html_tag<!tag_name = :html_tag_ident> =
+	:open_angle !tag_name
+	(:ident :eq :str)*
+	| :slash :close_angle
+	|
+		:close_angle
+		(text | html_tag)*
+		:open_angle !tag_name :slash :close_angle
+
+text = (:whitespace | :not_open_angle)+

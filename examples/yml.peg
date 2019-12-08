@@ -1,0 +1,46 @@
+:Ident = /\w+/
+:Colon = ':'
+:Dash = '-'
+:Space = / +/ ignore: true
+:EntitySeparator = '---'
+
+:Primitive = ["null", "undefined", "true", "false"]
+:Str = '/"(?:\\["\\]|[^\n"\\])*"/'
+:Num = /[0-9]+(\.[0-9]+)?/
+
+{ :indent, :deindent, :indent_continue } = use './IndentationLexer'
+// { :indent, :deindent, :indent_continue } = use './IndentationLexerWithRawBlock' with '|"', /\$\w+/, '${', '}', /#+"/, /"#+/
+
+
+yml_file =
+	@many_separated[entity, :indent_continue? :EntitySeparator]?
+
+entity =
+	| complex_entity
+	| simple_entity
+
+complex_entity =
+	| object | list
+
+simple_entity =
+	| :Primitive | :Str | :Num
+
+
+object =
+	@many_separated[object_entry, :indent_continue]
+
+object_entry =
+	| :Ident | :Str
+	:Colon
+	| :indent object :deindent
+	| :indent_continue list
+	| :Space simple_entity
+
+
+list =
+	@many_separated[list_entry, :indent_continue]
+
+list_entry =
+	:Dash
+	| :indent complex_entity :deindent
+	| :Space simple_entity
