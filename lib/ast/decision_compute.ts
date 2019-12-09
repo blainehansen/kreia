@@ -9,53 +9,82 @@ import { PathBuilder } from './decision'
 import {
 	get_token, get_rule, get_macro,
 	Arg, Var, Rule, Macro, Subrule, Maybe, Many, Or, MacroCall, Consume, Node, Definition,
-	Scope, DefinitionTuple, push_scope, pop_scope,
+	Scope, ScopeStack, DefinitionTuple, push_scope, pop_scope, in_scope,
 } from './ast'
 
 type NonEmpty<T> = [T, ...T[]]
 
-export function gather_branches(next: Definition): NonEmpty<Definition> {
-	const branches = [] as unknown as NonEmpty<Definition>
+
+export function gather_branches(next: Definition, scope: ScopeStack): [DefinitionTuple[], boolean] {
+	const branches = []
 	// console.log('next', next)
+
+	let all_maybe = true
 
 	let node
 	node_loop: while (node = next.shift()) {
 		// console.log('node', node)
 		switch (node.type) {
 		case 'Maybe':
-			branches.push(node.definition)
+			branches.push(t(node.definition, scope))
 			continue
-
 		case 'Or':
-			branches.push_all(node.choices)
+			branches.push_all(in_scope(node.choices, scope))
+			all_maybe = false
 			break node_loop
 		case 'Many':
-			branches.push(node.definition)
+			branches.push(t(node.definition, scope))
+			all_maybe = false
 			break node_loop
-		case 'Subrule':
+
+		case 'Subrule': {
 			const rule = get_rule(node.rule_name).unwrap()
-			if (rule.definition.length === 1 && rule.definition[0].type === 'Maybe') {
-				branches.push(rule.definition[0].definition)
+			const rule_scope = { current: Scope(rule.locking_args, undefined), previous: [] }
+			const [gathered, rule_all_maybe] = gather_branches(rule.definition.slice(), rule_scope)
+			if (rule_all_maybe) {
+				branches.push_all(gathered)
 				continue
 			}
-			branches.push([node as Node])
+			branches.push(t([node as Node], scope))
+			all_maybe = false
 			break node_loop
-		case 'MacroCall':
+		}
+
+		case 'MacroCall': {
 			const macro = get_macro(node.macro_name).unwrap()
-			if (macro.definition.length === 1 && macro.definition[0].type === 'Maybe') {
-				branches.push(macro.definition[0].definition)
+			const macro_scope = push_scope(scope, macro.locking_args, node.args)
+			const [gathered, macro_all_maybe] = gather_branches(macro.definition.slice(), macro_scope)
+			if (macro_all_maybe) {
+				branches.push_all(gathered)
 				continue
 			}
-			branches.push([node as Node])
+			branches.push(t([node as Node], scope))
+			all_maybe = false
 			break node_loop
+		}
+
+		case 'Var': {
+			const arg_definition = scope.current.args.get_by_name(node.arg_name).unwrap()
+			const var_scope = pop_scope(scope)
+			const [gathered, var_all_maybe] = gather_branches(arg_definition.slice(), var_scope)
+			if (var_all_maybe) {
+				branches.push_all(gathered)
+				continue
+			}
+			branches.push(t([node as Node], scope))
+			all_maybe = false
+			break node_loop
+		}
+
 		default:
-			branches.push([node as Node])
+			branches.push(t([node as Node], scope))
+			all_maybe = false
 			break node_loop
 		}
 	}
 
 	// console.log('branches', branches)
-	return branches
+	return [branches, all_maybe]
 }
 
 const Continue = Data((...definition_tuple: DefinitionTuple) => {
@@ -77,13 +106,11 @@ function* iterate_definition(
 	let node
 	while (node = nodes_to_visit.shift()) switch (node.type) {
 	case 'Or':
-		const choices = node.choices.map(choice => t(choice, scope))
-		yield choices
+		const [gathered, ] = gather_branches(nodes_to_visit, scope)[0]
+		yield [...in_scope(node.choices, scope), ...gathered]
 		continue
 	case 'Maybe': {
-		const branches = [node.definition, ...gather_branches(nodes_to_visit)]
-			.map(branch => t(branch, scope))
-		yield branches
+		yield [t(node.definition, scope), ...gather_branches(nodes_to_visit, scope)[0]]
 		continue
 	}
 	case 'Many':
@@ -97,37 +124,46 @@ function* iterate_definition(
 	case 'Subrule': {
 		const rule = get_rule(node.rule_name).unwrap()
 		const rule_scope = { current: Scope(rule.locking_args, undefined), previous: [] }
-		// what we can do here and in MacroCall is *always* gather_branches on the definition
-		// if gather_branches is scope aware, calls itself recursively, and signals to the parent whether to continue or not
-		// then we've basically *flattened* everything
-		// then both of these can use that signal to decide whether to yield the branches or just iterate_definition
-		if (rule.definition.length === 1 && rule.definition[0].type === 'Maybe') {
-			const branches = gather_branches(nodes_to_visit).map(branch => t(branch, scope))
-			yield [t(rule.definition[0].definition, rule_scope), ...branches]
-			continue
+		const [gathered, all_maybe] = gather_branches(rule.definition.slice(), rule_scope)
+		if (all_maybe) {
+			const branches = gather_branches(nodes_to_visit, scope)[0]
+			yield [...gathered, ...branches]
 		}
-		yield* iterate_definition(rule.definition, rule_scope)
+		else
+			yield* iterate_definition(rule.definition, rule_scope)
+
 		continue
 	}
 
 	case 'MacroCall': {
 		const macro = get_macro(node.macro_name).unwrap()
 		const macro_scope = push_scope(scope, macro.locking_args, node.args)
-		if (macro.definition.length === 1 && macro.definition[0].type === 'Maybe') {
-			const branches = gather_branches(nodes_to_visit).map(branch => t(branch, scope))
-			yield [t(macro.definition[0].definition, macro_scope), ...branches]
-			continue
+		const [gathered, all_maybe] = gather_branches(macro.definition.slice(), macro_scope)
+		if (all_maybe) {
+			const branches = gather_branches(nodes_to_visit, scope)[0]
+			yield [...gathered, ...branches]
 		}
-		yield* iterate_definition(macro.definition, macro_scope)
+		else
+			yield* iterate_definition(macro.definition, macro_scope)
+
 		continue
 	}
 
-	case 'Var':
+	case 'Var': {
 		// Vars use the parent_scope
 		const arg_definition = scope.current.args.get_by_name(node.arg_name).unwrap()
 		const var_scope = pop_scope(scope)
-		yield* iterate_definition(arg_definition, var_scope)
+		// const [gathered, all_maybe] = gather_branches(arg_definition.slice(), var_scope)
+		const [gathered, all_maybe] = gather_branches([...arg_definition, ...nodes_to_visit], var_scope)
+		if (all_maybe) {
+			const branches = gather_branches(nodes_to_visit, scope)[0]
+			yield [...gathered, ...branches]
+		}
+		else
+			yield* iterate_definition(arg_definition, var_scope)
+
 		continue
+	}
 
 	case 'LockingVar':
 		const locking_arg = scope.current.locking_args.get_by_name(node.locking_arg_name).unwrap()

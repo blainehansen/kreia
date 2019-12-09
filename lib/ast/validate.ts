@@ -9,14 +9,23 @@ import {
 	Scope, ScopeStack, push_scope, pop_scope,
 } from './ast'
 
+import { Console } from 'console'
+const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
+
 export function check_left_recursive(thing: Rule | Macro) {
+	// console.log('thing.name', thing.name)
 	const seen_rules = {} as Dict<true>
 	const seen_macros = {} as Dict<true>
 	const one_to_add = thing.type === 'Rule' ? seen_rules : seen_macros
 	one_to_add[thing.name] = true
 
 	const scope = { current: Scope(thing.locking_args, undefined), previous: [] }
-	return _check_left_recursive(seen_rules, seen_macros, thing.definition, scope)
+	const checked = _check_left_recursive(seen_rules, seen_macros, thing.definition, scope)
+	// console.log(`checked for ${thing.name}`, checked)
+	// console.log()
+	// console.log()
+	// console.log()
+	return checked
 }
 function _check_left_recursive(
 	seen_rules: Dict<true>,
@@ -24,56 +33,66 @@ function _check_left_recursive(
 	definition: Definition,
 	scope: ScopeStack,
 ): boolean {
-	for (const node of definition) switch (node.type) {
-	case 'Consume':
-		return false
-	case 'LockingVar':
-		return false
+	// console.log('seen_rules', seen_rules)
+	// console.log('seen_macros', seen_macros)
+	// console.log()
 
-	case 'Maybe':
-		if (_check_left_recursive(seen_rules, seen_macros, node.definition, scope))
-			return true
-		continue
-	case 'Or':
-		for (const choice of node.choices)
-			if (_check_left_recursive(seen_rules, seen_macros, choice, scope))
-				return true
-		return false
-	case 'Many':
-		if (_check_left_recursive(seen_rules, seen_macros, node.definition, scope))
-			return true
-		return false
-
-	case 'Subrule':
-		if (seen_rules[node.rule_name])
-			return true
-		const subrule = get_rule(node.rule_name).unwrap()
-		const rule_scope = { current: Scope(subrule.locking_args, undefined), previous: [] }
-		if (_check_left_recursive({ ...seen_rules, [node.rule_name]: true }, seen_macros, subrule.definition, rule_scope))
-			return true
-		return false
-
-	case 'MacroCall':
-		if (seen_macros[node.macro_name])
-			return true
-		const macro = get_macro(node.macro_name).unwrap()
-		const call_scope = push_scope(scope, macro.locking_args, node.args)
-		if (_check_left_recursive(seen_rules, { ...seen_macros, [node.macro_name]: true }, macro.definition, call_scope))
-			return true
-		return false
-
-	case 'Var':
-		const var_definition = scope.current.args.get_by_name(node.arg_name).to_undef()
-		if (var_definition === undefined)
+	for (const node of definition) {
+		// console.log('node.type', node.type)
+		switch (node.type) {
+		case 'Consume':
 			return false
-		const var_scope = pop_scope(scope)
-		if (_check_left_recursive(seen_rules, seen_macros, var_definition, var_scope))
-			return true
-		return false
+		case 'LockingVar':
+			return false
 
-	default: return exhaustive(node)
+		case 'Maybe':
+			if (_check_left_recursive(seen_rules, seen_macros, node.definition, scope))
+				return true
+			continue
+		case 'Or':
+			for (const choice of node.choices)
+				if (_check_left_recursive(seen_rules, seen_macros, choice, scope))
+					return true
+			return false
+		case 'Many':
+			if (_check_left_recursive(seen_rules, seen_macros, node.definition, scope))
+				return true
+			return false
+
+		case 'Subrule':
+			if (seen_rules[node.rule_name])
+				return true
+			const subrule = get_rule(node.rule_name).unwrap()
+			const rule_scope = { current: Scope(subrule.locking_args, undefined), previous: [] }
+			if (_check_left_recursive({ ...seen_rules, [node.rule_name]: true }, seen_macros, subrule.definition, rule_scope))
+				return true
+			return false
+
+		case 'MacroCall':
+			if (seen_macros[node.macro_name])
+				return true
+			const macro = get_macro(node.macro_name).unwrap()
+			const call_scope = push_scope(scope, macro.locking_args, node.args)
+			// if (_check_left_recursive(seen_rules, { ...seen_macros, [node.macro_name]: true }, macro.definition, call_scope))
+			if (_check_left_recursive(seen_rules, seen_macros, macro.definition, call_scope))
+				return true
+			return false
+
+		case 'Var':
+			const var_definition = scope.current.args.get_by_name(node.arg_name).to_undef()
+			if (var_definition === undefined)
+				return false
+			const var_scope = pop_scope(scope)
+			if (_check_left_recursive(seen_rules, seen_macros, var_definition, var_scope))
+				return true
+			return false
+
+		default: return exhaustive(node)
+		}
 	}
 
+	// console.log()
+	// console.log()
 	return false
 }
 

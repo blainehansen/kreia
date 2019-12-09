@@ -1,5 +1,5 @@
 import '@ts-std/extensions/dist/array'
-import { Dict } from '@ts-std/types'
+import { Dict, tuple as t } from '@ts-std/types'
 import { Maybe as Option, Some, None } from '@ts-std/monads'
 import { OrderedDict } from '@ts-std/collections'
 
@@ -7,7 +7,6 @@ import { TokenOptions } from '../lexer'
 import { Data, exhaustive, debug, exec, array_of, empty_ordered_dict } from '../utils'
 
 import { AstDecidable } from './decision'
-import { gather_branches, compute_decidable } from './decision_compute'
 
 
 export type RegexSpec =
@@ -181,6 +180,9 @@ export function pop_scope({ current, previous }: ScopeStack): ScopeStack {
 		previous: previous.slice(0, previous.length - 1),
 	}
 }
+export function in_scope(definitions: Definition[], scope: ScopeStack): [Definition, ScopeStack][] {
+	return definitions.map(d => t(d, scope))
+}
 
 export type DefinitionTuple = [Definition, ScopeStack]
 
@@ -194,7 +196,11 @@ export function visit_definition<T>(
 ): T[] {
 	const results = [] as T[]
 	for (const [node_index, node] of definition.entries()) {
-		const result = visit_node(node_visitors, node, definition.slice(node_index + 1), scope, wrapping_function_name)
+		const result = visit_node(
+			node_visitors, node,
+			[...definition.slice(node_index + 1), ...next],
+			scope, wrapping_function_name,
+		)
 		results.push(result)
 	}
 	return results

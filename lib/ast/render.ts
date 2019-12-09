@@ -15,7 +15,7 @@ import { check_left_recursive, validate_references } from './validate'
 import {
 	RegexSpec, MatchSpec, TokenSpec, Node, Definition, Grammar, get_token, get_rule, get_macro,
 	Rule, Macro, VirtualLexerUsage, LockingArg, TokenDef,
-	Scope, ScopeStack, push_scope, pop_scope, DefinitionTuple,
+	Scope, ScopeStack, push_scope, pop_scope, in_scope, DefinitionTuple,
 	VisitingFunctions, VisitorParams, visit_definition,
 	set_registered_tokens, set_registered_virtual_lexers, set_registered_rules, set_registered_macros,
 	Arg, Maybe, Many, Var,
@@ -87,7 +87,7 @@ const render_visiting_functions: VisitingFunctions<Call> = {
 			const choice = or.choices[choice_index]
 			const against = or.choices.slice(choice_index + 1)
 
-			choices.push(render_entity(choice, against, true, next, scope, 'maybe'))
+			choices.push(render_entity(t(choice, scope), in_scope(against, scope), true, next, 'maybe'))
 		}
 		// since Or always has all the information it needs about whether to enter or not (it merely tries all of its branches)
 		// it doesn't need a top level decidable. using maybe_or merely means it doesn't panic if no choice succeeds
@@ -98,13 +98,13 @@ const render_visiting_functions: VisitingFunctions<Call> = {
 	Maybe(maybe, next, scope, wrapping_function_name) {
 		return ts.createCall(
 			ts.createIdentifier('maybe'), undefined,
-			render_entity(maybe.definition, gather_branches(next.slice()), false, next, scope, 'maybe'),
+			render_entity(t(maybe.definition, scope), gather_branches(next.slice(), scope)[0], false, next, 'maybe'),
 		)
 	},
 	Many(many, next, scope, wrapping_function_name) {
 		return ts.createCall(
 			ts.createIdentifier(wrapping_function_name === 'maybe' ? 'maybe_many' : 'many'), undefined,
-			render_entity(many.definition, gather_branches(next.slice()), false, next, scope, 'many'),
+			render_entity(t(many.definition, scope), gather_branches(next.slice(), scope)[0], false, next, 'many'),
 		)
 	},
 	Consume(consume, next, scope, wrapping_function_name) {
@@ -119,7 +119,7 @@ const render_visiting_functions: VisitingFunctions<Call> = {
 			? ts.createCall(locker_identifier, undefined, [])
 			: ts.createCall(
 				ts.createIdentifier(wrapping_function_name), undefined,
-				render_entity([locking_var as Node], gather_branches(next.slice()), false, next, scope, wrapping_function_name),
+				render_entity(t([locking_var as Node], scope), gather_branches(next.slice(), scope)[0], false, next, wrapping_function_name),
 			)
 	},
 	Subrule(subrule, next, scope, wrapping_function_name) {
@@ -139,27 +139,28 @@ const render_visiting_functions: VisitingFunctions<Call> = {
 		const macro = get_macro(macro_call.macro_name).unwrap()
 		const pushed_scope = push_scope(scope, macro.locking_args, macro_call.args)
 
-		if (macro_call.macro_name === 'many_separated') {
-			const body_rule = macro_call.args.get_by_name('body_rule').unwrap()
-			const separator_rule = macro_call.args.get_by_name('separator_rule').unwrap()
+		// if (macro_call.macro_name === 'many_separated') {
+		// 	const body_rule = macro_call.args.get_by_name('body_rule').unwrap()
+		// 	const separator_rule = macro_call.args.get_by_name('separator_rule').unwrap()
 
-			const body_decidable =
-				render_entity_decidable(macro.definition, pushed_scope, next, scope, wrapping_function_name)
-			const separator_decidable =
-				render_entity_decidable([...separator_rule, ...body_rule], scope, next, scope, wrapping_function_name)
+		// 	const body_decidable =
+		// 		render_entity_decidable(macro.definition, pushed_scope, next, scope, wrapping_function_name)
+		// 	const separator_decidable =
+		// 		render_entity_decidable([...separator_rule, ...body_rule], scope, next, scope, wrapping_function_name)
 
-			return ts.createCall(
-				ts.createIdentifier(wrapping_function_name === 'maybe' ? 'maybe_many_separated' : 'many_separated'), undefined,
-				[
-					ts.createCall(ts.createIdentifier('f'), undefined, [render_arrow(body_rule, scope), body_decidable]),
-					ts.createCall(ts.createIdentifier('f'), undefined, [render_arrow(separator_rule, scope), separator_decidable]),
-				],
-			)
-		}
+		// 	return ts.createCall(
+		// 		ts.createIdentifier(wrapping_function_name === 'maybe' ? 'maybe_many_separated' : 'many_separated'), undefined,
+		// 		[
+		// 			ts.createCall(ts.createIdentifier('f'), undefined, [render_arrow(body_rule, scope), body_decidable]),
+		// 			ts.createCall(ts.createIdentifier('f'), undefined, [render_arrow(separator_rule, scope), separator_decidable]),
+		// 		],
+		// 	)
+		// }
 
 		const gathered_decidables: MacroRenderContext = { type: 'call', decidables: [] }
 		with_macro_render_context(gathered_decidables, () => {
-			render_definition(macro.definition, pushed_scope)
+			// console.log('calling from macro')
+			render_definition(macro.definition, pushed_scope, next.slice())
 		})
 
 		// all of these args are rendered in the current scope (we haven't already pushed the macro's args)
@@ -191,8 +192,10 @@ const render_visiting_functions: VisitingFunctions<Call> = {
 		return ts.createCall(ts.createIdentifier(wrapping_function_name), undefined, [var_identifier, entity_decidable])
 	},
 }
-function render_definition(definition: Definition, scope: ScopeStack) {
-	return visit_definition(render_visiting_functions, definition, [], scope, undefined)
+function render_definition(definition: Definition, scope: ScopeStack, next: Definition) {
+	// console.log('definition', definition)
+	// console.log('next', next)
+	return visit_definition(render_visiting_functions, definition, next, scope, undefined)
 		.map(rendered => ts.createExpressionStatement(rendered))
 }
 
@@ -204,13 +207,14 @@ function render_entity_decidable(
 ) {
 	return generate_decidable(
 		wrapping_function_name,
-		t(main, main_scope), gather_branches(next.slice()).map(branch => t(branch, next_scope)),
+		t(main, main_scope), gather_branches(next.slice(), next_scope)[0],
 	)
 }
 
 function render_entity<B extends boolean>(
-	target: Definition, against: Definition[], atom_style: B,
-	...[next, scope, wrapping_function_name]: VisitorParams
+	[target, target_scope]: DefinitionTuple, against: DefinitionTuple[], atom_style: B,
+	next: Definition, wrapping_function_name: VisitorParams[2],
+	// ...[next, scope, wrapping_function_name]: VisitorParams
 ): B extends true ? Call : ts.Expression[] {
 	if (
 		target.length === 1
@@ -237,11 +241,11 @@ function render_entity<B extends boolean>(
 		const entity_args = exec(() => {
 			switch (entity.type) {
 			case 'Subrule':
-				return render_visiting_functions.Subrule(entity, next, scope, 'maybe').arguments
+				return render_visiting_functions.Subrule(entity, next, target_scope, 'maybe').arguments
 			// case 'MacroCall':
-			// 	return render_visiting_functions.MacroCall(entity, next, scope, 'maybe').arguments
+			// 	return render_visiting_functions.MacroCall(entity, next, target_scope, 'maybe').arguments
 			case 'Var':
-				return render_visiting_functions.Var(entity, next, scope, 'maybe').arguments
+				return render_visiting_functions.Var(entity, next, target_scope, 'maybe').arguments
 			default:
 				return exhaustive(entity)
 			}
@@ -252,11 +256,11 @@ function render_entity<B extends boolean>(
 			: entity_args as unknown as B extends true ? Call : ts.Expression[]
 	}
 
-	const rendered_entity = render_arrow(target, scope)
+	const rendered_entity = render_arrow(target, target_scope)
 
 	const overall_decidable = generate_decidable(
 		wrapping_function_name,
-		t(target, scope), against.map(branch => t(branch, scope)),
+		t(target, target_scope), against,
 	)
 
 	return atom_style
@@ -271,7 +275,7 @@ function render_arrow(...[definition, scope]: DefinitionTuple) {
 	return ts.createArrowFunction(
 		undefined, undefined, [], undefined,
 		ts.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
-		ts.createBlock(render_definition(definition, scope), true),
+		ts.createBlock(render_definition(definition, scope, [] as Definition), true),
 	)
 }
 
@@ -285,7 +289,7 @@ export function render_macro(macro: Macro) {
 	const macro_render_context: MacroRenderContext = { type: 'definition', count: 0 }
 	const starting_scope = { current: Scope(macro.locking_args, undefined), previous: [] }
 	const rendered_definition = with_macro_render_context(macro_render_context, () => {
-		return render_definition(macro.definition, starting_scope)
+		return render_definition(macro.definition, starting_scope, [] as Definition)
 	})
 
 	return ts.createFunctionDeclaration(
@@ -562,7 +566,7 @@ export function render_rule(rule: Rule) {
 	if (global_macro_render_context !== undefined)
 		throw new Error('global_macro_render_context should be undefined')
 	const starting_scope = { current: Scope(rule.locking_args, undefined), previous: [] }
-	const rendered_definition = render_definition(rule.definition, starting_scope)
+	const rendered_definition = render_definition(rule.definition, starting_scope, [] as Definition)
 
 	return ts.createFunctionDeclaration(
 		undefined, [ts.createModifier(ts.SyntaxKind.ExportKeyword)], undefined,

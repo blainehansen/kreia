@@ -43,7 +43,35 @@ const F = 'F'
 const G = 'G'
 const H = 'H'
 
+// function sep(body: Definition, separator: Definition) {
+// 	return MacroCall(
+// 		'many_separated',
+// 		OrderedDict.create_unique((_, index) => index === 0 ? 'body_rule' : 'separator_rule', [
+// 			body, separator,
+// 		]).unwrap(),
+// 	)
+// }
+
+// function space_sep(body: Definition) {
+// 	return sep(body, [Consume(['space'])])
+// }
+
 describe('compute_decidable', () => {
+	// it('specific cases', () => {
+	// 	expect(compute_decidable(
+	// 		d(
+	// 			sep(
+	// 				[space_sep([Consume(['A'])])],
+	// 				[Consume(['space', 'bar', 'space'])],
+	// 			),
+	// 		),
+	// 		[
+	// 		d(),
+	// 	])).eql(
+	// 		path()
+	// 	)
+	// })
+
 	it('simple linear tokens', () => {
 		expect(compute_decidable(
 			d(Maybe([Consume([B])]), Consume([C])),
