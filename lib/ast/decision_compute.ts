@@ -2,6 +2,9 @@ import '@ts-std/extensions/dist/array'
 import { tuple as t } from '@ts-std/types'
 import { Data, exhaustive, IterWrapper } from '../utils'
 
+import { Console } from 'console'
+const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 4 } })
+
 import { PathBuilder } from './decision'
 import {
 	get_token, get_rule, get_macro,
@@ -9,26 +12,49 @@ import {
 	Scope, DefinitionTuple, push_scope, pop_scope,
 } from './ast'
 
-export function gather_branches(next: Definition) {
-	const branches = []
+type NonEmpty<T> = [T, ...T[]]
+
+export function gather_branches(next: Definition): NonEmpty<Definition> {
+	const branches = [] as unknown as NonEmpty<Definition>
+	// console.log('next', next)
 
 	let node
-	while (node = next.shift()) switch (node.type) {
-	case 'Maybe':
-		branches.push(node.definition)
-		continue
+	node_loop: while (node = next.shift()) {
+		// console.log('node', node)
+		switch (node.type) {
+		case 'Maybe':
+			branches.push(node.definition)
+			continue
 
-	case 'Or':
-		branches.push_all(node.choices)
-		break
-	case 'Many':
-		branches.push(node.definition)
-		break
-	default:
-		branches.push([node as Node])
-		break
+		case 'Or':
+			branches.push_all(node.choices)
+			break node_loop
+		case 'Many':
+			branches.push(node.definition)
+			break node_loop
+		case 'Subrule':
+			const rule = get_rule(node.rule_name).unwrap()
+			if (rule.definition.length === 1 && rule.definition[0].type === 'Maybe') {
+				branches.push(rule.definition[0].definition)
+				continue
+			}
+			branches.push([node as Node])
+			break node_loop
+		case 'MacroCall':
+			const macro = get_macro(node.macro_name).unwrap()
+			if (macro.definition.length === 1 && macro.definition[0].type === 'Maybe') {
+				branches.push(macro.definition[0].definition)
+				continue
+			}
+			branches.push([node as Node])
+			break node_loop
+		default:
+			branches.push([node as Node])
+			break node_loop
+		}
 	}
 
+	// console.log('branches', branches)
 	return branches
 }
 
@@ -51,13 +77,15 @@ function* iterate_definition(
 	let node
 	while (node = nodes_to_visit.shift()) switch (node.type) {
 	case 'Or':
-		yield node.choices
-			.map(choice => t(choice, scope))
+		const choices = node.choices.map(choice => t(choice, scope))
+		yield choices
 		continue
-	case 'Maybe':
-		yield [node.definition, ...gather_branches(nodes_to_visit)]
+	case 'Maybe': {
+		const branches = [node.definition, ...gather_branches(nodes_to_visit)]
 			.map(branch => t(branch, scope))
+		yield branches
 		continue
+	}
 	case 'Many':
 		yield* iterate_definition(node.definition, scope)
 		yield Continue(node.definition, scope)
@@ -66,16 +94,34 @@ function* iterate_definition(
 		yield* node.token_names.map(token_name => get_token(token_name).unwrap())
 		continue
 
-	case 'Subrule':
+	case 'Subrule': {
 		const rule = get_rule(node.rule_name).unwrap()
 		const rule_scope = { current: Scope(rule.locking_args, undefined), previous: [] }
+		// what we can do here and in MacroCall is *always* gather_branches on the definition
+		// if gather_branches is scope aware, calls itself recursively, and signals to the parent whether to continue or not
+		// then we've basically *flattened* everything
+		// then both of these can use that signal to decide whether to yield the branches or just iterate_definition
+		if (rule.definition.length === 1 && rule.definition[0].type === 'Maybe') {
+			const branches = gather_branches(nodes_to_visit).map(branch => t(branch, scope))
+			yield [t(rule.definition[0].definition, rule_scope), ...branches]
+			continue
+		}
 		yield* iterate_definition(rule.definition, rule_scope)
 		continue
-	case 'MacroCall':
+	}
+
+	case 'MacroCall': {
 		const macro = get_macro(node.macro_name).unwrap()
 		const macro_scope = push_scope(scope, macro.locking_args, node.args)
+		if (macro.definition.length === 1 && macro.definition[0].type === 'Maybe') {
+			const branches = gather_branches(nodes_to_visit).map(branch => t(branch, scope))
+			yield [t(macro.definition[0].definition, macro_scope), ...branches]
+			continue
+		}
 		yield* iterate_definition(macro.definition, macro_scope)
 		continue
+	}
+
 	case 'Var':
 		// Vars use the parent_scope
 		const arg_definition = scope.current.args.get_by_name(node.arg_name).unwrap()
@@ -117,12 +163,9 @@ function _compute_decidable(
 
 	let item
 	while (item = main.next()) {
-		// console.log()
-		// console.log()
 		// console.log('beginning iteration')
-		// console.log(item)
-		// console.log('against.length')
-		// console.log(against.length)
+		// console.log('item', item)
+		// console.log('against.length', against.length)
 
 		// this next call will already mutate the underlying definition in gather_branches
 		// so we could have entered this iteration of the loop with many things ahead
@@ -132,14 +175,13 @@ function _compute_decidable(
 			if (item.length === 0)
 				throw new Error('empty definition')
 
-			// console.log('branching')
+			// console.log('recursing')
+
 			const new_against = [] as AstIter[]
 			const decision_paths = []
 
 			for (const definition_tuple of item) {
-				// console.log('recursing on item')
-				// console.log(item)
-				// console.log()
+				// console.log('definition_tuple[0]', definition_tuple[0])
 				// it seems that *all* the exit states of the clone against iters of each definition
 				// must be added to the new list of against
 				const [decision_path, continued_against] = _compute_decidable(
@@ -152,10 +194,10 @@ function _compute_decidable(
 			}
 			against = new_against
 
-			// console.log('finished with recursion')
-			// console.log()
-
+			// console.log('decision_paths', decision_paths)
 			builder.push_branch(decision_paths)
+			if (against.length === 0)
+				break
 			continue
 		}
 
@@ -164,21 +206,17 @@ function _compute_decidable(
 			// hitting here means this thing is undecidable, at least for now
 			throw new Error('undecidable')
 
-		// console.log('NOT branching')
 
 		const new_against = [] as AstIter[]
 		const against_iters = against.slice()
 
 		let against_iter: AstIter
 		while (against_iter = against_iters.shift()!) {
-			// console.log()
-			// console.log('against_iter')
-			// console.log(against_iter)
 			const against_item = against_iter.next()
-			// console.log('against_item')
-			// console.log(against_item)
 			if (against_item === undefined)
 				continue
+
+			// console.log('against_item', against_item)
 
 			if (Array.isArray(against_item)) {
 				const child_iters = against_item.map(
@@ -195,18 +233,12 @@ function _compute_decidable(
 				continue
 			}
 
-			// if (item.name !== against_item.name)
 			if (item !== against_item)
 				continue
 
 			new_against.push(against_iter)
 		}
-		// console.log('new_against')
-		// console.log(new_against)
 		against = new_against
-
-		// if (same >= against.length)
-		// 	throw new Error("all branches have the same stem")
 
 		builder.push(item)
 		if (against.length === 0)
@@ -222,5 +254,8 @@ function _compute_decidable(
 	// it definitely means you need to warn people that the first matched rule in an Or will be taken,
 	// so they should put longer ones first if they share stems
 
+	// console.log('returning')
+	// console.log('against.length', against.length)
+	// console.log()
 	return t(builder.build(), against)
 }

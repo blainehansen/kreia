@@ -5,11 +5,11 @@
   "main": "./kreia.js",
   "types": "./kreia.d.ts",
   "scripts": {
-    "main": "ts-node lib/parser_ast.ts",
-    "serve": "ts-node lib/parser_out.ts",
+    "main": "ts-node lib/grammar_ast.ts",
+    "parse": "ts-node lib/grammar_out.ts",
     "preversion": "npm test",
     "finalize-version": "git push origin master && git push origin master --tags && npm publish",
-    "test": "mocha -r ts-node/register lib/IndentationLexerWithRawBlock.spec.ts",
+    "test": "mocha -r ts-node/register lib/grammar.spec.ts",
     "ts:ast": "ts-creator lib/ast/render_from.ts --use-tabs true --trailing-comma 'all' -o lib/ast/render_to.ts"
   },
   "keywords": [

@@ -16,24 +16,6 @@ import {
 
 import { log } from '../utils'
 
-// const _A = UserToken('A', 'A')
-// const _B = UserToken('B', 'B')
-// const _C = UserToken('C', 'C')
-// const _D = UserToken('D', 'D')
-// const _E = UserToken('E', 'E')
-// const _F = UserToken('F', 'F')
-// const _G = UserToken('G', 'G')
-// const _H = UserToken('H', 'H')
-
-const _A = TokenDef('A', { type: 'string', value: 'A' })
-const _B = TokenDef('B', { type: 'string', value: 'B' })
-const _C = TokenDef('C', { type: 'string', value: 'C' })
-const _D = TokenDef('D', { type: 'string', value: 'D' })
-const _E = TokenDef('E', { type: 'string', value: 'E' })
-const _F = TokenDef('F', { type: 'string', value: 'F' })
-const _G = TokenDef('G', { type: 'string', value: 'G' })
-const _H = TokenDef('H', { type: 'string', value: 'H' })
-
 const token_defs = [
 	TokenDef('A', { type: 'string', value: 'A' }),
 	TokenDef('B', { type: 'string', value: 'B' }),
@@ -64,12 +46,20 @@ const H = 'H'
 describe('compute_decidable', () => {
 	it('simple linear tokens', () => {
 		expect(compute_decidable(
+			d(Maybe([Consume([B])]), Consume([C])),
+			[
+			d(Consume([A])),
+		])).eql(
+			path(branch(path([B]), path([C]))),
+		)
+
+		expect(compute_decidable(
 			d(Consume([A])),
 			[
 			d(Consume([B])),
 			d(Consume([C])),
 		])).eql(
-			path([_A]),
+			path([A]),
 		)
 
 		expect(compute_decidable(
@@ -77,7 +67,7 @@ describe('compute_decidable', () => {
 			[
 			d(Consume([A, B, C, D, E])),
 		])).eql(
-			path([_A, _B, _C]),
+			path([A, B, C]),
 		)
 
 		expect(compute_decidable(
@@ -85,7 +75,7 @@ describe('compute_decidable', () => {
 			[
 			d(Consume([A, C, A])),
 		])).eql(
-			path([_A, _B]),
+			path([A, B]),
 		)
 
 		expect(compute_decidable(
@@ -94,7 +84,7 @@ describe('compute_decidable', () => {
 			d(Consume([A, C, D, A])),
 			d(Consume([A, C, B, A, E, A])),
 		])).eql(
-			path([_A, _C, _B, _A, _C]),
+			path([A, C, B, A, C]),
 		)
 
 		expect(compute_decidable(
@@ -103,7 +93,7 @@ describe('compute_decidable', () => {
 			d(Consume([A, C, D, A])),
 			d(Consume([A, C, B, A, E, A])),
 		])).eql(
-			path([_A, _C, _B, _A, _C]),
+			path([A, C, B, A, C]),
 		)
 	})
 
@@ -113,7 +103,7 @@ describe('compute_decidable', () => {
 			[
 			d(Consume([A]), Maybe([Consume([D, F])])),
 		])).eql(
-			path([_A, _B]),
+			path([A, B]),
 		)
 
 		expect(compute_decidable(
@@ -121,7 +111,7 @@ describe('compute_decidable', () => {
 			[
 			d(Consume([A]), Maybe([Consume([B, F])])),
 		])).eql(
-			path([_A, _B, _C]),
+			path([A, B, C]),
 		)
 
 		expect(compute_decidable(
@@ -129,7 +119,7 @@ describe('compute_decidable', () => {
 			[
 			d(Consume([A]), Maybe([Consume([E])]), Consume([B])),
 		])).eql(
-			path([_A, _B, _C]),
+			path([A, B, C]),
 		)
 
 		expect(compute_decidable(
@@ -137,7 +127,7 @@ describe('compute_decidable', () => {
 			[
 			d(Consume([A, B, E])),
 		])).eql(
-			path([_A, _B]),
+			path([A, B]),
 		)
 
 		expect(compute_decidable(
@@ -145,7 +135,7 @@ describe('compute_decidable', () => {
 			[
 			d(Consume([A, B, C, D])),
 		])).eql(
-			path([_A, _B], branch(path([_F]), path([_C, _E]))),
+			path([A, B], branch(path([F]), path([C, E]))),
 		)
 
 		expect(compute_decidable(
@@ -154,7 +144,7 @@ describe('compute_decidable', () => {
 			d(Consume([A, B, E, G])),
 			d(Consume([A, B, C, D, E, H])),
 		])).eql(
-			path([_A, _B], branch(path([_C, _D]), path([_E, _F])))
+			path([A, B], branch(path([C, D]), path([E, F])))
 		)
 	})
 
@@ -164,7 +154,7 @@ describe('compute_decidable', () => {
 			[
 			d(Consume([A, B, D])),
 		])).eql(
-			path([_A, _B, _C]),
+			path([A, B, C]),
 		)
 
 		expect(compute_decidable(
@@ -172,7 +162,7 @@ describe('compute_decidable', () => {
 			[
 			d(Many([Consume([A, B, C])])),
 		])).eql(
-			path([_A, _B, _D]),
+			path([A, B, D]),
 		)
 
 		expect(compute_decidable(
@@ -180,7 +170,7 @@ describe('compute_decidable', () => {
 			[
 			d(Many([Consume([A, B])]), Consume([C])),
 		])).eql(
-			path([_A, _B, _A, _B, _A, _B, _C]),
+			path([A, B, A, B, A, B, C]),
 		)
 
 		expect(compute_decidable(
@@ -188,7 +178,7 @@ describe('compute_decidable', () => {
 			[
 			d(Many([Consume([A, B])]), Consume([C])),
 		])).eql(
-			path([_A, _B, _A, _B, _C]),
+			path([A, B, A, B, C]),
 		)
 	})
 
@@ -198,7 +188,7 @@ describe('compute_decidable', () => {
 			[
 			d(Many([Consume([B])])),
 		])).eql(
-			path([_A]),
+			path([A]),
 		)
 
 		expect(compute_decidable(
@@ -206,7 +196,7 @@ describe('compute_decidable', () => {
 			[
 			d(Many([Consume([A, C])])),
 		])).eql(
-			path([_A, _B]),
+			path([A, B]),
 		)
 
 		expect(compute_decidable(
@@ -214,7 +204,7 @@ describe('compute_decidable', () => {
 			[
 			d(Consume([A, B]), Many([Consume([D, A, B, C])])),
 		])).eql(
-			path([_A, _B, _C]),
+			path([A, B, C]),
 		)
 
 		expect(compute_decidable(
@@ -222,7 +212,7 @@ describe('compute_decidable', () => {
 			[
 			d(Consume([A, B]), Many([Consume([D, A, B, C])])),
 		])).eql(
-			path([_A, _B, _D, _E]),
+			path([A, B, D, E]),
 		)
 	})
 
@@ -263,12 +253,12 @@ describe('compute_decidable', () => {
 			),
 		])).eql(
 			path(
-				[_A, _B],
+				[A, B],
 				branch(
-					path([_C, _D]),
-					path([_D]),
+					path([C, D]),
+					path([D]),
 				),
-				[_A],
+				[A],
 			)
 		)
 
@@ -293,12 +283,12 @@ describe('compute_decidable', () => {
 			),
 		])).eql(
 			path(
-				[_A, _B],
+				[A, B],
 				branch(
-					path([_C, _D, _E]),
-					path([_D]),
+					path([C, D, E]),
+					path([D]),
 				),
-				[_A],
+				[A],
 			),
 		)
 
@@ -309,8 +299,8 @@ describe('compute_decidable', () => {
 		])).eql(
 			path(
 				branch(
-					path([_D]),
-					path([_B, _C, _E]),
+					path([D]),
+					path([B, C, E]),
 				),
 			)
 		)
@@ -374,17 +364,6 @@ describe('check_left_recursive', () => {
 			Rule('two', [Subrule('one')]),
 		)
 
-		// this is an interesting situation,
-		// since it's one of these rules where something has only a single Maybe
-		// which is always a non-canonical way to put things
-		// expect_left(true,
-		// 	Rule('one', [Or([
-		// 		[Consume([A])],
-		// 		[Maybe([Consume([B])])],
-		// 	]), Subrule('two')]),
-		// 	Rule('two', [Subrule('one')]),
-		// )
-
 		expect_left(false,
 			Rule('one', [Many([Consume([A])]), Subrule('two')]),
 			Rule('two', [Subrule('one')]),
@@ -409,6 +388,17 @@ describe('check_left_recursive', () => {
 			Rule('one', [Or([
 				[Maybe([Consume([A]), Subrule('two')]), Consume([C])],
 				[Maybe([Consume([B])]), Consume([D])],
+			]), Subrule('two')]),
+			Rule('two', [Subrule('one')]),
+		)
+
+		// this is an interesting situation,
+		// since it's one of these rules where something has only a single Maybe
+		// which is always a non-canonical way to put things
+		expect_left(true,
+			Rule('one', [Or([
+				[Consume([A])],
+				[Maybe([Consume([B])])],
 			]), Subrule('two')]),
 			Rule('two', [Subrule('one')]),
 		)

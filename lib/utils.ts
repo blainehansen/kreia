@@ -5,8 +5,8 @@ import { OrderedDict } from '@ts-std/collections'
 export function debug(obj: any, depth = null as number | null) {
 	return util.inspect(obj, { depth, colors: true })
 }
-export function log(obj: any) {
-	console.log(debug(obj))
+export function log(obj: any, depth = null as number | null) {
+	console.log(debug(obj, depth))
 }
 
 export function exec<F extends (...args: any[]) => any>(fn: F, ...args: Parameters<F>): ReturnType<F> {

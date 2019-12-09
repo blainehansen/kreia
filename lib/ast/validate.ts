@@ -10,9 +10,6 @@ import {
 } from './ast'
 
 export function check_left_recursive(thing: Rule | Macro) {
-	if (thing.name !== 'separated_by_commas')
-		return false
-
 	const seen_rules = {} as Dict<true>
 	const seen_macros = {} as Dict<true>
 	const one_to_add = thing.type === 'Rule' ? seen_rules : seen_macros
@@ -51,7 +48,8 @@ function _check_left_recursive(
 		if (seen_rules[node.rule_name])
 			return true
 		const subrule = get_rule(node.rule_name).unwrap()
-		if (_check_left_recursive({ [node.rule_name]: true, ...seen_rules }, seen_macros, subrule.definition, scope))
+		const rule_scope = { current: Scope(subrule.locking_args, undefined), previous: [] }
+		if (_check_left_recursive({ ...seen_rules, [node.rule_name]: true }, seen_macros, subrule.definition, rule_scope))
 			return true
 		return false
 
@@ -60,7 +58,7 @@ function _check_left_recursive(
 			return true
 		const macro = get_macro(node.macro_name).unwrap()
 		const call_scope = push_scope(scope, macro.locking_args, node.args)
-		if (_check_left_recursive(seen_rules, { [node.macro_name]: true, ...seen_macros }, macro.definition, call_scope))
+		if (_check_left_recursive(seen_rules, { ...seen_macros, [node.macro_name]: true }, macro.definition, call_scope))
 			return true
 		return false
 

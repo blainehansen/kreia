@@ -20,17 +20,17 @@ function sep(body: Definition, separator: Definition) {
 }
 
 function comma_sep(body: Definition) {
-	return sep(body, [Subrule('_'), Consume(['Comma']), Subrule('_')])
+	return sep(body, [Subrule('_'), Consume(['comma']), Subrule('_')])
 }
 
 function diff_block(in_indent: Definition, not_in_indent: Definition) {
 	return Or([
+		not_in_indent,
 		[
 			Consume(['indent']),
-			sep(in_indent, [Consume('indent_continue')]),
+			sep(in_indent, [Consume(['indent_continue'])]),
 			Consume(['deindent']),
 		],
-		not_in_indent,
 	])
 }
 
@@ -81,65 +81,67 @@ const KreiaGrammar = [
 		Maybe([Consume(['space'])]),
 	]),
 
-	Rule('token_definition', [
-		Consume(['token_name', 'space', 'eq', 'space']),
-		Subrule('token_specification'),
-		// Maybe([Consume(['space']), Many([Subrule('token_option')])]),
-	]),
+	// Rule('token_definition', [
+	// 	Consume(['token_name', 'space', 'eq', 'space']),
+	// 	Subrule('token_specification'),
+	// 	// Maybe([Consume(['space']), Many([Subrule('token_option')])]),
+	// ]),
 
-	Rule('base_token_specification', [
-		Or([
-			[Consume(['slash']), /* TODO */, Consume(['slash'])],
-			[Consume(['str'])],
-		]),
-	]),
+	// Rule('base_token_specification', [
+	// 	Or([
+	// 		[Consume(['slash']), Subrule('regex'), Consume(['slash'])],
+	// 		[Consume(['str'])],
+	// 	]),
+	// ]),
 
-	Rule('token_specification', [
-		Or([
-			[Subrule('base_token_specification')],
-			[
-				Consume(['open_bracket']),
-				comma_sep([Subrule('base_token_specification')]),
-				Consume(['close_bracket']),
-			],
-		]),
-	]),
+	// // Rule('regex'),
 
-	Rule('virtual_lexer_usage', [
-		Consume(['open_brace']),
-		comma_sep([Consume(['token_name'])]),
-		Consume(['close_brace', 'space', 'eq', 'space', 'use_keyword', 'space', 'str']),
-		// Maybe([Consume(['space', 'with_keyword', 'space']), comma_sep([Subrule('token_specification')])]),
-	]),
+	// Rule('token_specification', [
+	// 	Or([
+	// 		[Subrule('base_token_specification')],
+	// 		[
+	// 			Consume(['open_bracket']),
+	// 			comma_sep([Subrule('base_token_specification')]),
+	// 			Consume(['close_bracket']),
+	// 		],
+	// 	]),
+	// ]),
+
+	// Rule('virtual_lexer_usage', [
+	// 	Consume(['open_brace']),
+	// 	comma_sep([Consume(['token_name'])]),
+	// 	Consume(['close_brace', 'space', 'eq', 'space', 'use_keyword', 'space', 'str']),
+	// 	// Maybe([Consume(['space', 'with_keyword', 'space']), comma_sep([Subrule('token_specification')])]),
+	// ]),
 
 
-	Rule('macro_definition', [
-		Consume(['macro_name']),
-		Maybe([Subrule('locking_definitions')]),
+	// Rule('macro_definition', [
+	// 	Consume(['macro_name']),
+	// 	Maybe([Subrule('locking_definitions')]),
 
-		Consume(['open_bracket'])
-		comma_sep([Consume(['var_name'])]),
-		Consume(['close_bracket', 'space', 'eq']),
-		Subrule('rule_block'),
-	]),
+	// 	Consume(['open_bracket'])
+	// 	comma_sep([Consume(['var_name'])]),
+	// 	Consume(['close_bracket', 'space', 'eq']),
+	// 	Subrule('rule_block'),
+	// ]),
 
-	Rule('rule_definition', [
-		Consume(['rule_name']),
-		Maybe([Subrule('locking_definitions')]),
+	// Rule('rule_definition', [
+	// 	Consume(['rule_name']),
+	// 	Maybe([Subrule('locking_definitions')]),
 
-		Consume(['space', 'eq']),
-		Subrule('rule_block'),
-	]),
+	// 	Consume(['space', 'eq']),
+	// 	Subrule('rule_block'),
+	// ]),
 
 	Rule('locking_definitions', [
 		Consume(['open_angle']),
-		comma_sep([Consume(['locked_token', 'space', 'eq', 'space', 'token_name'])]),
+		block([comma_sep([Consume(['locked_token', 'space', 'eq', 'space', 'token_name'])])]),
 		Consume(['close_angle']),
 	]),
 
-	Rule('rule_block', [
-		diff_block([Subrule(rule_line)], [Consume(['space']), Subrule(simple_rule_line)]),
-	]),
+	// Rule('rule_block', [
+	// 	diff_block([Subrule(rule_line)], [Consume(['space']), Subrule(simple_rule_line)]),
+	// ]),
 ]
 
 const rendered = render_grammar(KreiaGrammar)

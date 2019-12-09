@@ -5,7 +5,7 @@ import ts = require('typescript')
 import { Dict, tuple as t } from '@ts-std/types'
 import { UniqueDict, OrderedDict } from '@ts-std/collections'
 
-import { Data, exhaustive, debug, exec, array_of, empty_ordered_dict } from '../utils'
+import { Data, exhaustive, debug, log, exec, array_of, empty_ordered_dict } from '../utils'
 
 import { AstDecidable } from './decision'
 import { gather_branches, compute_decidable } from './decision_compute'
@@ -20,6 +20,9 @@ import {
 	set_registered_tokens, set_registered_virtual_lexers, set_registered_rules, set_registered_macros,
 	Arg, Maybe, Many, Var,
 } from './ast'
+
+import { Console } from 'console'
+const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
 
 type Call = ReturnType<typeof ts.createCall>
 
@@ -58,7 +61,13 @@ function generate_decidable(
 		return ts.createIdentifier(`_d${global_macro_render_context.count}`)
 	}
 
+	// console.log('main[0]', main[0])
+	// console.log('against.map(i => i[0])', against.map(i => i[0]))
 	const decidable = compute_decidable(main, against)
+	// console.log('decidable', decidable)
+	// console.log()
+	// console.log()
+	// console.log()
 	const lookahead_definition = render_decidable(decidable)
 	const lookahead_number = global_decidables.length
 	global_decidables.push(lookahead_definition)
@@ -137,7 +146,7 @@ const render_visiting_functions: VisitingFunctions<Call> = {
 			const body_decidable =
 				render_entity_decidable(macro.definition, pushed_scope, next, scope, wrapping_function_name)
 			const separator_decidable =
-				render_entity_decidable([...separator_rule, ...body_rule], pushed_scope, next, scope, wrapping_function_name)
+				render_entity_decidable([...separator_rule, ...body_rule], scope, next, scope, wrapping_function_name)
 
 			return ts.createCall(
 				ts.createIdentifier(wrapping_function_name === 'maybe' ? 'maybe_many_separated' : 'many_separated'), undefined,
@@ -220,7 +229,7 @@ function render_entity<B extends boolean>(
 		target.length === 1
 		&& (
 			target[0].type === 'Subrule'
-			|| target[0].type === 'MacroCall'
+			// || target[0].type === 'MacroCall'
 			|| target[0].type === 'Var'
 		)
 	) {
@@ -229,8 +238,8 @@ function render_entity<B extends boolean>(
 			switch (entity.type) {
 			case 'Subrule':
 				return render_visiting_functions.Subrule(entity, next, scope, 'maybe').arguments
-			case 'MacroCall':
-				return render_visiting_functions.MacroCall(entity, next, scope, 'maybe').arguments
+			// case 'MacroCall':
+			// 	return render_visiting_functions.MacroCall(entity, next, scope, 'maybe').arguments
 			case 'Var':
 				return render_visiting_functions.Var(entity, next, scope, 'maybe').arguments
 			default:
@@ -353,6 +362,7 @@ export function render_grammar(grammar: Grammar, filename = '') {
 	set_registered_rules(rules.into_dict())
 	set_registered_macros(macros.into_dict())
 
+	// log(rules.values().map(r => r.definition))
 	const rules_macros: (Rule | Macro)[] = [...rules.values(), ...macros.values()]
 	const validation_errors = rules_macros
 		.flat_map(validate_references)
@@ -387,7 +397,7 @@ export function render_grammar(grammar: Grammar, filename = '') {
 	]
 
 	const parser_statement = ts.createVariableStatement(
-		undefined,
+		[ts.createModifier(ts.SyntaxKind.ExportKeyword)],
 		ts.createVariableDeclarationList([
 			ts.createVariableDeclaration(ts.createObjectBindingPattern(
 				destructured_parser_names.map(name => ts.createBindingElement(undefined, undefined, ts.createIdentifier(name), undefined))
@@ -408,7 +418,8 @@ export function render_grammar(grammar: Grammar, filename = '') {
 					ts.createImportSpecifier(undefined, ts.createIdentifier(i)),
 				)
 			),
-		), ts.createStringLiteral('kreia'),
+		), ts.createStringLiteral('./index'),
+		// ), ts.createStringLiteral('kreia'),
 	)
 
 	const virtual_lexer_imports = virtual_lexers.values().map(virtual_lexer => {
@@ -554,7 +565,7 @@ export function render_rule(rule: Rule) {
 	const rendered_definition = render_definition(rule.definition, starting_scope)
 
 	return ts.createFunctionDeclaration(
-		undefined, undefined, undefined,
+		undefined, [ts.createModifier(ts.SyntaxKind.ExportKeyword)], undefined,
 		ts.createIdentifier(rule.name),
 		[], [], undefined,
 		ts.createBlock([...lockers, ...rendered_definition], true),
