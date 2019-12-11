@@ -107,7 +107,7 @@ type NodesManifest = {
 
 export type Node = NodesManifest[keyof NodesManifest]
 
-export interface Definition extends Array<Node> {}
+export interface Definition extends ReadonlyArray<Node> {}
 
 export type GrammarItem =
 	| TokenDef

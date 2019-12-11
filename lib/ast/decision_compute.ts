@@ -8,7 +8,7 @@ const console = new Console({ stdout: process.stdout, stderr: process.stderr, in
 import { PathBuilder } from './decision'
 import {
 	get_token, get_rule, get_macro,
-	Arg, Var, Rule, Macro, Subrule, Maybe, Many, Or, MacroCall, Consume, Node, Definition,
+	Node, Definition,
 	Scope, ScopeStack, DefinitionTuple, push_scope, pop_scope, in_scope,
 } from './ast'
 

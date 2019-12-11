@@ -1,5 +1,5 @@
 import * as util from 'util'
-import { Result, Ok, Err } from '@ts-std/monads'
+import { Result, Ok, Err, Maybe, Some, None } from '@ts-std/monads'
 import { OrderedDict } from '@ts-std/collections'
 
 export function debug(obj: any, depth = null as number | null) {
@@ -7,6 +7,10 @@ export function debug(obj: any, depth = null as number | null) {
 }
 export function log(obj: any, depth = null as number | null) {
 	console.log(debug(obj, depth))
+}
+
+export interface Cls<T, A extends any[]> {
+	new (...args: A): T
 }
 
 export function exec<F extends (...args: any[]) => any>(fn: F, ...args: Parameters<F>): ReturnType<F> {
@@ -18,6 +22,22 @@ export function array_of(length: number): undefined[] {
 }
 
 export const empty_ordered_dict = OrderedDict.create<any>(t => '', [])
+
+
+export type NonEmpty<T> = [T, ...T[]]
+export namespace NonEmpty {
+	export function from_array<T>(array: T[]): Maybe<NonEmpty<T>> {
+		return array.length !== 0 ? Some(array as NonEmpty<T>) : None
+	}
+}
+
+export type NonLone<T> = [T, T, ...T[]]
+export namespace NonLone {
+	export function from_array<T>(array: T[]): Maybe<NonLone<T>> {
+		return array.length >= 2 ? Some(array as NonLone<T>) : None
+	}
+}
+
 
 // export interface NiceGenerator<T> {
 // 	next(): T | undefined

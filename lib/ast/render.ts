@@ -37,16 +37,16 @@ type Call = ReturnType<typeof ts.createCall>
 
 // when counting decision points to render a macro definition, you don't have to iterate vars and macro calls, because in fact you can't. in fact you shouldn't recurse beyond the current definition at all. when gathering the finalized decision points at render time, the same is true that you don't recurse beyond the macro definition as you gather them, but you will have to recurse beyond in order to compute the decision points. you do have to render the provided vars themselves though
 
-type MacroRenderContext =
+type RenderContext =
 	| { type: 'definition', count: number }
 	| { type: 'call', decidables: ts.Identifier[] }
 
-let global_macro_render_context = undefined as undefined | MacroRenderContext
-function with_macro_render_context<T>(macro_render_context: MacroRenderContext, fn: () => T): T {
-	const saved = global_macro_render_context
-	global_macro_render_context = macro_render_context
+let global_render_context = undefined as undefined | RenderContext
+function with_render_context<T>(render_context: RenderContext, fn: () => T): T {
+	const saved = global_render_context
+	global_render_context = render_context
 	const result = fn()
-	global_macro_render_context = saved
+	global_render_context = saved
 	return result
 }
 
@@ -56,9 +56,9 @@ function generate_decidable(
 	wrapping_function_name: VisitorParams[2],
 	main: DefinitionTuple, against: DefinitionTuple[]
 ): ts.Identifier {
-	if (global_macro_render_context !== undefined && global_macro_render_context.type === 'definition') {
-		global_macro_render_context.count++
-		return ts.createIdentifier(`_d${global_macro_render_context.count}`)
+	if (global_render_context !== undefined && global_render_context.type === 'definition') {
+		global_render_context.count++
+		return ts.createIdentifier(`_d${global_render_context.count}`)
 	}
 
 	// console.log('main[0]', main[0])
@@ -73,8 +73,8 @@ function generate_decidable(
 	global_decidables.push(lookahead_definition)
 	const lookahead_ident = ts.createIdentifier(`_${lookahead_number}`)
 
-	if (global_macro_render_context !== undefined && global_macro_render_context.type === 'call')
-		global_macro_render_context.decidables.push(lookahead_ident)
+	if (global_render_context !== undefined && global_render_context.type === 'call')
+		global_render_context.decidables.push(lookahead_ident)
 
 	return lookahead_ident
 }
@@ -157,8 +157,8 @@ const render_visiting_functions: VisitingFunctions<Call> = {
 		// 	)
 		// }
 
-		const gathered_decidables: MacroRenderContext = { type: 'call', decidables: [] }
-		with_macro_render_context(gathered_decidables, () => {
+		const gathered_decidables: RenderContext = { type: 'call', decidables: [] }
+		with_render_context(gathered_decidables, () => {
 			// console.log('calling from macro')
 			render_definition(macro.definition, pushed_scope, next.slice())
 		})
@@ -286,9 +286,9 @@ export function render_macro(macro: Macro) {
 	const lockers = (macro.locking_args !== undefined ? macro.locking_args.to_array() : []).map(render_locking_arg)
 	const args = macro.args.to_array()
 
-	const macro_render_context: MacroRenderContext = { type: 'definition', count: 0 }
+	const render_context: RenderContext = { type: 'definition', count: 0 }
 	const starting_scope = { current: Scope(macro.locking_args, undefined), previous: [] }
-	const rendered_definition = with_macro_render_context(macro_render_context, () => {
+	const rendered_definition = with_render_context(render_context, () => {
 		return render_definition(macro.definition, starting_scope, [] as Definition)
 	})
 
@@ -307,7 +307,7 @@ export function render_macro(macro: Macro) {
 				ts.createIdentifier(arg.name), undefined,
 				ts.createTypeReferenceNode(ts.createIdentifier(arg.name.toUpperCase()), undefined), undefined,
 			)),
-			...array_of(macro_render_context.count).map((_, index) => ts.createParameter(
+			...array_of(render_context.count).map((_, index) => ts.createParameter(
 				undefined, undefined, undefined,
 				ts.createIdentifier(`_d${index + 1}`), undefined,
 				ts.createTypeReferenceNode(ts.createIdentifier('Decidable'), undefined), undefined,
@@ -563,8 +563,8 @@ function render_virtual_lexer_usage(virtual_lexer: VirtualLexerUsage) {
 export function render_rule(rule: Rule) {
 	const lockers = (rule.locking_args !== undefined ? rule.locking_args.to_array() : []).map(render_locking_arg)
 
-	if (global_macro_render_context !== undefined)
-		throw new Error('global_macro_render_context should be undefined')
+	if (global_render_context !== undefined)
+		throw new Error('global_render_context should be undefined')
 	const starting_scope = { current: Scope(rule.locking_args, undefined), previous: [] }
 	const rendered_definition = render_definition(rule.definition, starting_scope, [] as Definition)
 
