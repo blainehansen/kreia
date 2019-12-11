@@ -32,69 +32,69 @@ function wrapping_name(modifier: Modifer) {
 	}
 }
 
-function count_decidables(definition: Definition): number {
-	let count = 0
-	for (const node of definition.nodes) {
-		if (node.needs_decidable)
-			count++
-		if (node.type === 'Wrap')
-			count += count_decidables(node.nodes)
-		if (node.type === 'Or')
-			for (const choice of node.choices) {
-				// one for the the choice itself, and one
-				count++
-				count += count_decidables(node.nodes)
-			}
-		// if (node.type === 'Subrule' && node.needs_tail_decidable)
-		// 	count++
-		if (node.type === 'MacroCall') {
-			const macro = get_macro(node.macro_name).unwrap()
-			count += count_decidables(macro.definition)
-		}
-	}
+// function count_decidables(definition: Definition): number {
+// 	let count = 0
+// 	for (const node of definition.nodes) {
+// 		if (node.needs_decidable)
+// 			count++
+// 		if (node.type === 'Wrap')
+// 			count += count_decidables(node.nodes)
+// 		if (node.type === 'Or')
+// 			for (const choice of node.choices) {
+// 				// one for the the choice itself, and one
+// 				count++
+// 				count += count_decidables(node.nodes)
+// 			}
+// 		// if (node.type === 'Subrule' && node.needs_tail_decidable)
+// 		// 	count++
+// 		if (node.type === 'MacroCall') {
+// 			const macro = get_macro(node.macro_name).unwrap()
+// 			count += count_decidables(macro.definition)
+// 		}
+// 	}
 
-	return count
-}
+// 	return count
+// }
 
-function gather_decidables(definition: Definition, scope: ScopeStack, parent_next: DefinitionTuple[]): ts.Identifier[] {
-	const decidables = []
-	for (const [node_index, node] of definition.nodes.entries()) {
-		const next = [Scope.in_scope(definition.nodes.slice(node_index + 1)), ...parent_next]
+// function gather_decidables(definition: Definition, scope: ScopeStack, parent_next: DefinitionTuple[]): ts.Identifier[] {
+// 	const decidables = []
+// 	for (const [node_index, node] of definition.nodes.entries()) {
+// 		const next = [Scope.in_scope(definition.nodes.slice(node_index + 1)), ...parent_next]
 
-		if (node.needs_decidable) {
-			const decidable = generate_decidable(node, scope, next)
-			decidables.push(decidable)
-		}
+// 		if (node.needs_decidable) {
+// 			const decidable = generate_decidable(node, scope, next)
+// 			decidables.push(decidable)
+// 		}
 
-		if (node.type === 'Wrap') {
-			const child_decidables = gather_decidables(node.nodes, scope, next)
-			decidables.push_all(child_decidables)
-		}
+// 		if (node.type === 'Wrap') {
+// 			const child_decidables = gather_decidables(node.nodes, scope, next)
+// 			decidables.push_all(child_decidables)
+// 		}
 
-		if (node.type === 'Or')
-			for (const [choice_index, choice] of node.choices.entries()) {
-				const against = Scope.in_scope(node.choices.slice(choice_index + 1), scope)
-				decidables.push()
-				const child_decidables = gather_decidables(choice, scope, next, existing_against)
-				decidables.push_all(child_decidables)
-			}
+// 		if (node.type === 'Or')
+// 			for (const [choice_index, choice] of node.choices.entries()) {
+// 				const against = Scope.in_scope(node.choices.slice(choice_index + 1), scope)
+// 				decidables.push()
+// 				const child_decidables = gather_decidables(choice, scope, next, existing_against)
+// 				decidables.push_all(child_decidables)
+// 			}
 
-		// if (node.type === 'Subrule' && node.needs_tail_decidable) {
-		// 	const rule = get_rule(node.rule_name).unwrap()
-		// 	// const tail_decidable = generate_tail_decidable(rule, scope, next)
-		// 	const tail_decision_points = gather_branches(rule.definition.slice().reverse()).reverse()
-		// 	generate_decidable()
-		// }
+// 		// if (node.type === 'Subrule' && node.needs_tail_decidable) {
+// 		// 	const rule = get_rule(node.rule_name).unwrap()
+// 		// 	// const tail_decidable = generate_tail_decidable(rule, scope, next)
+// 		// 	const tail_decision_points = gather_branches(rule.definition.slice().reverse()).reverse()
+// 		// 	generate_decidable()
+// 		// }
 
-		if (node.type === 'MacroCall') {
-			const macro = get_macro(node.macro_name).unwrap()
-			const macro_scope = Scope.for_macro(scope, macro, node)
-			const child_decidables = gather_decidables(macro.definition, scope, next)
-		}
-	}
+// 		if (node.type === 'MacroCall') {
+// 			const macro = get_macro(node.macro_name).unwrap()
+// 			const macro_scope = Scope.for_macro(scope, macro, node)
+// 			const child_decidables = gather_decidables(macro.definition, scope, next)
+// 		}
+// 	}
 
-	return decidables
-}
+// 	return decidables
+// }
 
 // type RenderContext =
 // 	| { type: 'definition', count: number }
@@ -150,7 +150,6 @@ function render_definition(nodes: NonEmpty<Node>, scope: ScopeStack, parent_next
 
 
 export function gather_branches(current_next: Node[], parent_next: Node[]) {
-	// const next = [...current_next, ...parent_next]
 	const parent_copy = parent_next.slice()
 	let node
 	const branches = []
