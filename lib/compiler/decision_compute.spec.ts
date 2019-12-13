@@ -1,14 +1,13 @@
 import 'mocha'
 import { expect } from 'chai'
-
-import { tuple as t } from '@ts-std'
+import { tuple as t } from '@ts-std/types'
 
 import * as a from './ast'
-import { generate_decidable, AstDecisionPath as path, AstDecisionBranch as branch } from './decision_compute'
+import { compute_decidable, AstDecisionPath as path, AstDecisionBranch as branch } from './decision_compute'
 
 const empty_scope = a.Scope(undefined, undefined)
 
-describe('tail ambiguity' () => it('works', () => {
+describe('tail ambiguity', () => it('works', () => {
 	// @many_separated[$body, $separator] = $body ($separator $body)*
 
 	// @many_separated[
@@ -37,14 +36,14 @@ describe('tail ambiguity' () => it('works', () => {
 	// 	maybe_many_consume('space', 'num')
 	// )
 
-	expect(generate_decidable(
+	expect(compute_decidable(
 		a.maybe_many_consume('space', 'num'), empty_scope,
 		[],
 		[t(
 			a.maybe_many(
-				a.consume('space', 'bar', 'space')
-				a.consume('num')
-				a.maybe_many_consume('space', 'num')
+				a.consume('space', 'bar', 'space'),
+				a.consume('num'),
+				a.maybe_many_consume('space', 'num'),
 			),
 			empty_scope,
 		)],

@@ -1,6 +1,7 @@
 import { Data } from '../utils'
 import { compute_path_test_length } from '../runtime/decision'
 
+import { Node } from './ast'
 
 export const AstDecisionPath = Data((...path: (string[] | AstDecisionBranch)[]): AstDecisionPath => {
 	return { type: 'AstDecisionPath' as const, path, test_length: compute_path_test_length(path) }
