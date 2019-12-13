@@ -1,7 +1,7 @@
 import '@ts-std/extensions/dist/array'
 import { Dict, tuple as t, UnionToIntersection } from '@ts-std/types'
 
-import { debug } from './utils'
+import { debug } from '../utils'
 
 export type UserRawTokenDefinition = {
 	name: string,

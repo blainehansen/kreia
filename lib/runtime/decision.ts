@@ -1,8 +1,17 @@
 import '@ts-std/extensions/dist/array'
-import { Dict } from '@ts-std/types'
-import { Data } from '../utils'
 
-import { Lexer, LexerState, VirtualLexers, TokenDefinition, Token, match_and_trim } from '../lexer'
+import { Lexer, LexerState, VirtualLexers, TokenDefinition, Token, match_and_trim } from './lexer'
+
+export interface HasTestLength {
+	readonly test_length: number
+}
+export function compute_path_test_length<T>(path: (T[] | HasTestLength)[]) {
+	return path.map(
+		item => Array.isArray(item)
+			? item.length
+			: item.test_length
+	).sum()
+}
 
 export abstract class Decidable {
 	abstract readonly test_length: number
@@ -39,30 +48,6 @@ export class PathBuilder {
 
 		return AstDecisionPath(...this.items)
 	}
-}
-
-export const AstDecisionPath = Data((...path: (string[] | AstDecisionBranch)[]): AstDecisionPath => {
-	return { type: 'AstDecisionPath' as const, path, test_length: compute_path_test_length(path) }
-})
-export type AstDecisionPath = Readonly<{ type: 'AstDecisionPath', path: (string[] | AstDecisionBranch)[], test_length: number }>
-
-export const AstDecisionBranch = Data((...paths: AstDecisionPath[]): AstDecisionBranch => {
-	const is_optional = paths.length === 1
-	const test_length = Math.max(...paths.map(p => p.test_length))
-	return { type: 'AstDecisionBranch' as const, is_optional, paths: paths.slice(), test_length }
-})
-export type AstDecisionBranch = Readonly<{ type: 'AstDecisionBranch', is_optional: boolean, paths: AstDecisionPath[], test_length: number }>
-export type AstDecidable = AstDecisionPath | AstDecisionBranch
-
-interface HasTestLength {
-	readonly test_length: number
-}
-function compute_path_test_length<T>(path: (T[] | HasTestLength)[]) {
-	return path.map(
-		item => Array.isArray(item)
-			? item.length
-			: item.test_length
-	).sum()
 }
 
 

@@ -130,10 +130,16 @@ export class MacroCall extends BaseNode {
 		this.args = Definition.screen_definitions(args)
 	}
 }
-export function macro_call(macro_name: string, args: NonLone<Definition>) { return new Subrule(undefined, macro_name, args) }
-export function many_macro_call(macro_name: string, args: NonLone<Definition>) { return new Subrule(Modifier.Many, macro_name, args) }
-export function maybe_macro_call(macro_name: string, args: NonLone<Definition>) { return new Subrule(Modifier.Maybe, macro_name, args) }
-export function maybe_many_macro_call(macro_name: string, args: NonLone<Definition>) { return new Subrule(Modifier.MaybeMany, macro_name, args) }
+export function macro_call(macro_name: string, args: NonLone<Definition>) { return new MacroCall(undefined, macro_name, args) }
+export function many_macro_call(macro_name: string, args: NonLone<Definition>) { return new MacroCall(Modifier.Many, macro_name, args) }
+export function maybe_macro_call(macro_name: string, args: NonLone<Definition>) { return new MacroCall(Modifier.Maybe, macro_name, args) }
+export function maybe_many_macro_call(macro_name: string, args: NonLone<Definition>) { return new MacroCall(Modifier.MaybeMany, macro_name, args) }
+export function many_separated(body: Definition, separator: Definition) {
+	return new MacroCall(undefined, 'many_separated', [body, separator] as NonLone<Definition>)
+}
+export function maybe_many_separated(body: Definition, separator: Definition) {
+	return new MacroCall(Modifier.Maybe, 'many_separated', [body, separator] as NonLone<Definition>)
+}
 
 export class Var extends BaseNode {
 	readonly type: 'Var' = 'Var'
