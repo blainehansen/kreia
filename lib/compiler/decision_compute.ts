@@ -1,4 +1,4 @@
-import { Data } from '../utils'
+import { Data, exec } from '../utils'
 import { compute_path_test_length } from '../runtime/decision'
 
 import { Node } from './ast'
@@ -52,13 +52,13 @@ export class PathBuilder {
 
 
 
-export function gather_branches(next: [Node, ScopeStack][]) {
+export function gather_branches(next: [Node, ScopeStack][]): [Definition, ScopeStack][] {
 	let tuple
 	const branches = []
 	while (tuple = next.shift()) {
-		const [node, ] = tuple
+		const [node, scope] = tuple
 		if (node.needs_decidable)
-			branches.push(tuple)
+			branches.push([[node], scope])
 		else
 			break
 	}
@@ -80,70 +80,76 @@ type AstIterItem = string | DefinitionTuple[] | Continue
 type AstIter = IterWrapper<AstIterItem>
 
 function* iterate_definition(
-	...[definition, scope]: DefinitionTuple
+	// tuples: [Definition, ScopeStack][],
+	definition: Definition, scope: ScopeStack,
 ): Generator<AstIterItem, void, undefined> {
-	const nodes_to_visit = definition.slice()
-	let node
-	while (node = nodes_to_visit.shift()) switch (node.type) {
-	case 'Or':
-		const [gathered, ] = gather_branches(nodes_to_visit, scope)[0]
-		yield [...in_scope(node.choices, scope), ...gathered]
-		continue
+	const tuples_to_visit = Scope.zip_nodes(definition, scope)
+	let tuple
+	while (tuple = tuples_to_visit.shift()) {
+		const [node, scope] = tuple
 
-	case 'Consume':
-		yield* node.token_names.map(token_name => get_token(token_name).unwrap())
-		continue
+		type SubIterator =
+			| { t: 'star', star: Iterable<AstIterItem> }
+			| { t: 'branches', branches: DefinitionTuple[] }
 
-	case 'Subrule': {
-		const rule = get_rule(node.rule_name).unwrap()
-		const rule_scope = { current: Scope(rule.locking_args, undefined), previous: [] }
-		const [gathered, all_maybe] = gather_branches(rule.definition.slice(), rule_scope)
-		if (all_maybe) {
-			const branches = gather_branches(nodes_to_visit, scope)[0]
-			yield [...gathered, ...branches]
+		const [sub, always_optional] = exec((): [SubIterator, boolean] => {
+			switch (node.type) {
+			case 'Consume':
+				return t({ t: 'star', star: node.token_names }, false)
+				// yield* node.token_names
+
+			case 'Or':
+				return t(Scope.zip_definitions(node.choices, scope), false, false)
+
+			case 'Subrule':
+				const rule = get_rule(node.rule_name).unwrap()
+				const rule_scope = Scope.for_rule(rule)
+				return t(t(rule.definition, rule_scope), true, rule.always_optional)
+
+			case 'MacroCall':
+				const macro = get_macro(node.macro_name).unwrap()
+				const macro_scope = Scope.for_macro(scope, macro, node)
+				return t(t(macro.definition, macro_scope), true, macro.always_optional)
+
+			case 'Var':
+				const var_tuple = Scope.for_var(scope, node)
+				// TODO this isn't accurate, it has to recurse to really know this
+				return t(var_tuple, true, Definition.all_optional(arg_definition[0]))
+
+			case 'LockingVar':
+				const locked_token_name = Scope.for_locking_var(scope, node)
+				return t([locked_token_name], true, false)
+
+			default: return exhaustive(node)
+			}
+		})
+
+		switch (node.modifier) {
+		case '?':
+			yield [tuple, gather_branches(tuples_to_visit)]
+			break
+		case '+':
+			yield Continue(...tuple)
+			break
+		case '*':
+			yield [tuple, gather_branches(tuples_to_visit), Continue(...tuple)]
+			break
+		default:
+			switch (sub.t) {
+			case 'star':
+				if (always_optional) {
+					const branches = gather_branches(tuples_to_visit)
+					yield [Consume(undefined, )]
+				}
+				else yield* sub.star
+			case 'branches':
+				if (always_optional) {
+					const branches = gather_branches(tuples_to_visit)
+					yield [...sub, ...branches]
+				}
+				else yield sub
+			}
 		}
-		else
-			yield* iterate_definition(rule.definition, rule_scope)
-
-		continue
-	}
-
-	case 'MacroCall': {
-		const macro = get_macro(node.macro_name).unwrap()
-		const macro_scope = push_scope(scope, macro.locking_args, node.args)
-		const [gathered, all_maybe] = gather_branches(macro.definition.slice(), macro_scope)
-		if (all_maybe) {
-			const branches = gather_branches(nodes_to_visit, scope)[0]
-			yield [...gathered, ...branches]
-		}
-		else
-			yield* iterate_definition(macro.definition, macro_scope)
-
-		continue
-	}
-
-	case 'Var': {
-		// Vars use the parent_scope
-		const arg_definition = scope.current.args.get_by_name(node.arg_name).unwrap()
-		const var_scope = pop_scope(scope)
-		// const [gathered, all_maybe] = gather_branches(arg_definition.slice(), var_scope)
-		const [gathered, all_maybe] = gather_branches([...arg_definition, ...nodes_to_visit], var_scope)
-		if (all_maybe) {
-			const branches = gather_branches(nodes_to_visit, scope)[0]
-			yield [...gathered, ...branches]
-		}
-		else
-			yield* iterate_definition(arg_definition, var_scope)
-
-		continue
-	}
-
-	case 'LockingVar':
-		const locking_arg = scope.current.locking_args.get_by_name(node.locking_arg_name).unwrap()
-		yield get_token(locking_arg.token_name).unwrap()
-		continue
-
-	default: return exhaustive(node)
 	}
 }
 
@@ -155,13 +161,12 @@ function EternalAstIter(definition_tuple: DefinitionTuple): AstIter {
 }
 
 export function compute_decidable(
-	// main: Definition, main_scope: ScopeStack,
-	main: Node, main_scope: ScopeStack,
+	main: [Definition, ScopeStack],
 	known_against: [Definition, ScopeStack][],
 	input_next: [Node, ScopeStack][],
 ) {
 	const next = input_next.slice()
-	const against = [...known_against, gather_branches(next)]
+	const against = [...known_against, ...gather_branches(next)]
 
 	const [path, _] = _compute_decidable(
 		AstIter(main),

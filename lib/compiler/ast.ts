@@ -24,9 +24,13 @@ export namespace Modifier {
 
 abstract class BaseNode {
 	readonly is_optional: boolean
+	readonly is_hard_many: boolean
+	readonly is_maybe_many: boolean
 	readonly needs_decidable: boolean
 	constructor(readonly modifier: Modifier) {
 		this.is_optional = Modifier.is_optional(modifier)
+		this.is_hard_many = modifier === BaseModifier.Many
+		this.is_maybe_many = modifier === BaseModifier.MaybeMany
 		this.needs_decidable = modifier !== undefined
 	}
 }
@@ -74,7 +78,7 @@ export namespace Definition {
 		return nodes.every(node => node.is_optional)
 	}
 
-	export function screen_definitions(definitions: NonLone<Definition>): Result<NonLone<Definition>, Definition[]> {
+	export function screen_all_optional(definitions: NonLone<Definition>): Result<NonLone<Definition>, Definition[]> {
 		const empty_definitions = definitions.filter(all_optional)
 		return empty_definitions.length === 0
 			? Ok(definitions)
@@ -113,7 +117,7 @@ export class Or extends BaseNode {
 		choices: NonLone<Definition>,
 	) {
 		super(modifier)
-		this.choices = Definition.screen_definitions(choices).match({
+		this.choices = Definition.screen_all_optional(choices).match({
 			ok: choices => choices,
 			err: empty_definitions => {
 				throw new LogError([
@@ -134,7 +138,6 @@ export function maybe_many_or(...choices: NonLone<Definition>) { return new Or(B
 
 export class Subrule extends BaseNode {
 	readonly type: 'Subrule' = 'Subrule'
-	readonly always_optional: boolean
 	constructor(
 		readonly modifier: Modifier,
 		readonly rule_name: string,
@@ -154,7 +157,7 @@ export class MacroCall extends BaseNode {
 		args: NonLone<Definition>,
 	) {
 		super(modifier)
-		this.args = Definition.screen_definitions(args)
+		this.args = Definition.screen_all_optional(args)
 	}
 }
 export function macro_call(macro_name: string, ...args: NonLone<Definition>) { return new MacroCall(undefined, macro_name, args) }
@@ -210,7 +213,7 @@ function index_locking_args(input_locking_args: LockingArg[] | undefined):  Dict
 }
 
 
-class TokenDef {
+export class TokenDef {
 	readonly type: 'TokenDef' = 'TokenDef'
 	constructor(readonly name: string, readonly def: TokenSpec) {}
 }
@@ -218,7 +221,7 @@ export function TokenDef(name: string, def: TokenSpec) {
 	return new TokenDef(name, def)
 }
 
-class Rule {
+export class Rule {
 	readonly type: 'Rule' = 'Rule'
 	readonly always_optional: boolean
 	readonly locking_args: Dict<LockingArg>
@@ -235,7 +238,7 @@ export function Rule(name: string, definition: Definition, locking_args?: Lockin
 	return new Rule(name, definition, locking_args)
 }
 
-class Macro {
+export class Macro {
 	readonly type: 'Macro' = 'Macro'
 	readonly always_optional: boolean
 	readonly locking_args: Dict<LockingArg>
@@ -253,7 +256,7 @@ export function Macro(name: string, args: NonEmpty<Arg>, definition: Definition,
 	return new Macro(name, args, definition, locking_args)
 }
 
-class VirtualLexerUsage {
+export class VirtualLexerUsage {
 	readonly type: 'VirtualLexerUsage' = 'VirtualLexerUsage'
 	constructor(
 		readonly virtual_lexer_name: string,
@@ -348,8 +351,14 @@ export namespace Scope {
 			},
 		)
 	}
-	export function in_scope(definitions: Definition[], scope: ScopeStack): DefinitionTuple[] {
+	export function for_locking_var({ current }: ScopeStack, locking_var: LockingVar): string {
+		return Maybe.from_nillable(current.locking_args[locking_var.locking_arg_name]).unwrap().token_name
+	}
+
+	export function zip_definitions(definitions: Definition[], scope: ScopeStack): [Definition, ScopeStack][] {
 		return definitions.map(d => t(d, scope))
 	}
+	export function zip_nodes(definition: Definition, scope: ScopeStack): [Node, ScopeStack][] {
+		return definition.map(node => t(node, scope))
+	}
 }
-export type DefinitionTuple = [Definition, ScopeStack]
