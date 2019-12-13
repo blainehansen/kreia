@@ -21,35 +21,6 @@ export abstract class Decidable {
 	): [Token[], LexerState<V>] | undefined
 }
 
-export class PathBuilder {
-	private items = [] as (string[] | AstDecisionBranch)[]
-
-	push_branch(paths: AstDecisionPath[]) {
-		this.items.push(AstDecisionBranch(
-			...paths.filter(path => path.test_length > 0)
-		))
-	}
-
-	push(def: string) {
-		const last_index = this.items.length - 1
-		const last = this.items[last_index]
-		if (this.items.length === 0 || !Array.isArray(last)) {
-			this.items.push([def])
-			return
-		}
-		last.push(def)
-	}
-
-	build() {
-		const last_index = this.items.length - 1
-		const last = this.items.maybe_get(-1)
-		if (last.is_some() && !Array.isArray(last.value) && last.value.is_optional)
-			this.items.splice(last_index, 1)
-
-		return AstDecisionPath(...this.items)
-	}
-}
-
 
 export function path(...path: (TokenDefinition[] | DecisionBranch)[]) {
 	return new DecisionPath(path)

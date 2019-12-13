@@ -1,7 +1,7 @@
 import { Dict, tuple as t } from '@ts-std/types'
-import { Maybe as Option, Some, None } from '@ts-std/monads'
+import { Maybe, Some, None } from '@ts-std/monads'
 
-import { Data } from '../utils'
+import { debug, LogError, NonEmpty, NonLone } from '../utils'
 
 export enum BaseModifier {
 	Many = '+',
@@ -23,13 +23,11 @@ export namespace Modifier {
 
 
 abstract class BaseNode {
-	abstract readonly modifer: Modifier
-
-	get is_optional() {
-		return Modifier.is_optional(this.modifer)
-	}
-	get needs_decidable() {
-		return this.modifer !== undefined
+	readonly is_optional: boolean
+	readonly needs_decidable: boolean
+	constructor(readonly modifer: Modifier) {
+		this.is_optional = Modifier.is_optional(modifer)
+		this.needs_decidable = modifer !== undefined
 	}
 }
 
@@ -40,82 +38,107 @@ export type Node =
 	| MacroCall
 	| Var
 	| LockingVar
-	| Wrap
+	| Paren
 
 export namespace Node {
 	export function flatten(nodes: NonEmpty<Node>): Node {
 		return NonLone.from_array(nodes).match({
-			some: non_lone => new Wrap(non_lone, undefined),
+			some: non_lone => new Paren(non_lone, undefined),
 			none: () => nodes[0]
 		})
 	}
-
-	export function zip_args(macro: Macro, call: MacroCall): Result<Dict<Definition>> {
-		const def_args = macro.args.slice()
-		const args = call.args.slice()
-		let a, b
-		const zipped = {} as Dict<Definition>
-		while (a = def_args.shift()) {
-			b = args.shift()
-			if (b === undefined)
-				return Err(`not enough args: have ${macro.args}, but have ${call.args}`)
-			zipped[a.name] = b
-		}
-
-		if (args.length !== 0)
-			return Err(`too many args: have ${macro.args}, have have ${call.args}`)
-
-		return Ok(zipped)
-	}
 }
 
-export class Definition {
-	readonly all_optional: boolean
-	constructor(readonly nodes: NonEmpty<Node>) {
-		this.all_optional = nodes.all(node => node.is_optional)
+function zip_args(macro: Macro, call: MacroCall): Result<Dict<Definition>> {
+	const args = macro.args.slice()
+	const definitions = call.args.slice()
+
+	const zipped = {} as Dict<Definition>
+	let arg
+	while (arg = args.shift()) {
+		const definition = definitions.shift()
+		if (definition === undefined)
+			return Err(`not enough args: macro has ${debug(macro.args)}, but was given ${debug(call.args)}`)
+		zipped[arg.name] = definition
 	}
 
-	static screen_definitions(definitions: NonLone<Definition>): Result<NonLone<Definition>, Definition[]> {
-		const empty_definitions = definitions.filter(definition => definition.all_optional)
+	if (definitions.length !== 0)
+		return Err(`too many args: macro has ${debug(macro.args)}, but was given ${debug(call.args)}`)
+
+	return Ok(zipped)
+}
+
+export type Definition = NonEmpty<Node>
+export namespace Definition {
+	export function all_optional(nodes: Definition) {
+		return nodes.all(node => node.is_optional)
+	}
+
+	export function screen_definitions(definitions: NonLone<Definition>) {
+		const empty_definitions = definitions.filter(all_optional)
 		return empty_definitions.length === 0
 			? Ok(definitions)
 			: Err(empty_definitions)
 	}
 }
 
-export class Wrap extends BaseNode {
-	readonly type: 'Wrap' = 'Wrap'
-	constructor(readonly modifer: BaseModifier, readonly nodes: NonLone<Node>) { super() }
+export class Paren extends BaseNode {
+	readonly type: 'Paren' = 'Paren'
+	constructor(
+		readonly modifer: BaseModifier,
+		readonly nodes: NonLone<Node>,
+	) { super(modifier) }
 }
-export function many(nodes: NonLone<Node>) { return new Wrap(Modifier.Many, nodes) }
-export function maybe(nodes: NonLone<Node>) { return new Wrap(Modifier.Maybe, nodes) }
-export function maybe_many(nodes: NonLone<Node>) { return new Wrap(Modifier.MaybeMany, nodes) }
+export function many(...nodes: NonLone<Node>) { return new Paren(Modifier.Many, nodes) }
+export function maybe(...nodes: NonLone<Node>) { return new Paren(Modifier.Maybe, nodes) }
+export function maybe_many(...nodes: NonLone<Node>) { return new Paren(Modifier.MaybeMany, nodes) }
 
 export class Consume extends BaseNode {
 	readonly type: 'Consume' = 'Consume'
-	constructor(readonly modifer: Modifier, readonly token_names: NonEmpty<string>) { super() }
+	constructor(
+		readonly modifer: Modifier,
+		readonly token_names: NonEmpty<string>,
+	) { super(modifier) }
 }
-export function consume(token_names: NonEmpty<string>) { return new Consume(undefined, token_names) }
-export function many_consume(token_names: NonEmpty<string>) { return new Consume(Modifier.Many, token_names) }
-export function maybe_consume(token_names: NonEmpty<string>) { return new Consume(Modifier.Maybe, token_names) }
-export function maybe_many_consume(token_names: NonEmpty<string>) { return new Consume(Modifier.MaybeMany, token_names) }
+export function consume(...token_names: NonEmpty<string>) { return new Consume(undefined, token_names) }
+export function many_consume(...token_names: NonEmpty<string>) { return new Consume(Modifier.Many, token_names) }
+export function maybe_consume(...token_names: NonEmpty<string>) { return new Consume(Modifier.Maybe, token_names) }
+export function maybe_many_consume(...token_names: NonEmpty<string>) { return new Consume(Modifier.MaybeMany, token_names) }
 
 export class Or extends BaseNode {
 	readonly type: 'Or' = 'Or'
-	readonly choices: Result<NonLone<Definition>, Definition[]>
-	constructor(readonly modifer: Modifier, choices: NonLone<Definition>) {
-		super()
-		this.choices = Definition.screen_definitions(choices)
+	readonly choices: NonLone<Definition>
+	constructor(
+		readonly modifer: Modifier,
+		choices: NonLone<Definition>,
+	) {
+		super(modifier)
+		this.choices = Definition.screen_definitions(choices).match({
+			ok: choices => choices,
+			err: empty_definitions => {
+				throw new LogError([
+					`these choices in an Or node had only optional nodes:\n`,
+					empty_definitions
+					'',
+					`it doesn't make a lot of sense to have a branch of an Or node be all optional, and this is probably a mistake`,
+					`consider moving this optional item out of the Or node, or making the Or node optional`,
+				], 4)
+			}
+		})
 	}
 }
-export function or(choices: NonLone<Definition>) { return new Or(undefined, choices) }
-export function many_or(choices: NonLone<Definition>) { return new Or(Modifier.Many, choices) }
-export function maybe_or(choices: NonLone<Definition>) { return new Or(Modifier.Maybe, choices) }
-export function maybe_many_or(choices: NonLone<Definition>) { return new Or(Modifier.MaybeMany, choices) }
+export function or(...choices: NonLone<Definition>) { return new Or(undefined, choices) }
+export function many_or(...choices: NonLone<Definition>) { return new Or(Modifier.Many, choices) }
+export function maybe_or(...choices: NonLone<Definition>) { return new Or(Modifier.Maybe, choices) }
+export function maybe_many_or(...choices: NonLone<Definition>) { return new Or(Modifier.MaybeMany, choices) }
 
 export class Subrule extends BaseNode {
 	readonly type: 'Subrule' = 'Subrule'
-	constructor(readonly modifer: Modifier, readonly rule_name: string) { super() }
+	readonly always_optional: boolean
+	constructor(
+		readonly modifer: Modifier,
+		readonly rule_name: string,
+	) { super(modifier) }
 }
 export function subrule(rule_name: string) { return new Subrule(undefined, rule_name) }
 export function many_subrule(rule_name: string) { return new Subrule(Modifier.Many, rule_name) }
@@ -124,26 +147,33 @@ export function maybe_many_subrule(rule_name: string) { return new Subrule(Modif
 
 export class MacroCall extends BaseNode {
 	readonly type: 'MacroCall' = 'MacroCall'
-	readonly args: Result<NonLone<Definition>, Definition[]>
-	constructor(readonly modifer: Modifier, readonly macro_name: string, args: NonLone<Definition>) {
-		super()
+	readonly args: NonLone<Definition>
+	constructor(
+		readonly modifer: Modifier,
+		readonly macro_name: string,
+		args: NonLone<Definition>,
+	) {
+		super(modifier)
 		this.args = Definition.screen_definitions(args)
 	}
 }
-export function macro_call(macro_name: string, args: NonLone<Definition>) { return new MacroCall(undefined, macro_name, args) }
-export function many_macro_call(macro_name: string, args: NonLone<Definition>) { return new MacroCall(Modifier.Many, macro_name, args) }
-export function maybe_macro_call(macro_name: string, args: NonLone<Definition>) { return new MacroCall(Modifier.Maybe, macro_name, args) }
-export function maybe_many_macro_call(macro_name: string, args: NonLone<Definition>) { return new MacroCall(Modifier.MaybeMany, macro_name, args) }
+export function macro_call(macro_name: string, ...args: NonLone<Definition>) { return new MacroCall(undefined, macro_name, args) }
+export function many_macro_call(macro_name: string, ...args: NonLone<Definition>) { return new MacroCall(Modifier.Many, macro_name, args) }
+export function maybe_macro_call(macro_name: string, ...args: NonLone<Definition>) { return new MacroCall(Modifier.Maybe, macro_name, args) }
+export function maybe_many_macro_call(macro_name: string, ...args: NonLone<Definition>) { return new MacroCall(Modifier.MaybeMany, macro_name, args) }
 export function many_separated(body: Definition, separator: Definition) {
-	return new MacroCall(undefined, 'many_separated', [body, separator] as NonLone<Definition>)
+	return new MacroCall(undefined, 'many_separated', body, separator)
 }
 export function maybe_many_separated(body: Definition, separator: Definition) {
-	return new MacroCall(Modifier.Maybe, 'many_separated', [body, separator] as NonLone<Definition>)
+	return new MacroCall(Modifier.Maybe, 'many_separated', body, separator)
 }
 
 export class Var extends BaseNode {
 	readonly type: 'Var' = 'Var'
-	constructor(readonly modifer: Modifier, readonly arg_name: string) { super() }
+	constructor(
+		readonly modifer: Modifier,
+		readonly arg_name: string,
+	) { super(modifier) }
 }
 export function _var(arg_name: string) { return new Var(undefined, arg_name) }
 export function many_var(arg_name: string) { return new Var(Modifier.Many, arg_name) }
@@ -152,7 +182,10 @@ export function maybe_many_var(arg_name: string) { return new Var(Modifier.Maybe
 
 export class LockingVar extends BaseNode {
 	readonly type: 'LockingVar' = 'LockingVar'
-	constructor(readonly modifer: Modifier, readonly locking_arg_name: string) { super() }
+	constructor(
+		readonly modifer: Modifier,
+		readonly locking_arg_name: string,
+	) { super(modifier) }
 }
 export function locking_var(locking_arg_name: string) { return new LockingVar(undefined, locking_arg_name) }
 export function many_locking_var(locking_arg_name: string) { return new LockingVar(Modifier.Many, locking_arg_name) }
@@ -172,40 +205,53 @@ function index_locking_args(input_locking_args: LockingArg[] | undefined) {
 	const locking_args = input_locking_args || []
 	return locking_args.unique_index_by('name').match({
 		ok: locking_args => locking_args,
-		err: ([name,]) => { throw new Error(`some locking_args have the same name: ${name}`) }
+		err: ([name,]) => { throw new Error(`some locking tokens have the same name: ${name}`) }
 	})
 }
 
 
-export class TokenDef {
+class TokenDef {
 	readonly type: 'TokenDef' = 'TokenDef'
-	constructor(readonly name: string, def: TokenSpec) {}
+	constructor(readonly name: string, readonly def: TokenSpec) {}
+}
+export function TokenDef(name: string, def: TokenSpec) {
+	return new TokenDef(name, def)
 }
 
-export class Rule {
+class Rule {
 	readonly type: 'Rule' = 'Rule'
+	readonly always_optional: boolean
 	constructor(
 		readonly name: string,
-		readonly definition: NonEmpty<Definition>,
+		readonly definition: Definition,
 		readonly locking_args?: LockingArg[],
 	) {
 		this.locking_args = index_locking_args(locking_args)
+		this.always_optional = Definition.all_optional(definition)
 	}
 }
+export function Rule(name: string, definition: Definition, locking_args?: LockingArg[]) {
+	return new Rule(name, definition, locking_args)
+}
 
-export class Macro {
+class Macro {
 	readonly type: 'Macro' = 'Macro'
+	readonly always_optional: boolean
 	constructor(
 		readonly name: string,
 		readonly args: NonEmpty<Arg>,
-		readonly definition: NonEmpty<Definition>,
+		readonly definition: Definition,
 		readonly locking_args?: LockingArg[],
 	) {
 		this.locking_args = index_locking_args(locking_args)
+		this.always_optional = Definition.all_optional(definition)
 	}
 }
+export function Macro(name: string, args: NonEmpty<Arg>, definition: Definition, locking_args?: LockingArg[]) {
+	return new Macro(name, args, definition, locking_args)
+}
 
-export class VirtualLexerUsage {
+class VirtualLexerUsage {
 	readonly type: 'VirtualLexerUsage' = 'VirtualLexerUsage'
 	constructor(
 		readonly virtual_lexer_name: string,
@@ -213,6 +259,9 @@ export class VirtualLexerUsage {
 		readonly args: TokenSpec[],
 		readonly exposed_tokens: Dict<true>,
 	) {}
+}
+export function VirtualLexerUsage(virtual_lexer_name: string, path: string, args: TokenSpec[], exposed_tokens: Dict<true>) {
+	return new VirtualLexerUsage(virtual_lexer_name, path, args, exposed_tokens)
 }
 
 export type GrammarItem =
@@ -240,7 +289,7 @@ export function set_registered_virtual_lexers(new_registered_virtual_lexers: Dic
 	registered_virtual_lexers = new_registered_virtual_lexers
 }
 
-export function get_token(token_name: string): Option<string> {
+export function get_token(token_name: string): Maybe<string> {
 	if (token_name in registered_tokens)
 		return Some(token_name)
 
@@ -250,11 +299,11 @@ export function get_token(token_name: string): Option<string> {
 
 	return None
 }
-export function get_rule(rule_name: string): Option<Rule> {
-	return Option.from_nillable(registered_rules[rule_name])
+export function get_rule(rule_name: string): Maybe<Rule> {
+	return Maybe.from_nillable(registered_rules[rule_name])
 }
-export function get_macro(macro_name: string): Option<Macro> {
-	return Option.from_nillable(registered_macros[macro_name])
+export function get_macro(macro_name: string): Maybe<Macro> {
+	return Maybe.from_nillable(registered_macros[macro_name])
 }
 
 export function register_tokens(token_defs: TokenDef[]) {
@@ -272,9 +321,12 @@ export function register_virtual_lexers(virtual_lexers: VirtualLexerUsage[]) {
 
 
 
-export type Scope = Readonly<{ locking_args: LockingArg[], args: NonEmpty<Definition> }>
-export function Scope(locking_args: LockingArg[] | undefined, args: NonEmpty<Definition> | undefined): Scope {
-	return { locking_args: locking_args || empty_ordered_dict, args: args || empty_ordered_dict }
+export type Scope = Readonly<{ locking_args: Dict<LockingArg>, args: Dict<Definition> }>
+export function Scope(locking_args: Dict<LockingArg> | undefined, args: Dict<Definition> | undefined): Scope {
+	return {
+		locking_args: locking_args || {},
+		args: args || {},
+	}
 }
 export type ScopeStack = { current: Scope, previous: Scope[] }
 export namespace Scope {
@@ -282,11 +334,12 @@ export namespace Scope {
 		return { current: Scope(rule.locking_args, undefined), previous: [] }
 	}
 	export function for_macro({ current, previous }: ScopeStack, macro: Macro, call: MacroCall): ScopeStack {
-		return { current: Scope(macro.locking_args, call.args), previous: [...previous, current] }
+		const args = zip_args(macro, call).unwrap()
+		return { current: Scope(macro.locking_args, args), previous: [...previous, current] }
 	}
 	export function for_var({ current, previous }: ScopeStack, var_node: Var): [Node, ScopeStack] {
 		return t(
-			current.get_by_name(var_node.arg_name).unwrap(),
+			Maybe.from_nillable(current[var_node.arg_name]).unwrap()
 			{
 				current: previous.maybe_get(-1).unwrap(),
 				previous: previous.slice(0, previous.length - 1),
@@ -298,76 +351,3 @@ export namespace Scope {
 	}
 }
 export type DefinitionTuple = [Node, ScopeStack]
-
-
-
-type AstIterItem = string | DefinitionTuple[] | Continue
-type AstIter = IterWrapper<AstIterItem>
-
-function* iterate_definition(
-	...[definition, scope]: DefinitionTuple
-): Generator<AstIterItem, void, undefined> {
-	const nodes_to_visit = definition.slice()
-	let node
-	while (node = nodes_to_visit.shift()) switch (node.type) {
-
-	case 'Or':
-		const [gathered, ] = gather_branches(nodes_to_visit, scope)[0]
-		yield [...in_scope(node.choices, scope), ...gathered]
-		continue
-	case 'Consume':
-		yield* node.token_names.map(token_name => get_token(token_name).unwrap())
-		continue
-
-	case 'Subrule': {
-		const rule = get_rule(node.rule_name).unwrap()
-		const rule_scope = { current: Scope(rule.locking_args, undefined), previous: [] }
-		const [gathered, all_maybe] = gather_branches(rule.definition.slice(), rule_scope)
-		if (all_maybe) {
-			const branches = gather_branches(nodes_to_visit, scope)[0]
-			yield [...gathered, ...branches]
-		}
-		else
-			yield* iterate_definition(rule.definition, rule_scope)
-
-		continue
-	}
-
-	case 'MacroCall': {
-		const macro = get_macro(node.macro_name).unwrap()
-		const macro_scope = push_scope(scope, macro.locking_args, node.args)
-		const [gathered, all_maybe] = gather_branches(macro.definition.slice(), macro_scope)
-		if (all_maybe) {
-			const branches = gather_branches(nodes_to_visit, scope)[0]
-			yield [...gathered, ...branches]
-		}
-		else
-			yield* iterate_definition(macro.definition, macro_scope)
-
-		continue
-	}
-
-	case 'Var': {
-		// Vars use the parent_scope
-		const arg_definition = scope.current.args.get_by_name(node.arg_name).unwrap()
-		const var_scope = pop_scope(scope)
-		// const [gathered, all_maybe] = gather_branches(arg_definition.slice(), var_scope)
-		const [gathered, all_maybe] = gather_branches([...arg_definition, ...nodes_to_visit], var_scope)
-		if (all_maybe) {
-			const branches = gather_branches(nodes_to_visit, scope)[0]
-			yield [...gathered, ...branches]
-		}
-		else
-			yield* iterate_definition(arg_definition, var_scope)
-
-		continue
-	}
-
-	case 'LockingVar':
-		const locking_arg = scope.current.locking_args.get_by_name(node.locking_arg_name).unwrap()
-		yield get_token(locking_arg.token_name).unwrap()
-		continue
-
-	default: return exhaustive(node)
-	}
-}

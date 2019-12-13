@@ -59,7 +59,7 @@ typings/
 
 dist
 
-lib/ast/render_from.ts
-lib/ast/render_to.ts
+lib/compiler/_generate_from.ts
+lib/compiler/_generate_to.ts
 
 .local*

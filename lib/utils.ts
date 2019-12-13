@@ -9,6 +9,17 @@ export function log(obj: any, depth = null as number | null) {
 	console.log(debug(obj, depth))
 }
 
+export class LogError extends Error {
+	constructor(lines: (string | any)[], depth = null as number | null) {
+		const message = lines.map(line => {
+			return typeof line === 'string'
+				? line
+				: debug(line, depth)
+		}).join('\n')
+		super(message)
+	}
+}
+
 export interface Cls<T, A extends any[]> {
 	new (...args: A): T
 }

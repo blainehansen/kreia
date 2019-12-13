@@ -149,20 +149,6 @@ function render_definition(nodes: NonEmpty<Node>, scope: ScopeStack, parent_next
 }
 
 
-export function gather_branches(current_next: Node[], parent_next: Node[]) {
-	const parent_copy = parent_next.slice()
-	let node
-	const branches = []
-	while (node = (current_next.shift() || parent_copy.shift())) {
-		if (node.is_optional)
-			branches.push(node)
-		else
-			break
-	}
-
-	return branches
-}
-
 function render_node(node: Node, scope: ScopeStack, next: Node[]) {
 	switch (node.type) {
 
