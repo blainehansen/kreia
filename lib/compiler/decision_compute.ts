@@ -311,6 +311,10 @@ function _compute_decidable(
 			// since we've placed an against.length check before this,
 			// hitting here means this thing is undecidable, at least for now
 			throw new Error('undecidable')
+		if (item_is(item, 'NotEnough')) {
+			builder.push(item)
+			continue
+		}
 
 
 		const new_against = [] as AstIter[]
@@ -340,6 +344,10 @@ function _compute_decidable(
 				// we'll just keep cycling this iterator over and over
 				// that's a safe choice since the main loop will die if it also has one
 				against_iters.push(EternalAstIter(against_item.definition_tuple))
+				continue
+			}
+			if (item_is(against_item, 'NotEnough')) {
+				new_against.push(against_iter)
 				continue
 			}
 
