@@ -4,6 +4,10 @@ import { Data, exec, NonEmpty, IterWrapper, exhaustive } from '../utils'
 import { compute_path_test_length } from '../runtime/decision'
 import { Node, Definition, ScopeStack, Scope, get_rule, get_macro } from './ast'
 
+import { Console } from 'console'
+const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
+
+
 export const AstDecisionPath = Data((...path: (string[] | AstDecisionBranch)[]): AstDecisionPath => {
 	return { type: 'AstDecisionPath' as const, path, test_length: compute_path_test_length(path) }
 })
@@ -67,18 +71,23 @@ export class PathBuilder {
 
 
 
-export function gather_branches(next: [Node, ScopeStack][]): [Definition, ScopeStack][] {
-	const lower_next = next.slice()
-	return mut_gather_branches(lower_next)
+export function gather_branches(
+	next: [Node, ScopeStack][],
+): [Definition, ScopeStack][] {
+	const mut_next = next.slice()
+	return mut_gather_branches(mut_next)
 }
 
-export function mut_gather_branches(next: [Node, ScopeStack][]): [Definition, ScopeStack][] {
+export function mut_gather_branches(
+	next: [Node, ScopeStack][],
+): [Definition, ScopeStack][] {
 	let tuple
 	const branches = []
 	while (tuple = next.shift()) {
 		const [node, scope] = tuple
-		if (node.needs_decidable)
-			branches.push(t(t(node), scope))
+
+		// if (must_gather || node.needs_decidable)
+		branches.push(t(t(node), scope))
 		if (node.is_optional)
 			continue
 		else
@@ -133,6 +142,8 @@ function* iterate_definition(
 			// in this situation, a non-gathering strategy would lead to a lookahead of merely A
 			// when in fact A B C is necessary not to erroneously enter
 			// when we're simply given (A B)+ in the parse input
+			// console.log('performing Simultaneous')
+			// console.log('tuples_to_visit', tuples_to_visit)
 			yield Simultaneous(t(node.purify(), scope), ...mut_gather_branches(tuples_to_visit))
 			continue
 		case '+':
@@ -140,7 +151,12 @@ function* iterate_definition(
 			// a case: (A B C)+ (A B)+
 			// same as the last one, if we don't gather, we'll only grab A
 			// when A B C is necessary not to erroneously continue
+			// against a node that doesn't need_decidable:
+			// a case: (A B C)+ A B
+			// again the same. only using A would erroneously continue
 			const many_tuple = t(node.purify(), scope)
+			// console.log('performing MainAgainst')
+			// console.log('tuples_to_visit', tuples_to_visit)
 			yield MainAgainst(many_tuple, gather_branches(tuples_to_visit))
 			yield Continue(many_tuple)
 			continue
@@ -222,6 +238,8 @@ export function compute_decidable(
 	next: [Node, ScopeStack][],
 ) {
 	const against = [...known_against, ...gather_branches(next)]
+	// console.log('main[0]', main[0])
+	// console.log('against.map(tuple => tuple[0])', against.map(tuple => tuple[0]))
 
 	const [path, _] = _compute_decidable(
 		AstIter(main),
@@ -249,7 +267,7 @@ function _compute_decidable(
 		// but the next will have none left
 
 		if (item_is(item, 'Simultaneous')) {
-			// console.log('recursing')
+			// console.log('recursing Simultaneous')
 			const new_against = [] as AstIter[]
 			const decision_paths = []
 
@@ -262,6 +280,7 @@ function _compute_decidable(
 					against.map(a => a.clone()),
 					new PathBuilder(),
 				)
+				// console.log('emerged from Simultaneous with decision_path', decision_path)
 				new_against.push_all(continued_against)
 				decision_paths.push(decision_path)
 			}
@@ -274,14 +293,18 @@ function _compute_decidable(
 			continue
 		}
 		if (item_is(item, 'MainAgainst')) {
+			// console.log('recursing MainAgainst')
 			// compute a decidable for main
 			// don't use or preserve any of the against, we'll see them in a moment
-			const [decision_path, ] = _compute_decidable(
+			const [decision_path, ignored_against] = _compute_decidable(
 				AstIter(item.main),
-				item.against.map(AstIter),
+				[...item.against.map(AstIter), ...against],
 				new PathBuilder(),
 			)
+			// console.log('emerged from MainAgainst, doing concat_path decision_path', decision_path)
 			builder.concat_path(decision_path)
+			if (ignored_against.length === 0)
+				break
 			continue
 		}
 		if (item_is(item, 'Continue'))
@@ -320,6 +343,7 @@ function _compute_decidable(
 				continue
 			}
 
+			// console.log('item !== against_item', item !== against_item)
 			if (item !== against_item)
 				continue
 
@@ -339,9 +363,5 @@ function _compute_decidable(
 	// since the Maybe only happens once, the next could definitely happen
 	// it definitely means you need to warn people that the first matched rule in an Or will be taken,
 	// so they should put longer ones first if they share stems
-
-	// console.log('returning')
-	// console.log('against.length', against.length)
-	// console.log()
 	return t(builder.build(), against)
 }
