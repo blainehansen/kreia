@@ -2,6 +2,7 @@ import { Dict, tuple as t } from '@ts-std/types'
 import { Result, Ok, Err, Maybe, Some, None } from '@ts-std/monads'
 
 import { debug, LogError, NonEmpty, NonLone } from '../utils'
+import { TokenSpec } from '../runtime/lexer'
 
 export enum BaseModifier {
 	Many = '+',
@@ -24,13 +25,9 @@ export namespace Modifier {
 
 abstract class BaseNode {
 	readonly is_optional: boolean
-	readonly is_hard_many: boolean
-	readonly is_maybe_many: boolean
 	readonly needs_decidable: boolean
 	constructor(readonly modifier: Modifier) {
 		this.is_optional = Modifier.is_optional(modifier)
-		this.is_hard_many = modifier === BaseModifier.Many
-		this.is_maybe_many = modifier === BaseModifier.MaybeMany
 		this.needs_decidable = modifier !== undefined
 	}
 }
@@ -47,8 +44,8 @@ export type Node =
 export namespace Node {
 	export function flatten(nodes: NonEmpty<Node>): Node | Definition {
 		return NonLone.from_array(nodes).match({
-			some: non_lone => non_lone as Definition,
-			none: () => nodes[0] as Node
+			some: non_lone => non_lone as Node | Definition,
+			none: () => nodes[0],
 		})
 	}
 }
@@ -78,7 +75,9 @@ export namespace Definition {
 		return nodes.every(node => node.is_optional)
 	}
 
-	export function screen_all_optional(definitions: NonLone<Definition>): Result<NonLone<Definition>, Definition[]> {
+	export function screen_all_optional<A extends Definition[]>(
+		definitions: A,
+	): Result<A, Definition[]> {
 		const empty_definitions = definitions.filter(all_optional)
 		return empty_definitions.length === 0
 			? Ok(definitions)
@@ -92,6 +91,10 @@ export class Paren extends BaseNode {
 		readonly modifier: BaseModifier,
 		readonly nodes: NonLone<Node>,
 	) { super(modifier) }
+
+	purify() {
+		return this.nodes.slice() as Definition
+	}
 }
 export function many(...nodes: NonLone<Node>) { return new Paren(BaseModifier.Many, nodes) }
 export function maybe(...nodes: NonLone<Node>) { return new Paren(BaseModifier.Maybe, nodes) }
@@ -103,6 +106,10 @@ export class Consume extends BaseNode {
 		readonly modifier: Modifier,
 		readonly token_names: NonEmpty<string>,
 	) { super(modifier) }
+
+	purify() {
+		return [new Consume(undefined, this.token_names)] as Definition
+	}
 }
 export function consume(...token_names: NonEmpty<string>) { return new Consume(undefined, token_names) }
 export function many_consume(...token_names: NonEmpty<string>) { return new Consume(BaseModifier.Many, token_names) }
@@ -125,10 +132,14 @@ export class Or extends BaseNode {
 					empty_definitions,
 					'',
 					`it doesn't make a lot of sense to have a branch of an Or node be all optional, and this is probably a mistake`,
-					`consider moving this optional item out of the Or node, or making the Or node optional`,
+					`consider moving this optional item out of the Or node, or making the Or node itself optional`,
 				], 4)
 			}
 		})
+	}
+
+	purify() {
+		return [new Or(undefined, this.choices)] as Definition
 	}
 }
 export function or(...choices: NonLone<Definition>) { return new Or(undefined, choices) }
@@ -142,6 +153,10 @@ export class Subrule extends BaseNode {
 		readonly modifier: Modifier,
 		readonly rule_name: string,
 	) { super(modifier) }
+
+	purify() {
+		return [new Subrule(undefined, this.rule_name)] as Definition
+	}
 }
 export function subrule(rule_name: string) { return new Subrule(undefined, rule_name) }
 export function many_subrule(rule_name: string) { return new Subrule(BaseModifier.Many, rule_name) }
@@ -150,14 +165,18 @@ export function maybe_many_subrule(rule_name: string) { return new Subrule(BaseM
 
 export class MacroCall extends BaseNode {
 	readonly type: 'MacroCall' = 'MacroCall'
-	readonly args: NonLone<Definition>
+	readonly args: NonEmpty<Definition>
 	constructor(
 		readonly modifier: Modifier,
 		readonly macro_name: string,
-		args: NonLone<Definition>,
+		args: NonEmpty<Definition>,
 	) {
 		super(modifier)
-		this.args = Definition.screen_all_optional(args)
+		this.args = Definition.screen_all_optional(args).unwrap()
+	}
+
+	purify() {
+		return [new MacroCall(undefined, this.macro_name, this.args)] as Definition
 	}
 }
 export function macro_call(macro_name: string, ...args: NonLone<Definition>) { return new MacroCall(undefined, macro_name, args) }
@@ -165,10 +184,10 @@ export function many_macro_call(macro_name: string, ...args: NonLone<Definition>
 export function maybe_macro_call(macro_name: string, ...args: NonLone<Definition>) { return new MacroCall(BaseModifier.Maybe, macro_name, args) }
 export function maybe_many_macro_call(macro_name: string, ...args: NonLone<Definition>) { return new MacroCall(BaseModifier.MaybeMany, macro_name, args) }
 export function many_separated(body: Definition, separator: Definition) {
-	return new MacroCall(undefined, 'many_separated', body, separator)
+	return new MacroCall(undefined, 'many_separated', [body, separator])
 }
 export function maybe_many_separated(body: Definition, separator: Definition) {
-	return new MacroCall(BaseModifier.Maybe, 'many_separated', body, separator)
+	return new MacroCall(BaseModifier.Maybe, 'many_separated', [body, separator])
 }
 
 export class Var extends BaseNode {
@@ -177,6 +196,10 @@ export class Var extends BaseNode {
 		readonly modifier: Modifier,
 		readonly arg_name: string,
 	) { super(modifier) }
+
+	purify() {
+		return [new Var(undefined, this.arg_name)] as Definition
+	}
 }
 export function _var(arg_name: string) { return new Var(undefined, arg_name) }
 export function many_var(arg_name: string) { return new Var(BaseModifier.Many, arg_name) }
@@ -189,6 +212,10 @@ export class LockingVar extends BaseNode {
 		readonly modifier: Modifier,
 		readonly locking_arg_name: string,
 	) { super(modifier) }
+
+	purify() {
+		return [new LockingVar(undefined, this.locking_arg_name)] as Definition
+	}
 }
 export function locking_var(locking_arg_name: string) { return new LockingVar(undefined, locking_arg_name) }
 export function many_locking_var(locking_arg_name: string) { return new LockingVar(BaseModifier.Many, locking_arg_name) }
@@ -217,44 +244,48 @@ export class TokenDef {
 	readonly type: 'TokenDef' = 'TokenDef'
 	constructor(readonly name: string, readonly def: TokenSpec) {}
 }
-export function TokenDef(name: string, def: TokenSpec) {
-	return new TokenDef(name, def)
-}
+// export function TokenDef(name: string, def: TokenSpec) {
+// 	return new TokenDef(name, def)
+// }
 
 export class Rule {
 	readonly type: 'Rule' = 'Rule'
-	readonly always_optional: boolean
+	// readonly always_optional: boolean
+	readonly definition: Definition
 	readonly locking_args: Dict<LockingArg>
 	constructor(
 		readonly name: string,
-		readonly definition: Definition,
+		definition: Definition,
 		locking_args?: LockingArg[],
 	) {
+		// this.always_optional = Definition.all_optional(definition)
+		this.definition = Definition.screen_all_optional(t(definition)).unwrap()[0]
 		this.locking_args = index_locking_args(locking_args)
-		this.always_optional = Definition.all_optional(definition)
 	}
 }
-export function Rule(name: string, definition: Definition, locking_args?: LockingArg[]) {
-	return new Rule(name, definition, locking_args)
-}
+// export function Rule(name: string, definition: Definition, locking_args?: LockingArg[]) {
+// 	return new Rule(name, definition, locking_args)
+// }
 
 export class Macro {
 	readonly type: 'Macro' = 'Macro'
-	readonly always_optional: boolean
+	// readonly always_optional: boolean
+	readonly definition: Definition
 	readonly locking_args: Dict<LockingArg>
 	constructor(
 		readonly name: string,
 		readonly args: NonEmpty<Arg>,
-		readonly definition: Definition,
+		definition: Definition,
 		locking_args?: LockingArg[],
 	) {
+		// this.always_optional = Definition.all_optional(definition)
+		this.definition = Definition.screen_all_optional(t(definition)).unwrap()[0]
 		this.locking_args = index_locking_args(locking_args)
-		this.always_optional = Definition.all_optional(definition)
 	}
 }
-export function Macro(name: string, args: NonEmpty<Arg>, definition: Definition, locking_args?: LockingArg[]) {
-	return new Macro(name, args, definition, locking_args)
-}
+// export function Macro(name: string, args: NonEmpty<Arg>, definition: Definition, locking_args?: LockingArg[]) {
+// 	return new Macro(name, args, definition, locking_args)
+// }
 
 export class VirtualLexerUsage {
 	readonly type: 'VirtualLexerUsage' = 'VirtualLexerUsage'
@@ -265,9 +296,9 @@ export class VirtualLexerUsage {
 		readonly exposed_tokens: Dict<true>,
 	) {}
 }
-export function VirtualLexerUsage(virtual_lexer_name: string, path: string, args: TokenSpec[], exposed_tokens: Dict<true>) {
-	return new VirtualLexerUsage(virtual_lexer_name, path, args, exposed_tokens)
-}
+// export function VirtualLexerUsage(virtual_lexer_name: string, path: string, args: TokenSpec[], exposed_tokens: Dict<true>) {
+// 	return new VirtualLexerUsage(virtual_lexer_name, path, args, exposed_tokens)
+// }
 
 export type GrammarItem =
 	| TokenDef
