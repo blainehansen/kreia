@@ -9,6 +9,10 @@ export function log(obj: any, depth = null as number | null) {
 	console.log(debug(obj, depth))
 }
 
+// export function impossible(): never {
+// 	//
+// }
+
 export class LogError extends Error {
 	constructor(lines: (string | any)[], depth = null as number | null) {
 		const message = lines.map(line => {

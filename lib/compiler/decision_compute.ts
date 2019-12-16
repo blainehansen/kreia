@@ -2,7 +2,7 @@ import { tuple as t } from '@ts-std/types'
 import { Data, exec, NonEmpty, IterWrapper, exhaustive } from '../utils'
 
 import { compute_path_test_length } from '../runtime/decision'
-import { Node, Definition, ScopeStack, Scope, get_rule, get_macro } from './ast'
+import { Node, Definition, ScopeStack, Scope, Registry } from './ast'
 
 import { Console } from 'console'
 const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
@@ -31,7 +31,13 @@ export class PathBuilder {
 	}
 
 	concat_path(path: AstDecisionPath) {
-		this.items.push_all(path.path)
+		for (const item of path.path) {
+			if (Array.isArray(item))
+				for (const tok of item)
+					this.push(tok)
+			else
+				this.items.push(item)
+		}
 	}
 
 	// concat_path(decidable: AstDecidable) {
@@ -40,7 +46,7 @@ export class PathBuilder {
 	// 		this.items.push_all(decidable.items)
 	// 	case 'AstDecisionBranch':
 	// 		this.items.push(decidable)
-	// 	default: return exhaustive(decidable.type)
+	// 	default: return exhaustive(decidable)
 	// 	}
 	// }
 
@@ -61,7 +67,8 @@ export class PathBuilder {
 			// if (this.items.length === 1)
 			// 	return last.value
 
-			if (last.value.is_optional)
+			// if (last.value.is_optional)
+			if (last.value.is_optional && this.items.length !== 1)
 				this.items.splice(last_index, 1)
 		}
 
@@ -71,14 +78,14 @@ export class PathBuilder {
 
 
 
-export function gather_branches(
+function gather_branches(
 	next: [Node, ScopeStack][],
 ): [Definition, ScopeStack][] {
 	const mut_next = next.slice()
 	return mut_gather_branches(mut_next)
 }
 
-export function mut_gather_branches(
+function mut_gather_branches(
 	next: [Node, ScopeStack][],
 ): [Definition, ScopeStack][] {
 	let tuple
@@ -168,6 +175,12 @@ function* iterate_definition(
 			yield Continue(maybe_many_tuple)
 			continue
 		}
+		// thinking about the NotEnough:
+		// a case (A B)+ (A& C)
+		// this is redundant, we would already do that
+		// a case (A B)+ (B& C)
+		// this is also redundant
+
 
 		// now we move forward assuming that there's no modifier
 		// the recurse will see the node without one
@@ -179,6 +192,8 @@ function* iterate_definition(
 
 		case 'Paren':
 			throw new Error("encountered a Paren, which should be impossible since it always has a modifier")
+			// hopefully typescript is able to refine and know that since modifier is undefined,
+			// this can't possibly be Paren
 
 		case 'Or':
 			// should this gather now that the modifier is gone?
@@ -192,7 +207,7 @@ function* iterate_definition(
 			continue
 
 		case 'Subrule':
-			const rule = get_rule(node.rule_name).unwrap()
+			const rule = Registry.get_rule(node.rule_name).unwrap()
 			const rule_scope = Scope.for_rule(rule)
 			// if (rule.always_optional) {
 			// 	yield Simultaneous(t(rule.definition, rule_scope), ...mut_gather_branches(tuples_to_visit))
@@ -202,8 +217,8 @@ function* iterate_definition(
 			continue
 
 		case 'MacroCall':
-			const macro = get_macro(node.macro_name).unwrap()
-			const macro_scope = Scope.for_macro(scope, macro, node)
+			const macro = Registry.get_macro(node.macro_name).unwrap()
+			const macro_scope = Scope.for_macro_call(scope, macro, node)
 			// if (macro.always_optional) {
 			// 	yield Simultaneous(t(macro.definition, macro_scope), ...mut_gather_branches(tuples_to_visit))
 			// 	continue
@@ -236,8 +251,12 @@ export function compute_decidable(
 	main: [Definition, ScopeStack],
 	known_against: [Definition, ScopeStack][],
 	next: [Node, ScopeStack][],
+	should_gather: boolean,
 ) {
-	const against = [...known_against, ...gather_branches(next)]
+	const against = should_gather
+		? [...known_against, ...gather_branches(next)]
+		: known_against
+
 	// console.log('main[0]', main[0])
 	// console.log('against.map(tuple => tuple[0])', against.map(tuple => tuple[0]))
 
@@ -311,10 +330,10 @@ function _compute_decidable(
 			// since we've placed an against.length check before this,
 			// hitting here means this thing is undecidable, at least for now
 			throw new Error('undecidable')
-		if (item_is(item, 'NotEnough')) {
-			builder.push(item)
-			continue
-		}
+		// if (item_is(item, 'NotEnough')) {
+		// 	builder.push(item)
+		// 	continue
+		// }
 
 
 		const new_against = [] as AstIter[]
@@ -346,10 +365,10 @@ function _compute_decidable(
 				against_iters.push(EternalAstIter(against_item.definition_tuple))
 				continue
 			}
-			if (item_is(against_item, 'NotEnough')) {
-				new_against.push(against_iter)
-				continue
-			}
+			// if (item_is(against_item, 'NotEnough')) {
+			// 	new_against.push(against_iter)
+			// 	continue
+			// }
 
 			// console.log('item !== against_item', item !== against_item)
 			if (item !== against_item)

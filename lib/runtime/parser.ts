@@ -22,12 +22,13 @@ export function Parser<D extends Dict<TokenSpec>, V extends VirtualLexers = {}>(
 			lexer.reset(...args)
 		},
 		// arg<A extends ParseArg>(parse_arg: A, ...arg_args: A extends Func ? Parameters<A> : []): ArgReturn<A> {
-		arg<A extends ParseArg>(parse_arg: A): ReturnType<A> {
-			// return Array.isArray(parse_arg)
-			// 	? lexer.require(parse_arg) as ArgReturn<A>
-			// 	: (parse_arg as Func)(...arg_args)
-			return parse_arg()
-		},
+		// TODO until this can hold flattened token_definitions, it isn't useful
+		// arg<A extends ParseArg>(parse_arg: A): ReturnType<A> {
+		// 	// return Array.isArray(parse_arg)
+		// 	// 	? lexer.require(parse_arg) as ArgReturn<A>
+		// 	// 	: (parse_arg as Func)(...arg_args)
+		// 	return parse_arg()
+		// },
 		lock(token_definition: RawTokenDefinition) {
 			return lock(lexer, token_definition)
 		},
@@ -42,6 +43,12 @@ export function Parser<D extends Dict<TokenSpec>, V extends VirtualLexers = {}>(
 		},
 		maybe_or<C extends ParseEntity[]>(...choices: C) {
 			return maybe_or(lexer, choices)
+		},
+		many_or<C extends ParseEntity[]>(...choices: C) {
+			return many_or(lexer, choices)
+		},
+		maybe_many_or<C extends ParseEntity[]>(...choices: C) {
+			return maybe_many_or(lexer, choices)
 		},
 		many<E extends ParseEntity>(...entity: E) {
 			return many(lexer, entity)
@@ -79,6 +86,10 @@ export function f<F extends Func>(
 	...args: Parameters<F>
 ): DecidableFunc<F> {
 	return [fn, d, ...args] as DecidableFunc<F>
+}
+
+export function c<C extends ParseEntity>(...choice: C): C {
+	return choice
 }
 
 
@@ -139,6 +150,7 @@ function consume<L extends TokenDefinition[]>(
 }
 
 // function lock<E extends ParseEntity>(lexer: Lexer, ...entity: E) {
+// this would be renamed create_lock or locker
 function lock(lexer: Lexer, token_definition: RawTokenDefinition) {
 	// const locked = new LockedValue<EntityReturn<E>>(deep_equal)
 	let locked = undefined as RawToken | undefined
@@ -154,6 +166,13 @@ function lock(lexer: Lexer, token_definition: RawTokenDefinition) {
 		return token
 	}
 }
+function lock(lexer: Lexer, locker: Locker) {
+	return locker.perform(lexer).match({
+		ok: token => token,
+		err: token => { throw new Error(`unexpected locked Token, expected ${locked} got ${token}`) }
+	})
+}
+
 
 type Optional<T, B extends boolean> = B extends true ? T | undefined : T
 
@@ -219,6 +238,29 @@ function maybe_or<C extends ParseEntity[]>(
 	choices: C
 ): ChoicesReturn<C> | undefined {
 	return _or(lexer, true, choices) as ChoicesReturn<C> | undefined
+}
+function many_or<C extends ParseEntity[]>(
+	lexer: Lexer,
+	choices: C,
+): ChoicesReturn<C>[] {
+	const results = [_or(lexer, false, choices)]
+
+	let result
+	while (result = _or(lexer, true, choices))
+		results.push(result)
+
+	return results
+}
+function maybe_many_or<C extends ParseEntity[]>(
+	lexer: Lexer,
+	choices: C,
+): ChoicesReturn<C>[] | undefined {
+	const results = [] as ChoicesReturn<C>[]
+	let result
+	while (result = _or(lexer, true, choices))
+		results.push(result)
+
+	return results.length !== 0 ? results : undefined
 }
 
 function _or<C extends ParseEntity[], B extends boolean>(

@@ -414,7 +414,7 @@ export function match_and_trim(tokens: Token[], token_definitions: TokenDefiniti
 
 
 export type TokenOptions = { ignore?: true }
-type BaseTokenSpec = RegExp | string | (RegExp | string)[]
+export type BaseTokenSpec = RegExp | string | (RegExp | string)[]
 export type TokenSpec = BaseTokenSpec | { match: BaseTokenSpec } & TokenOptions
 
 function source_regex(def: RegExp | string) {

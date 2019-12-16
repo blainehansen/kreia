@@ -8,6 +8,8 @@ export enum BaseModifier {
 	Many = '+',
 	Maybe = '?',
 	MaybeMany = '*',
+	// NotEnough = '&',
+	// ManyNotEnough = '&+',
 }
 
 export type Modifier = BaseModifier | undefined
@@ -41,14 +43,6 @@ export type Node =
 	| LockingVar
 	| Paren
 
-export namespace Node {
-	export function flatten(nodes: NonEmpty<Node>): Node | Definition {
-		return NonLone.from_array(nodes).match({
-			some: non_lone => non_lone as Node | Definition,
-			none: () => nodes[0],
-		})
-	}
-}
 
 function zip_args(macro: Macro, call: MacroCall): Result<Dict<Definition>> {
 	const args = macro.args.slice()
@@ -82,6 +76,13 @@ export namespace Definition {
 		return empty_definitions.length === 0
 			? Ok(definitions)
 			: Err(empty_definitions)
+	}
+
+	export function flatten(nodes: Definition) {
+		return NonLone.from_array(nodes).match({
+			some: non_lone => non_lone as Node | Definition,
+			none: () => nodes[0],
+		})
 	}
 }
 
@@ -253,6 +254,7 @@ export class Rule {
 	// readonly always_optional: boolean
 	readonly definition: Definition
 	readonly locking_args: Dict<LockingArg>
+	readonly ordered_locking_args: LockingArg[]
 	constructor(
 		readonly name: string,
 		definition: Definition,
@@ -261,6 +263,7 @@ export class Rule {
 		// this.always_optional = Definition.all_optional(definition)
 		this.definition = Definition.screen_all_optional(t(definition)).unwrap()[0]
 		this.locking_args = index_locking_args(locking_args)
+		this.ordered_locking_args = locking_args || []
 	}
 }
 // export function Rule(name: string, definition: Definition, locking_args?: LockingArg[]) {
@@ -272,6 +275,7 @@ export class Macro {
 	// readonly always_optional: boolean
 	readonly definition: Definition
 	readonly locking_args: Dict<LockingArg>
+	readonly ordered_locking_args: LockingArg[]
 	constructor(
 		readonly name: string,
 		readonly args: NonEmpty<Arg>,
@@ -281,6 +285,7 @@ export class Macro {
 		// this.always_optional = Definition.all_optional(definition)
 		this.definition = Definition.screen_all_optional(t(definition)).unwrap()[0]
 		this.locking_args = index_locking_args(locking_args)
+		this.ordered_locking_args = locking_args || []
 	}
 }
 // export function Macro(name: string, args: NonEmpty<Arg>, definition: Definition, locking_args?: LockingArg[]) {
@@ -308,51 +313,54 @@ export type GrammarItem =
 
 export type Grammar = GrammarItem[]
 
-let registered_tokens = {} as Dict<TokenDef>
-export function set_registered_tokens(new_registered_tokens: Dict<TokenDef>) {
-	registered_tokens = new_registered_tokens
-}
-let registered_rules = {} as Dict<Rule>
-export function set_registered_rules(new_registered_rules: Dict<Rule>) {
-	registered_rules = new_registered_rules
-}
-let registered_macros = {} as Dict<Macro>
-export function set_registered_macros(new_registered_macros: Dict<Macro>) {
-	registered_macros = new_registered_macros
-}
-let registered_virtual_lexers = {} as Dict<VirtualLexerUsage>
-export function set_registered_virtual_lexers(new_registered_virtual_lexers: Dict<VirtualLexerUsage>) {
-	registered_virtual_lexers = new_registered_virtual_lexers
-}
 
-export function get_token(token_name: string): Maybe<string> {
-	if (token_name in registered_tokens)
-		return Some(token_name)
+export namespace Registry {
+	let registered_tokens = {} as Dict<TokenDef>
+	export function set_registered_tokens(new_registered_tokens: Dict<TokenDef>) {
+		registered_tokens = new_registered_tokens
+	}
+	let registered_rules = {} as Dict<Rule>
+	export function set_registered_rules(new_registered_rules: Dict<Rule>) {
+		registered_rules = new_registered_rules
+	}
+	let registered_macros = {} as Dict<Macro>
+	export function set_registered_macros(new_registered_macros: Dict<Macro>) {
+		registered_macros = new_registered_macros
+	}
+	let registered_virtual_lexers = {} as Dict<VirtualLexerUsage>
+	export function set_registered_virtual_lexers(new_registered_virtual_lexers: Dict<VirtualLexerUsage>) {
+		registered_virtual_lexers = new_registered_virtual_lexers
+	}
 
-	for (const virtual_lexer of Object.values(registered_virtual_lexers))
-		if (token_name in virtual_lexer.exposed_tokens)
+	export function get_token(token_name: string): Maybe<string> {
+		if (token_name in registered_tokens)
 			return Some(token_name)
 
-	return None
-}
-export function get_rule(rule_name: string): Maybe<Rule> {
-	return Maybe.from_nillable(registered_rules[rule_name])
-}
-export function get_macro(macro_name: string): Maybe<Macro> {
-	return Maybe.from_nillable(registered_macros[macro_name])
-}
+		for (const virtual_lexer of Object.values(registered_virtual_lexers))
+			if (token_name in virtual_lexer.exposed_tokens)
+				return Some(token_name)
 
-export function register_tokens(token_defs: TokenDef[]) {
-	registered_tokens = token_defs.unique_index_by('name').unwrap()
-}
-export function register_rules(rules: Rule[]) {
-	registered_rules = rules.unique_index_by('name').unwrap()
-}
-export function register_macros(macros: Macro[]) {
-	registered_macros = macros.unique_index_by('name').unwrap()
-}
-export function register_virtual_lexers(virtual_lexers: VirtualLexerUsage[]) {
-	registered_virtual_lexers = virtual_lexers.unique_index_by('virtual_lexer_name').unwrap()
+		return None
+	}
+	export function get_rule(rule_name: string): Maybe<Rule> {
+		return Maybe.from_nillable(registered_rules[rule_name])
+	}
+	export function get_macro(macro_name: string): Maybe<Macro> {
+		return Maybe.from_nillable(registered_macros[macro_name])
+	}
+
+	export function register_tokens(token_defs: TokenDef[]) {
+		registered_tokens = token_defs.unique_index_by('name').unwrap()
+	}
+	export function register_rules(rules: Rule[]) {
+		registered_rules = rules.unique_index_by('name').unwrap()
+	}
+	export function register_macros(macros: Macro[]) {
+		registered_macros = macros.unique_index_by('name').unwrap()
+	}
+	export function register_virtual_lexers(virtual_lexers: VirtualLexerUsage[]) {
+		registered_virtual_lexers = virtual_lexers.unique_index_by('virtual_lexer_name').unwrap()
+	}
 }
 
 
@@ -369,7 +377,10 @@ export namespace Scope {
 	export function for_rule(rule: Rule): ScopeStack {
 		return { current: Scope(rule.locking_args, undefined), previous: [] }
 	}
-	export function for_macro({ current, previous }: ScopeStack, macro: Macro, call: MacroCall): ScopeStack {
+	export function for_macro(macro: Macro): ScopeStack {
+		return { current: Scope(macro.locking_args, undefined), previous: [] }
+	}
+	export function for_macro_call({ current, previous }: ScopeStack, macro: Macro, call: MacroCall): ScopeStack {
 		const args = zip_args(macro, call).unwrap()
 		return { current: Scope(macro.locking_args, args), previous: [...previous, current] }
 	}
@@ -386,10 +397,17 @@ export namespace Scope {
 		return Maybe.from_nillable(current.locking_args[locking_var.locking_arg_name]).unwrap().token_name
 	}
 
-	export function zip_definitions(definitions: Definition[], scope: ScopeStack): [Definition, ScopeStack][] {
-		return definitions.map(d => t(d, scope))
+	export function zip_definitions<L extends Definition[]>(
+		definitions: L, scope: ScopeStack,
+	): TForL<[Definition, ScopeStack], L> {
+		return definitions.map(d => t(d, scope)) as TForL<[Definition, ScopeStack], L>
 	}
-	export function zip_nodes(definition: Definition, scope: ScopeStack): [Node, ScopeStack][] {
-		return definition.map(node => t(node, scope))
+	export function zip_nodes<L extends Node[]>(
+		nodes: L, scope: ScopeStack,
+	): TForL<[Node, ScopeStack], L> {
+		return nodes.map(node => t(node, scope)) as TForL<[Node, ScopeStack], L>
 	}
 }
+
+
+type TForL<T, L extends any[]> = { [K in keyof L]: T }
