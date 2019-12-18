@@ -45,6 +45,7 @@
     "@ts-std/collections": "^1.1.1",
     "@ts-std/extensions": "^1.0.10",
     "@ts-std/monads": "^1.0.4",
-    "kreia-moo": "^0.4.8"
+    "kreia-moo": "^0.4.8",
+    "shorthash": "0.0.2"
   }
 }

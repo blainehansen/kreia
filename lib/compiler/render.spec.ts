@@ -105,17 +105,6 @@ describe('many_separated case', () => it('works', () => {
 			),
 		]),
 
-		// consume('num')
-		// maybe_many(
-		// 	consume('space', 'num')
-		// )
-		// maybe_many(
-		// 	consume('space', 'bar', 'space')
-		// 	consume('num')
-		// 	maybe_many(
-		// 		consume('space', 'num')
-		// 	)
-		// )
 		new Rule('a', [
 			many_separated(
 				[many_separated(
@@ -127,25 +116,33 @@ describe('many_separated case', () => it('works', () => {
 		])
 	])
 
-	expect(rendered_rules.length).eql(1)
-	b(rendered_rules[0]).eql(boil_string(`
-		export function a() {
-			many_separated(() => {
-				many_separated(() => {
-					consume(tok.num)
-				}, () => {
-					consume(tok.space, tok.bar, tok.space)
-				}, _1)
-			}, () => {
-				consume(tok.space)
-			}, _0)
-		}
-	`))
+	// expect(rendered_rules.length).eql(1)
+	// b(rendered_rules[0]).eql(boil_string(`
+	// 	export function a() {
+	// 		many_separated(() => {
+	// 			many_separated(() => {
+	// 				consume(tok.num)
+	// 			}, () => {
+	// 				consume(tok.space, tok.bar, tok.space)
+	// 			}, _1)
+	// 		}, () => {
+	// 			consume(tok.space)
+	// 		}, _0)
+	// 	}
+	// `))
 
-	expect(rendered_macros.length).eql(1)
-	b(rendered_macros[0]).eql(boil_string(`
-		//
-	`))
+	// expect(rendered_macros.length).eql(1)
+	// b(rendered_macros[0]).eql(boil_string(`
+	// 	function many_separated<BODY extends ParseArg, SEPARATOR extends ParseArg>(
+	// 		body: BODY, separator: SEPARATOR, _d1: Decidable
+	// 	) {
+	// 		body()
+	// 		maybe_many(() => {
+	// 			separator()
+	// 			body()
+	// 		}, _d1)
+	// 	}
+	// `))
 
 	b(rendered_decidables).eql(boil_string(`
 		const [_0, _1] = [

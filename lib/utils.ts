@@ -123,6 +123,22 @@ export class IterWrapper<T> {
 }
 
 
+export class MaxDict<T> {
+	protected items: Dict<T> = {}
+	constructor(readonly left_greater_right: (left: T, right: T) => boolean) {}
+
+	set(key: string, item: T): T {
+		if (key in this.items) {
+			const existing = this.items[key]
+			const existing_greater = this.left_greater_right(existing, item)
+			return this.items[key] = existing_greater ? existing : item
+		}
+
+		return this.items[key] = item
+	}
+}
+
+
 export function Data<F extends (...args: any) => any>(
 	fn: F,
 ): (...args: Parameters<F>) => Readonly<ReturnType<F>> {

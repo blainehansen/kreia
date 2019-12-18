@@ -1,3 +1,4 @@
+import shorthash from './_shorthash'
 import { tuple as t } from '@ts-std/types'
 import { Data, exec, NonEmpty, IterWrapper, exhaustive } from '../utils'
 
@@ -8,19 +9,50 @@ import { Console } from 'console'
 const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
 
 
-export const AstDecisionPath = Data((...path: (string[] | AstDecisionBranch)[]): AstDecisionPath => {
-	return { type: 'AstDecisionPath' as const, path, test_length: compute_path_test_length(path) }
-})
-export type AstDecisionPath = Readonly<{ type: 'AstDecisionPath', path: (string[] | AstDecisionBranch)[], test_length: number }>
+class _AstDecisionPath {
+	readonly type: 'AstDecisionPath' = 'AstDecisionPath'
+	readonly test_length: number
+	constructor(readonly path: readonly (string[] | AstDecisionBranch)[]) {
+		this.test_length = compute_path_test_length(path)
+	}
 
-export const AstDecisionBranch = Data((...paths: AstDecisionPath[]): AstDecisionBranch => {
-	const is_optional = paths.length === 1
-	const test_length = Math.max(...paths.map(p => p.test_length))
-	return { type: 'AstDecisionBranch' as const, is_optional, paths: paths.slice(), test_length }
-})
-export type AstDecisionBranch = Readonly<{ type: 'AstDecisionBranch', is_optional: boolean, paths: AstDecisionPath[], test_length: number }>
+	to_hash() {
+		const child_string = this.path.map(item => {
+			return Array.isArray(item)
+				? item.join('+')
+				: item.to_hash()
+		}).join(' ')
+		return shorthash(child_string)
+	}
+}
+export function AstDecisionPath(...path: (string[] | AstDecisionBranch)[]) {
+	return new _AstDecisionPath(path)
+}
+export type AstDecisionPath = _AstDecisionPath
+
+class _AstDecisionBranch {
+	readonly type: 'AstDecisionBranch' = 'AstDecisionBranch'
+	readonly is_optional: boolean
+	readonly test_length: number
+	readonly paths: readonly AstDecisionPath[]
+	constructor(paths: AstDecisionPath[]) {
+		this.is_optional = paths.length === 1
+		this.test_length = Math.max(...paths.map(p => p.test_length))
+		this.paths = paths.slice()
+	}
+
+	to_hash() {
+		const child_string = this.paths.map(path => path.to_hash()).join('|')
+		return shorthash(child_string)
+	}
+}
+export function AstDecisionBranch(...paths: AstDecisionBranch[]) {
+	return new _AstDecisionBranch(paths)
+}
+export type AstDecisionBranch = _AstDecisionBranch
+
+
 export type AstDecidable = AstDecisionPath | AstDecisionBranch
-
 export class PathBuilder {
 	private items = [] as (string[] | AstDecisionBranch)[]
 
