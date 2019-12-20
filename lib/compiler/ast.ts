@@ -180,10 +180,10 @@ export class MacroCall extends BaseNode {
 		return [new MacroCall(undefined, this.macro_name, this.args)] as Definition
 	}
 }
-export function macro_call(macro_name: string, ...args: NonLone<Definition>) { return new MacroCall(undefined, macro_name, args) }
-export function many_macro_call(macro_name: string, ...args: NonLone<Definition>) { return new MacroCall(BaseModifier.Many, macro_name, args) }
-export function maybe_macro_call(macro_name: string, ...args: NonLone<Definition>) { return new MacroCall(BaseModifier.Maybe, macro_name, args) }
-export function maybe_many_macro_call(macro_name: string, ...args: NonLone<Definition>) { return new MacroCall(BaseModifier.MaybeMany, macro_name, args) }
+export function macro_call(macro_name: string, ...args: NonEmpty<Definition>) { return new MacroCall(undefined, macro_name, args) }
+export function many_macro_call(macro_name: string, ...args: NonEmpty<Definition>) { return new MacroCall(BaseModifier.Many, macro_name, args) }
+export function maybe_macro_call(macro_name: string, ...args: NonEmpty<Definition>) { return new MacroCall(BaseModifier.Maybe, macro_name, args) }
+export function maybe_many_macro_call(macro_name: string, ...args: NonEmpty<Definition>) { return new MacroCall(BaseModifier.MaybeMany, macro_name, args) }
 export function many_separated(body: Definition, separator: Definition) {
 	return new MacroCall(undefined, 'many_separated', [body, separator])
 }

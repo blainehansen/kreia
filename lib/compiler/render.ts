@@ -261,41 +261,30 @@ function render_node(
 	}
 
 	case 'Var': {
-		if (global_render_context !== undefined && global_render_context.type !== 'counting') {
-			const [arg_scope, arg_definition] = Scope.for_var(scope, node)
+		if (global_render_context !== undefined && global_render_context.type === 'counting') {
+			const maybe_function_name = wrapping_name(node.modifier)
+			if (maybe_function_name === undefined)
+				return create_call(node.arg_name, [])
 
-			// if we aren't in a global_render_context, then encountering a Var makes no sense
-			// and similarly, we do the same thing regladless of which gathering variant we're in
-			// the generate_decidable will do the appropriate thing based on what's happening
-
-			const gathered_arg: RenderContext = {
-				type: 'gathering_arg', current_point: 0,
-				points: new MaxDict<[ts.Identifier, AstDecidable]>((left, right) => {
-					return left[1].test_length > right[1].test_length
-				}).
-			}
-			const rendered_arrow = with_render_context(gathering_arg, () => {
-				return render_definition_arrow(arg_definition, arg_scope, next, parent_other_choices)
-			})
-			if (global_render_context.type !== 'gathering_macro_call')
-				// zuh?
-				throw new Error()
-			global_render_context.rendered_args[node.arg_name] = rendered_arrow
-
-			if (node.modifier !== undefined) {
-				generate_decidable(arg_definition, arg_scope, parent_other_choices, next, node.modifier)
-			}
-
-			return create_call('fake', [])
+			// this Var *must* appear directly inside a macro definition, otherwise it makes no sense
+			// the real one is generated at the MacroCall site that fills in this decidable
+			return create_call(maybe_function_name, [ts.createIdentifier(node.arg_name), generate_fake_decidable()])
 		}
 
-		const maybe_function_name = wrapping_name(node.modifier)
-		if (maybe_function_name === undefined)
-			return create_call(node.arg_name, [])
+		if (global_render_context === undefined || global_render_context.type !== 'gathering_macro_call')
+			throw new Error("tried to render a Var while not in a counting or gathering_macro_call RenderContext")
 
-		// this Var *must* appear directly inside a macro definition, otherwise it makes no sense
-		// the real one is generated at the MacroCall site that fills in this decidable
-		return create_call(maybe_function_name, [ts.createIdentifier(node.arg_name), generate_fake_decidable()])
+		// this arg_scope now contains the necessary information to capture this Var's arrow
+		const [arg_scope, arg_definition] = Scope.for_var(scope, node)
+
+		const rendered_arrow = render_definition_arrow(arg_definition, arg_scope, next, parent_other_choices)
+		scope.render_context.rendered_args[node.arg_name] = rendered_arrow
+
+		if (node.modifier !== undefined) {
+			generate_decidable(arg_definition, arg_scope, parent_other_choices, next, node.modifier)
+		}
+
+		return create_call('fake', [])
 	}
 
 	// these two are the simplest

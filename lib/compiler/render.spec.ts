@@ -6,6 +6,7 @@ import {
 	Definition, Scope, ScopeStack, Node,
 	TokenDef, VirtualLexerUsage, Rule, Macro, Arg,
 	consume, maybe, maybe_many, maybe_consume, maybe_many_consume, many_consume, or, many, _var, many_separated,
+	macro_call,
 } from './ast'
 import { render_rule, render_grammar } from './render'
 import { print_node } from './render_codegen'
@@ -151,3 +152,39 @@ describe('many_separated case', () => it('works', () => {
 		]
 	`))
 }))
+
+
+describe('macro in macro', () => it('works', () => {
+	const { rendered_decidables, rendered_rules, rendered_macros } = render_grammar([
+		new TokenDef('space', 'space'),
+
+		new Macro('many_separated', [new Arg('body'), new Arg('separator')], [
+			_var('body'),
+			maybe_many(
+				_var('separator'),
+				_var('body'),
+			),
+		]),
+
+		new Macro('space_separated', [new Arg('body')], [
+			macro_call('many_separated',
+				[_var('body')],
+				[consume('space')],
+			),
+		]),
+	])
+
+	b(expect(rendered_rules[1])).eql(boil_string(`
+		function space_separated<BODY extends ParseArg>(body: BODY, _d1: Decidable) {
+			many_separated(
+				() => { body() },
+				() => { consume(tok.space) },
+				_d1
+			)
+		}
+	`))
+}))
+
+// here we see a situation where who *receives* the decidable is different that who *determines* the decidable
+// determination is by the "counting", or the definition
+// reception is for the macro call
