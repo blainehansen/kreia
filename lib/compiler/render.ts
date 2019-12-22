@@ -61,6 +61,39 @@ function wrap_function_name(function_name: string, modifier: Modifier) {
 // 	return result
 // }
 
+type Determiner =
+	// the decidable should simply be created
+	| undefined
+	// we're in a definition with Vars, so we need to pull from the caller
+	// which means for now we just produce a fake decidable
+	| { type: 'counting_for_macro_definition', count: number }
+	// we need to maximize the length at each point
+	| { type: 'maximizing_for_var_arrow', current_point: number, points: MaxDict<[ts.Identifier, AstDecidable]> }
+
+type Receiver =
+	// the currently rendered definition should simply receive things
+	// this is used for normal rule rendering *and for Var arrow rendering*
+	// the Var simply uses it's arrow as the capture
+	| undefined
+	// we're rendering for a macro call, and all the decidables we create need to be captured
+	// this is because we're going to throw out the actual rendered definition itself
+	| {
+		type: 'capturing_for_macro_call',
+		body_decidables: ts.Identifier[],
+		rendered_args: DefaultDict<{
+			arrow: ts.ArrowFunction | undefined,
+			current_point: number,
+			points: MaxDict<[ts.Identifier, AstDecidable]>,
+		}>,
+	}
+
+// there are two valid ways to encounter a Var:
+// - while in a counting_for_macro_definition, in which we simply generate_fake_decidable if we need to and move on
+// - while in a capturing_for_macro_call
+// in the second case, we pull from the capturing_for_macro_call dictionary to populate the maximizing_for_var_arrow Determiner
+// we also set the Receiver to undefined so that the arrow simply captures
+// then the Var does the work manually of mutating the capturing_for_macro_call Receiver after it's rendered itself
+
 let global_decidables = {} as Dict<ts.CallExpression>
 function generate_decidable(
 	main_definition: Definition, main_scope: ScopeStack,
