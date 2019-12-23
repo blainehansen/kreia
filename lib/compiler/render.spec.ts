@@ -117,39 +117,39 @@ describe('many_separated case', () => it('works', () => {
 		])
 	])
 
-	// expect(rendered_rules.length).eql(1)
-	// b(rendered_rules[0]).eql(boil_string(`
-	// 	export function a() {
-	// 		many_separated(() => {
-	// 			many_separated(() => {
-	// 				consume(tok.num)
-	// 			}, () => {
-	// 				consume(tok.space, tok.bar, tok.space)
-	// 			}, _1)
-	// 		}, () => {
-	// 			consume(tok.space)
-	// 		}, _0)
-	// 	}
-	// `))
+	expect(rendered_rules.length).eql(1)
+	b(rendered_rules[0]).eql(boil_string(`
+		export function a() {
+			many_separated(() => {
+				many_separated(() => {
+					consume(tok.num)
+				}, () => {
+					consume(tok.space, tok.bar, tok.space)
+				}, _Z17XUHM)
+			}, () => {
+				consume(tok.space)
+			}, _7U1Cw)
+		}
+	`))
 
-	// expect(rendered_macros.length).eql(1)
-	// b(rendered_macros[0]).eql(boil_string(`
-	// 	function many_separated<BODY extends ParseArg, SEPARATOR extends ParseArg>(
-	// 		body: BODY, separator: SEPARATOR, _d1: Decidable
-	// 	) {
-	// 		body()
-	// 		maybe_many(() => {
-	// 			separator()
-	// 			body()
-	// 		}, _d1)
-	// 	}
-	// `))
+	expect(rendered_macros.length).eql(1)
+	b(rendered_macros[0]).eql(boil_string(`
+		function many_separated<BODY extends ParseArg, SEPARATOR extends ParseArg>(
+			body: BODY, separator: SEPARATOR, _d1: Decidable
+		) {
+			body()
+			maybe_many(() => {
+				separator()
+				body()
+			}, _d1)
+		}
+	`))
 
 	b(rendered_decidables).eql(boil_string(`
-		const [_0, _1] = [
-			path([tok.space, tok.bar]),
-			path([tok.space])
-		]
+		const { _Z17XUHM, _7U1Cw } = {
+			_Z17XUHM: path([tok.space, tok.bar]),
+			_7U1Cw: path([tok.space])
+		}
 	`))
 }))
 
@@ -174,7 +174,7 @@ describe('macro in macro', () => it('works', () => {
 		]),
 	])
 
-	b(expect(rendered_rules[1])).eql(boil_string(`
+	b(rendered_macros[1]).eql(boil_string(`
 		function space_separated<BODY extends ParseArg>(body: BODY, _d1: Decidable) {
 			many_separated(
 				() => { body() },
@@ -183,6 +183,16 @@ describe('macro in macro', () => it('works', () => {
 			)
 		}
 	`))
+
+	// b(rendered_rules[1]).eql(boil_string(`
+	// 	function space_separated<BODY extends ParseArg>(body: BODY, _d1: Decidable) {
+	// 		many_separated(
+	// 			() => { body() },
+	// 			() => { consume(tok.space) },
+	// 			_d1
+	// 		)
+	// 	}
+	// `))
 }))
 
 // here we see a situation where who *receives* the decidable is different that who *determines* the decidable

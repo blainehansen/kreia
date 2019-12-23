@@ -16,7 +16,7 @@ class _AstDecisionPath {
 		this.test_length = compute_path_test_length(path)
 	}
 
-	to_hash() {
+	to_hash(): string {
 		const child_string = this.path.map(item => {
 			return Array.isArray(item)
 				? item.join('+')
@@ -41,12 +41,12 @@ class _AstDecisionBranch {
 		this.paths = paths.slice()
 	}
 
-	to_hash() {
+	to_hash(): string {
 		const child_string = this.paths.map(path => path.to_hash()).join('|')
 		return shorthash(child_string)
 	}
 }
-export function AstDecisionBranch(...paths: AstDecisionBranch[]) {
+export function AstDecisionBranch(...paths: AstDecisionPath[]) {
 	return new _AstDecisionBranch(paths)
 }
 export type AstDecisionBranch = _AstDecisionBranch

@@ -1,6 +1,7 @@
 import * as util from 'util'
-import { Result, Ok, Err, Maybe, Some, None } from '@ts-std/monads'
+import { Dict } from '@ts-std/types'
 import { OrderedDict } from '@ts-std/collections'
+import { Result, Ok, Err, Maybe, Some, None } from '@ts-std/monads'
 
 export function debug(obj: any, depth = null as number | null) {
 	return util.inspect(obj, { depth, colors: true })

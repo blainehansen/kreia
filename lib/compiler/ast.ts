@@ -245,9 +245,6 @@ export class TokenDef {
 	readonly type: 'TokenDef' = 'TokenDef'
 	constructor(readonly name: string, readonly def: TokenSpec) {}
 }
-// export function TokenDef(name: string, def: TokenSpec) {
-// 	return new TokenDef(name, def)
-// }
 
 export class Rule {
 	readonly type: 'Rule' = 'Rule'
@@ -266,9 +263,6 @@ export class Rule {
 		this.ordered_locking_args = locking_args || []
 	}
 }
-// export function Rule(name: string, definition: Definition, locking_args?: LockingArg[]) {
-// 	return new Rule(name, definition, locking_args)
-// }
 
 export class Macro {
 	readonly type: 'Macro' = 'Macro'
@@ -288,9 +282,6 @@ export class Macro {
 		this.ordered_locking_args = locking_args || []
 	}
 }
-// export function Macro(name: string, args: NonEmpty<Arg>, definition: Definition, locking_args?: LockingArg[]) {
-// 	return new Macro(name, args, definition, locking_args)
-// }
 
 export class VirtualLexerUsage {
 	readonly type: 'VirtualLexerUsage' = 'VirtualLexerUsage'
@@ -301,9 +292,6 @@ export class VirtualLexerUsage {
 		readonly exposed_tokens: Dict<true>,
 	) {}
 }
-// export function VirtualLexerUsage(virtual_lexer_name: string, path: string, args: TokenSpec[], exposed_tokens: Dict<true>) {
-// 	return new VirtualLexerUsage(virtual_lexer_name, path, args, exposed_tokens)
-// }
 
 export type GrammarItem =
 	| TokenDef
@@ -362,3 +350,69 @@ export namespace Registry {
 		registered_virtual_lexers = virtual_lexers.unique_index_by('virtual_lexer_name').unwrap()
 	}
 }
+
+
+export type Scope<P = {}> = Readonly<{ locking_args: Dict<LockingArg>, args: Dict<Definition> }> & P
+
+export function Scope<P = {}>(
+	locking_args: Dict<LockingArg> | undefined,
+	args: Dict<Definition> | undefined,
+	payload?: P,
+): Scope {
+	return { locking_args: locking_args || {}, args: args || {}, ...(payload || {} as P) }
+}
+export type ScopeStack<P = {}> = { current: Scope<P>, previous: Scope<P>[] }
+export namespace Scope {
+	export function for_rule<P = {}>(rule: Rule, payload?: P): ScopeStack<P> {
+		return { current: Scope(rule.locking_args, undefined, payload) as Scope<P>, previous: [] }
+	}
+	export function for_macro<P = {}>(macro: Macro, payload?: P): ScopeStack<P> {
+		return { current: Scope(macro.locking_args, undefined, payload) as Scope<P>, previous: [] }
+	}
+	export function for_macro_call<P = {}>(
+		{ current, previous }: ScopeStack<P>,
+		macro: Macro,
+		call: MacroCall,
+		payload?: P,
+	): ScopeStack<P> {
+		const args = zip_args(macro, call).unwrap()
+		return {
+			current: Scope(macro.locking_args, args, payload) as Scope<P>,
+			previous: [...previous, current],
+		}
+	}
+	export function for_var<P = {}>(
+		{ current, previous }: ScopeStack<P>,
+		var_node: Var,
+		payload?: P,
+	): [Definition, ScopeStack<P>] {
+		return t(
+			Maybe.from_nillable(current.args[var_node.arg_name]).unwrap(),
+			{
+				current: { ...previous.maybe_get(-1).unwrap(), ...(payload || {} as P) },
+				previous: previous.slice(0, previous.length - 1),
+			},
+		)
+	}
+	export function for_locking_var<P = {}>(
+		{ current }: ScopeStack<P>,
+		locking_var: LockingVar,
+	): string {
+		return Maybe.from_nillable(current.locking_args[locking_var.locking_arg_name]).unwrap().token_name
+	}
+
+	export function zip_definitions<L extends Definition[], P = {}>(
+		definitions: L, scope: ScopeStack<P>,
+	): TForL<[Definition, ScopeStack<P>], L> {
+		return definitions.map(d => t(d, scope)) as TForL<[Definition, ScopeStack<P>], L>
+	}
+	export function zip_nodes<L extends Node[], P = {}>(
+		nodes: L, scope: ScopeStack<P>,
+	): TForL<[Node, ScopeStack<P>], L> {
+		return nodes.map(node => t(node, scope)) as TForL<[Node, ScopeStack<P>], L>
+	}
+}
+
+
+type TForL<T, L extends any[]> = { [K in keyof L]: T }
+

@@ -5,7 +5,7 @@ import { Lexer, LexerState, VirtualLexers, TokenDefinition, Token, match_and_tri
 export interface HasTestLength {
 	readonly test_length: number
 }
-export function compute_path_test_length<T>(path: (T[] | HasTestLength)[]) {
+export function compute_path_test_length<T>(path: readonly (T[] | HasTestLength)[]) {
 	return path.map(
 		item => Array.isArray(item)
 			? item.length

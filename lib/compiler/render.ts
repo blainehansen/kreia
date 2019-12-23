@@ -1,13 +1,13 @@
 import ts = require('typescript')
+import { Maybe } from '@ts-std/monads'
 import { Dict, tuple as t } from '@ts-std/types'
-import { UniqueDict } from '@ts-std/collections'
+import { UniqueDict, DefaultDict } from '@ts-std/collections'
 import { MaxDict, NonEmpty, exhaustive, array_of, exec } from '../utils'
 
 import * as ast from './ast'
 import {
 	BaseModifier, Modifier, Scope as AstScope, ScopeStack as AstScopeStack, Node, Definition, Registry,
-	TokenDef, VirtualLexerUsage, Rule, Macro, Grammar,
-	LockingArg,
+	TokenDef, VirtualLexerUsage, Rule, Macro, Grammar, LockingArg,
 } from './ast'
 import { TokenSpec, BaseTokenSpec } from '../runtime/lexer'
 import { AstDecidable, compute_decidable } from './decision_compute'
@@ -52,14 +52,20 @@ function wrap_function_name(function_name: string, modifier: Modifier) {
 }
 
 
-// let global_render_context = undefined as undefined | RenderContext
-// function with_render_context<T>(render_context: RenderContext, fn: () => T): T {
-// 	const saved = global_render_context
-// 	global_render_context = render_context
-// 	const result = fn()
-// 	global_render_context = saved
-// 	return result
-// }
+function points_initializer(left: AstDecidable, right: AstDecidable) {
+	return left.test_length > right.test_length
+}
+
+function rendered_args_initializer() {
+	return {
+		arrow: undefined, current_point: 0,
+		points: new MaxDict(points_initializer),
+	}
+}
+
+type RenderContext = { determiner: Determiner, receiver: Receiver }
+type Scope = AstScope<RenderContext>
+type ScopeStack = { current: Scope, previous: Scope[] }
 
 type Determiner =
 	// the decidable should simply be created
@@ -68,23 +74,19 @@ type Determiner =
 	// which means for now we just produce a fake decidable
 	| { type: 'counting_for_macro_definition', count: number }
 	// we need to maximize the length at each point
-	| { type: 'maximizing_for_var_arrow', current_point: number, points: MaxDict<[ts.Identifier, AstDecidable]> }
+	| { type: 'maximizing_for_var_arrow', current_point: number, points: MaxDict<AstDecidable> }
 
 type Receiver =
 	// the currently rendered definition should simply receive things
 	// this is used for normal rule rendering *and for Var arrow rendering*
-	// the Var simply uses it's arrow as the capture
+	// the Var simply uses its arrow as the capture
 	| undefined
 	// we're rendering for a macro call, and all the decidables we create need to be captured
 	// this is because we're going to throw out the actual rendered definition itself
 	| {
-		type: 'capturing_for_macro_call',
 		body_decidables: ts.Identifier[],
-		rendered_args: DefaultDict<{
-			arrow: ts.ArrowFunction | undefined,
-			current_point: number,
-			points: MaxDict<[ts.Identifier, AstDecidable]>,
-		}>,
+		// rendered_args: DefaultDict<{ arrow: ts.ArrowFunction | undefined, points: MaxDict<AstDecidable> }>,
+		rendered_args: DefaultDict<{ arrow: ts.Expression | undefined, points: MaxDict<AstDecidable> }>,
 	}
 
 // there are two valid ways to encounter a Var:
@@ -101,42 +103,37 @@ function generate_decidable(
 	next: [Node, ScopeStack][],
 	calling_modifier: Modifier,
 ) {
-	if (global_render_context !== undefined && global_render_context.type === 'counting')
-		return generate_fake_decidable()
+	const current_scope = main_scope.current
+	if (current_scope.determiner !== undefined && current_scope.determiner.type === 'counting_for_macro_definition')
+		return generate_fake_decidable(current_scope.determiner)
 
-	// console.log('main_definition', main_definition)
-	// console.log('known_against.map(a => a[0])', known_against.map(a => a[0]))
-	// console.log('next.map(a => a[0])', next.map(a => a[0]))
-	// console.log('calling_modifier', calling_modifier)
 	const should_gather = calling_modifier !== undefined
-	// console.log('should_gather', should_gather)
-	const decidable = compute_decidable(t(main_definition, main_scope), known_against, next, should_gather)
-	const rendered_decidable = render_decidable(decidable)
+	const here_decidable = compute_decidable(t(main_definition, main_scope), known_against, next, should_gather)
+
+	// console.log('here_decidable', here_decidable)
+	// console.log('current_scope.determiner', current_scope.determiner)
+	const decidable = current_scope.determiner !== undefined && current_scope.determiner.type === 'maximizing_for_var_arrow'
+		? current_scope.determiner.points.set('' + (++current_scope.determiner.current_point), here_decidable)
+		: here_decidable
+	// console.log('decidable', decidable)
+	// console.log()
 
 	const decidable_name = `_${decidable.to_hash()}`
 	const decidable_ident = ts.createIdentifier(decidable_name)
+	const rendered_decidable = render_decidable(decidable)
 	global_decidables[decidable_name] = rendered_decidable
 
-	if (global_render_context !== undefined && global_render_context.type === 'gathering_macro_call')
-		global_render_context.decidables.push(decidable_ident)
-
-	if (global_render_context !== undefined && global_render_context.type === 'gathering_arg') {
-		const current_point = global_render_context.current_point
-		global_render_context.current_point++
-
-		const [final_ident, ] = global_render_context.points.set('' + current_point, t(decidable_ident, decidable))
-		return final_ident
-	}
+	if (current_scope.receiver !== undefined)
+		current_scope.receiver.body_decidables.push(decidable_ident)
 
 	return decidable_ident
 }
-function generate_fake_decidable() {
-	if (!(global_render_context !== undefined && global_render_context.type === 'counting'))
-		throw new Error("tried to generate_fake_decidable while not in a 'counting' global_render_context")
 
-	global_render_context.count++
-	return ts.createIdentifier(`_d${global_render_context.count}`)
+function generate_fake_decidable(context: { type: 'counting_for_macro_definition', count: number }) {
+	context.count++
+	return ts.createIdentifier(`_d${context.count}`)
 }
+
 function render_decidable(decidable: AstDecidable): ts.CallExpression {
 	switch (decidable.type) {
 	case 'AstDecisionPath':
@@ -169,7 +166,7 @@ function render_definition(
 	const rendered = []
 	for (const [index, node] of nodes.entries()) {
 		// console.log('index', index)
-		const next = [...Scope.zip_nodes(nodes.slice(index + 1), scope), ...parent_next]
+		const next = [...AstScope.zip_nodes(nodes.slice(index + 1), scope), ...parent_next]
 		// console.log('next', next)
 		// console.log()
 		rendered.push(create_statement(render_node(node, scope, next, parent_other_choices)))
@@ -219,7 +216,7 @@ function render_node(
 		for (const [choice_index, choice] of node.choices.entries()) {
 			const choice = node.choices[choice_index]
 			const other_choices = [
-				...Scope.zip_definitions(node.choices.slice(choice_index + 1), scope),
+				...AstScope.zip_definitions(node.choices.slice(choice_index + 1), scope),
 				...parent_other_choices,
 			]
 
@@ -257,11 +254,10 @@ function render_node(
 
 	case 'Subrule': {
 		const rule = Registry.get_rule(node.rule_name).unwrap()
-		const rule_scope = Scope.for_rule(rule)
-		// const gathered: RenderContext = { type: 'gathering', decidables: [] }
-		// with_render_context(gathered, () => {
-		// 	render_definition(rule.definition, rule_scope, next)
-		// })
+		const rule_scope = AstScope.for_rule(rule, {
+			determiner: scope.current.determiner,
+			receiver: scope.current.receiver,
+		} as RenderContext)
 
 		const maybe_function_name = wrapping_name(node.modifier)
 		if (maybe_function_name === undefined)
@@ -275,15 +271,20 @@ function render_node(
 
 	case 'MacroCall': {
 		const macro = Registry.get_macro(node.macro_name).unwrap()
-		const macro_scope = Scope.for_macro_call(scope, macro, node)
 
-		const gathered: RenderContext = { type: 'gathering_macro_call', body_decidables: [], rendered_args: {} }
-		with_render_context(gathered, () => {
-			render_definition(macro.definition, macro_scope, next, parent_other_choices)
-		})
+		const receiver = { body_decidables: [], rendered_args: new DefaultDict(rendered_args_initializer) }
+		const macro_scope = AstScope.for_macro_call(scope, macro, node, {
+			determiner: scope.current.determiner,
+			// determiner: undefined,
+			receiver,
+		} as RenderContext)
+		// console.log('macro_scope', macro_scope)
 
-		const rendered_args = macro.args.map(arg => Maybe.from_nillable(gathered.rendered_args[arg.name]).unwrap())
-		const macro_args = [...rendered_args, ...gathered.body_decidables]
+		render_definition(macro.definition, macro_scope, next, parent_other_choices)
+
+		// console.log('receiver', receiver)
+		const rendered_args = macro.args.map(arg => Maybe.from_nillable<ts.Expression>(receiver.rendered_args.get(arg.name).arrow).unwrap())
+		const macro_args = [...rendered_args, ...receiver.body_decidables]
 
 		const maybe_function_name = wrapping_name(node.modifier)
 		if (maybe_function_name === undefined)
@@ -294,34 +295,60 @@ function render_node(
 	}
 
 	case 'Var': {
-		if (global_render_context !== undefined && global_render_context.type === 'counting') {
-			const maybe_function_name = wrapping_name(node.modifier)
-			if (maybe_function_name === undefined)
-				return create_call(node.arg_name, [])
+		if (scope.current.determiner !== undefined && scope.current.determiner.type === 'counting_for_macro_definition') {
+			// if (scope.previous.length !== 0)
+			// 	// just do the normal thing?
 
-			// this Var *must* appear directly inside a macro definition, otherwise it makes no sense
-			// the real one is generated at the MacroCall site that fills in this decidable
-			return create_call(maybe_function_name, [ts.createIdentifier(node.arg_name), generate_fake_decidable()])
+			const maybe_function_name = wrapping_name(node.modifier)
+
+			const final_call = maybe_function_name === undefined
+				? create_call(node.arg_name, [])
+				: create_call(maybe_function_name, [ts.createIdentifier(node.arg_name), generate_fake_decidable(scope.current.determiner)])
+
+			if (scope.current.receiver !== undefined) {
+				const rendered_arg = maybe_function_name === undefined
+					? ts.createIdentifier(node.arg_name)
+					: ts.createArrowFunction(
+						undefined, undefined, [], undefined,
+						ts.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+						ts.createBlock([ts.createExpressionStatement(final_call)], true),
+					)
+
+				scope.current.receiver.rendered_args.get(node.arg_name).arrow = rendered_arg
+			}
+
+			return final_call
 		}
 
-		if (global_render_context === undefined || global_render_context.type !== 'gathering_macro_call')
-			throw new Error("tried to render a Var while not in a counting or gathering_macro_call RenderContext")
+		if (scope.current.receiver === undefined)
+			throw new Error("tried to render a Var while not in a macro definition or macro call")
 
-		// this arg_scope now contains the necessary information to capture this Var's arrow
-		const [arg_scope, arg_definition] = Scope.for_var(scope, node)
+		// console.log('scope.current.receiver', scope.current.receiver)
+		const [arg_definition, arg_scope] = AstScope.for_var(scope, node, {
+			determiner: {
+				type: 'maximizing_for_var_arrow' as const,
+				current_point: 0,
+				points: scope.current.receiver.rendered_args.get(node.arg_name).points,
+			},
+			receiver: undefined,
+			// receiver: scope.current.receiver,
+		} as RenderContext)
 
+		// console.log('arg_scope', arg_scope)
 		const rendered_arrow = render_definition_arrow(arg_definition, arg_scope, next, parent_other_choices)
-		scope.render_context.rendered_args[node.arg_name] = rendered_arrow
+		scope.current.receiver.rendered_args.get(node.arg_name).arrow = rendered_arrow
 
 		if (node.modifier !== undefined) {
+			const [arg_definition, arg_scope] = AstScope.for_var(scope, node, {
+				// determiner: scope.current.determiner,
+				receiver: scope.current.receiver,
+			} as RenderContext)
 			generate_decidable(arg_definition, arg_scope, parent_other_choices, next, node.modifier)
 		}
 
 		return create_call('fake', [])
 	}
 
-	// these two are the simplest
-	// they never need a decidable
 	case 'Consume': {
 		const function_name = wrapping_name(node.modifier) || 'consume'
 		return create_call(function_name, render_token_tuple(node.token_names))
@@ -335,7 +362,7 @@ function render_node(
 
 
 export function render_grammar(grammar: Grammar) {
-	global_decidables = []
+	global_decidables = {}
 	const token_defs = new UniqueDict<TokenDef>()
 	const virtual_lexers = new UniqueDict<VirtualLexerUsage>()
 	const rules = new UniqueDict<Rule>()
@@ -396,17 +423,20 @@ export function render_grammar(grammar: Grammar) {
 	const rendered_macros = macros.values().filter_map(render_macro)
 	const rendered_rules = rules.values().map(render_rule)
 
+	const decidable_entries = Object.entries(global_decidables)
 	const rendered_decidables = ts.createVariableStatement(
 		undefined, ts.createVariableDeclarationList(
 		[ts.createVariableDeclaration(
-			ts.createArrayBindingPattern(array_of(global_decidables.length).map((_, index) => ts.createBindingElement(
-				undefined, undefined,
-				ts.createIdentifier(`_${index}`), undefined,
-			))),
+			ts.createObjectBindingPattern(decidable_entries.map(([name, _]) =>
+				ts.createBindingElement(undefined, undefined, ts.createIdentifier(name), undefined)
+			)),
 			undefined,
-			ts.createArrayLiteral(global_decidables, false),
-		)], ts.NodeFlags.Const),
-	)
+			ts.createObjectLiteral(decidable_entries.map(([name, decidable]) =>
+				ts.createPropertyAssignment(ts.createIdentifier(name), decidable),
+			), false),
+		)],
+		ts.NodeFlags.Const,
+	))
 
 	const destructured_parser_names = [
 		'tok', 'reset', 'exit', 'arg', 'maybe', 'consume', 'many', 'maybe_many',
@@ -460,15 +490,8 @@ export function render_grammar(grammar: Grammar) {
 export function render_rule(rule: Rule) {
 	const lockers = rule.ordered_locking_args.map(render_locking_arg)
 
-	if (global_render_context !== undefined)
-		throw new Error('global_render_context should be undefined')
-
-	const scope = Scope.for_rule(rule)
+	const scope = AstScope.for_rule(rule, { determiner: undefined, receiver: undefined })
 	const rendered_definition = render_definition(rule.definition, scope, [], [])
-	// const render_context: RenderContext = { type: 'counting', count: 0 }
-	// const rendered_definition = with_render_context(render_context, () => {
-	// 	return render_definition(rule.definition, scope, [])
-	// })
 
 	return ts.createFunctionDeclaration(
 		undefined, [ts.createModifier(ts.SyntaxKind.ExportKeyword)], undefined,
@@ -506,11 +529,9 @@ export function render_macro(macro: Macro) {
 	const lockers = macro.ordered_locking_args.map(render_locking_arg)
 	const args = macro.args
 
-	const render_context: RenderContext = { type: 'counting', count: 0 }
-	const macro_scope = Scope.for_macro(macro)
-	const rendered_definition = with_render_context(render_context, () => {
-		return render_definition(macro.definition, macro_scope, [], [])
-	})
+	const determiner = { type: 'counting_for_macro_definition' as const, count: 0 }
+	const macro_definition_scope = AstScope.for_macro(macro, { determiner, receiver: undefined })
+	const rendered_definition = render_definition(macro.definition, macro_definition_scope, [], [])
 
 	return ts.createFunctionDeclaration(
 		undefined, undefined, undefined,
@@ -527,7 +548,7 @@ export function render_macro(macro: Macro) {
 				ts.createIdentifier(arg.name), undefined,
 				ts.createTypeReferenceNode(ts.createIdentifier(arg.name.toUpperCase()), undefined), undefined,
 			)),
-			...array_of(render_context.count).map((_, index) => ts.createParameter(
+			...array_of(determiner.count).map((_, index) => ts.createParameter(
 				undefined, undefined, undefined,
 				ts.createIdentifier(`_d${index + 1}`), undefined,
 				ts.createTypeReferenceNode(ts.createIdentifier('Decidable'), undefined), undefined,
