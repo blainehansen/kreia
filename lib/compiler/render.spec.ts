@@ -107,6 +107,16 @@ describe('many_separated case', () => it('works', () => {
 		]),
 
 		new Rule('a', [
+			// when we start, we have an empty scope
+			// then we hit this first macro_call, and push to this:
+			// { current: { args: { body: [nested], separator: [consume] }, receiver_one }, previous: [empty] }
+
+			// then we're going along and hit the body var, and should pop to this:
+			// { current: { args: {}, determiner: maximizing_body }, previous: [] }
+
+			// then as we're maximizing_body, we hit the second macro_call:
+			// { current: { args: { body: [consume], separator: [consume] }, receiver_two }, previous: [^] }
+			// we hit the maybe_many and generate the decidable that's gathered by receiver_two
 			many_separated(
 				[many_separated(
 					[consume('num')],
@@ -166,6 +176,20 @@ describe('macro in macro', () => it('works', () => {
 			),
 		]),
 
+
+		// but perhaps this would be more appropriate?
+		// { current: { args: { body: [] }, determiner: { count: 0 } }, previous: [] }
+
+
+		// when we enter, we have this scope:
+		// { current: { args: {}, determiner: { count: 0 } }, previous: [] }
+
+		// then we hit the macro_call, and push to this:
+		// { current: { args: { body: [var], separator: [consume] }, determiner: { count: 0 } }, previous: [^above] }
+
+		// as we're going along the many_separated definition, we first encounter the body var, and pop to this:
+		// { current: { args: {}, determiner: { count: 0 } }, previous: [] }
+		// that makes perfect sense, so it would also make sense not to push the determiner through both stages
 		new Macro('space_separated', [new Arg('body')], [
 			macro_call('many_separated',
 				[_var('body')],
