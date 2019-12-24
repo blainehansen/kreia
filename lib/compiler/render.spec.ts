@@ -48,7 +48,7 @@ describe('render_rule', () => it('works', () => {
 			maybe_many(() => {
 				consume(tok.space, tok.bar, tok.space, tok.num)
 				maybe_many(tok.space, tok.num)
-			}, _0)
+			}, _7U1Cw)
 		}
 	`))
 }))
@@ -77,18 +77,18 @@ describe('basic gathering in render_grammar', () => it('works', () => {
 			many(() => {
 				consume(tok.A)
 				many(tok.B, tok.A)
-			}, _0)
+			}, _h9W)
 			many(() => {
 				consume(tok.A)
 				many(tok.C, tok.A)
-			}, _1)
+			}, _14)
 		}
 	`))
 	b(rendered_decidables).eql(boil_string(`
-		const [_0, _1] = [
-			path([tok.A, tok.B]),
-			path([tok.A])
-		]
+		const { _h9W, _14 } = {
+			_h9W: path([tok.A, tok.B]),
+			_14: path([tok.A])
+		}
 	`))
 }))
 
@@ -107,16 +107,6 @@ describe('many_separated case', () => it('works', () => {
 		]),
 
 		new Rule('a', [
-			// when we start, we have an empty scope
-			// then we hit this first macro_call, and push to this:
-			// { current: { args: { body: [nested], separator: [consume] }, receiver_one }, previous: [empty] }
-
-			// then we're going along and hit the body var, and should pop to this:
-			// { current: { args: {}, determiner: maximizing_body }, previous: [] }
-
-			// then as we're maximizing_body, we hit the second macro_call:
-			// { current: { args: { body: [consume], separator: [consume] }, receiver_two }, previous: [^] }
-			// we hit the maybe_many and generate the decidable that's gathered by receiver_two
 			many_separated(
 				[many_separated(
 					[consume('num')],
@@ -176,20 +166,6 @@ describe('macro in macro', () => it('works', () => {
 			),
 		]),
 
-
-		// but perhaps this would be more appropriate?
-		// { current: { args: { body: [] }, determiner: { count: 0 } }, previous: [] }
-
-
-		// when we enter, we have this scope:
-		// { current: { args: {}, determiner: { count: 0 } }, previous: [] }
-
-		// then we hit the macro_call, and push to this:
-		// { current: { args: { body: [var], separator: [consume] }, determiner: { count: 0 } }, previous: [^above] }
-
-		// as we're going along the many_separated definition, we first encounter the body var, and pop to this:
-		// { current: { args: {}, determiner: { count: 0 } }, previous: [] }
-		// that makes perfect sense, so it would also make sense not to push the determiner through both stages
 		new Macro('space_separated', [new Arg('body')], [
 			macro_call('many_separated',
 				[_var('body')],
@@ -207,18 +183,4 @@ describe('macro in macro', () => it('works', () => {
 			)
 		}
 	`))
-
-	// b(rendered_rules[1]).eql(boil_string(`
-	// 	function space_separated<BODY extends ParseArg>(body: BODY, _d1: Decidable) {
-	// 		many_separated(
-	// 			() => { body() },
-	// 			() => { consume(tok.space) },
-	// 			_d1
-	// 		)
-	// 	}
-	// `))
 }))
-
-// here we see a situation where who *receives* the decidable is different that who *determines* the decidable
-// determination is by the "counting", or the definition
-// reception is for the macro call

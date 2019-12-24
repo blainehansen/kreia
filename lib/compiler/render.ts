@@ -5,6 +5,7 @@ import { UniqueDict, DefaultDict } from '@ts-std/collections'
 import { MaxDict, NonEmpty, exhaustive, array_of, exec } from '../utils'
 
 import * as ast from './ast'
+import { validate_references, check_left_recursive } from './ast_validate'
 import {
 	BaseModifier, Modifier, Scope as AstScope, ScopeStack as AstScopeStack, Node, Definition, Registry,
 	TokenDef, VirtualLexerUsage, Rule, Macro, Grammar, LockingArg,
@@ -377,17 +378,16 @@ export function render_grammar(grammar: Grammar) {
 	Registry.set_registered_rules(rules.into_dict())
 	Registry.set_registered_macros(macros.into_dict())
 
-	// log(rules.values().map(r => r.definition))
-	// const rules_macros: (Rule | Macro)[] = [...rules.values(), ...macros.values()]
-	// const validation_errors = rules_macros
-	// 	.flat_map(validate_references)
-	// if (validation_errors.length > 0)
-	// 	throw new Error(validation_errors.join('\n\n'))
+	const rules_macros: (Rule | Macro)[] = [...rules.values(), ...macros.values()]
+	const validation_errors = rules_macros
+		.flat_map(validate_references)
+	if (validation_errors.length > 0)
+		throw new Error(validation_errors.join('\n\n'))
 
-	// const left_recursive_rules = rules_macros
-	// 	.filter(check_left_recursive)
-	// if (left_recursive_rules.length > 0)
-	// 	throw new Error(`There are left recursive rules: ${left_recursive_rules.join('\n\n')}`)
+	const left_recursive_rules = rules_macros
+		.filter(check_left_recursive)
+	if (left_recursive_rules.length > 0)
+		throw new Error(`There are left recursive rules: ${left_recursive_rules.join('\n\n')}`)
 
 	const rendered_tokens = token_defs.values().map(render_token_def)
 	const rendered_virtual_lexers = virtual_lexers.values().map(render_virtual_lexer_usage)
