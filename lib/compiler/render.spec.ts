@@ -5,7 +5,7 @@ import { compute_decidable, AstDecisionPath as path, AstDecisionBranch as branch
 import {
 	Definition, Scope, ScopeStack, Node,
 	TokenDef, VirtualLexerUsage, Rule, Macro, Arg,
-	consume, maybe, maybe_many, maybe_consume, maybe_many_consume, many_consume, or, many, _var, many_separated,
+	consume, maybe, maybe_many, maybe_consume, maybe_many_consume, many_consume, or, many, _var, many_var, many_separated,
 	macro_call,
 } from './ast'
 import { render_rule, render_grammar } from './render'
@@ -181,6 +181,83 @@ describe('macro in macro', () => it('works', () => {
 				() => { consume(tok.space) },
 				_d1
 			)
+		}
+	`))
+}))
+
+describe('macros deeply nested', () => it('works', () => {
+	const { rendered_macros } = render_grammar([
+		// new TokenDef('A', 'A'),
+		// new TokenDef('A', 'A'),
+		// new TokenDef('A', 'A'),
+
+		new Macro('one', [new Arg('one_body')], [
+			_var('one_body'),
+		]),
+
+		new Macro('two', [new Arg('two_body')], [
+			macro_call('one', [_var('two_body')]),
+		]),
+
+		new Macro('three', [new Arg('three_body')], [
+			macro_call('two', [_var('three_body')]),
+		]),
+	])
+
+	b(rendered_macros[0]).eql(boil_string(`
+		function one<ONE_BODY extends ParseArg>(one_body: ONE_BODY) {
+			one_body()
+		}
+	`))
+
+	b(rendered_macros[1]).eql(boil_string(`
+		function two<TWO_BODY extends ParseArg>(two_body: TWO_BODY) {
+			one(() => { two_body() })
+		}
+	`))
+
+	b(rendered_macros[2]).eql(boil_string(`
+		function three<THREE_BODY extends ParseArg>(three_body: THREE_BODY) {
+			two(() => { three_body() })
+		}
+	`))
+}))
+
+
+describe('macros deeply nested with decidables', () => it('works', () => {
+	const { rendered_macros } = render_grammar([
+		// new TokenDef('A', 'A'),
+		// new TokenDef('A', 'A'),
+		// new TokenDef('A', 'A'),
+
+		new Macro('one', [new Arg('one_body')], [
+			many_var('one_body'),
+		]),
+
+		new Macro('two', [new Arg('two_body')], [
+			macro_call('one', [_var('two_body')]),
+		]),
+
+		new Macro('three', [new Arg('three_body')], [
+			macro_call('two', [_var('three_body')]),
+		]),
+	])
+
+	b(rendered_macros[0]).eql(boil_string(`
+		function one<ONE_BODY extends ParseArg>(one_body: ONE_BODY, _d1: Decidable) {
+			many(one_body, _d1)
+		}
+	`))
+
+	b(rendered_macros[1]).eql(boil_string(`
+		function two<TWO_BODY extends ParseArg>(two_body: TWO_BODY, _d1: Decidable) {
+			one(() => { two_body() }, _d1)
+		}
+	`))
+
+	b(rendered_macros[2]).eql(boil_string(`
+		function three<THREE_BODY extends ParseArg>(three_body: THREE_BODY, _d1: Decidable) {
+			two(() => { three_body() }, _d1)
 		}
 	`))
 }))

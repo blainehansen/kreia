@@ -94,6 +94,8 @@ export type TokensForDefinitions<L extends TokenDefinition[]> = {
 		: RawToken
 }
 
+// TODO make VirtualLexer a function that can be called, essentially replacing the `use` function
+// that means that a usage in the final generated code will simply be a function call
 export type VirtualLexer<S, T extends Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, A extends any[]> = Readonly<{
 	use(...args: A): T,
 	initialize(): S,

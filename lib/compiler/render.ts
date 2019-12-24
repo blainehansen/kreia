@@ -287,13 +287,15 @@ function render_node(
 
 		if (scope.current.receiving_macro_call !== undefined) {
 			// console.log('scope.current.receiving_macro_call', scope.current.receiving_macro_call)
+			// since the for_var *pops* the scope, we should only provide the things that we must override
+			// and let the parent scope determine the rest
+			// this isn't true with for_rule and for_macro,
+			// since they're pushing and therefore must propagate what they have downward
 			const [arg_definition, arg_scope] = AstScope.for_var(scope, node, {
-				macro_definition_count: scope.current.macro_definition_count,
 				maximizing_var: {
 					current_point: 0,
 					points: scope.current.receiving_macro_call.rendered_args.get(node.arg_name).points,
 				},
-				receiving_macro_call: undefined,
 			} as RenderContext)
 
 			// console.log('arg_scope', arg_scope)
@@ -302,9 +304,7 @@ function render_node(
 
 			if (node.modifier !== undefined) {
 				const [arg_definition, arg_scope] = AstScope.for_var(scope, node, {
-					macro_definition_count: scope.current.macro_definition_count,
-					maximizing_var: scope.current.maximizing_var,
-					receiving_macro_call: undefined,
+					receiving_macro_call: scope.current.receiving_macro_call,
 				} as RenderContext)
 				generate_decidable(arg_definition, arg_scope, parent_other_choices, next, node.modifier)
 			}
@@ -404,7 +404,7 @@ export function render_grammar(grammar: Grammar) {
 			undefined,
 			ts.createObjectLiteral(decidable_entries.map(([name, decidable]) =>
 				ts.createPropertyAssignment(ts.createIdentifier(name), decidable),
-			), false),
+			), true),
 		)],
 		ts.NodeFlags.Const,
 	))

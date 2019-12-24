@@ -1,5 +1,4 @@
 import * as fs from 'fs'
-import { log } from './utils'
 import { tuple as t } from '@ts-std/types'
 
 import { print_grammar } from './render_codegen'
@@ -180,6 +179,7 @@ const KreiaGrammar = [
 	// 	]),
 	// ]),
 
+
 	new Rule('simple_rule_line', [
 		macro_call('many_separated',
 			[macro_call('space_sep', [subrule('rule_atom')])],
@@ -197,6 +197,7 @@ const KreiaGrammar = [
 		),
 		// maybe_subrule('modifier'),
 	]),
+
 
 	// new Rule('modifier', [
 	// 	Or([
