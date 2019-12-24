@@ -1,7 +1,7 @@
 import { Dict, tuple as t } from '@ts-std/types'
 import { Result, Ok, Err, Maybe, Some, None } from '@ts-std/monads'
 
-import { debug, LogError, NonEmpty, NonLone } from '../utils'
+import { debug, NonEmpty, NonLone } from '../utils'
 import { TokenSpec } from '../runtime/lexer'
 
 export enum BaseModifier {
@@ -44,7 +44,7 @@ export type Node =
 	| Paren
 
 
-function zip_args(macro: Macro, call: MacroCall): Result<Dict<Definition>> {
+export function zip_args(macro: Macro, call: MacroCall): Result<Dict<Definition>> {
 	const args = macro.args.slice()
 	const definitions = call.args.slice()
 
@@ -125,18 +125,7 @@ export class Or extends BaseNode {
 		choices: NonLone<Definition>,
 	) {
 		super(modifier)
-		this.choices = Definition.screen_all_optional(choices).match({
-			ok: choices => choices,
-			err: empty_definitions => {
-				throw new LogError([
-					`these choices in an Or node had only optional nodes:\n`,
-					empty_definitions,
-					'',
-					`it doesn't make a lot of sense to have a branch of an Or node be all optional, and this is probably a mistake`,
-					`consider moving this optional item out of the Or node, or making the Or node itself optional`,
-				], 4)
-			}
-		})
+		this.choices = Definition.screen_all_optional(choices).unwrap()
 	}
 
 	purify() {
@@ -232,14 +221,6 @@ export class LockingArg {
 	constructor(readonly name: string, readonly token_name: string) {}
 }
 
-function index_locking_args(input_locking_args: LockingArg[] | undefined):  Dict<LockingArg> {
-	const locking_args = input_locking_args || []
-	return locking_args.unique_index_by('name').match({
-		ok: locking_args => locking_args,
-		err: ([name,]) => { throw new Error(`some locking tokens have the same name: ${name}`) }
-	})
-}
-
 
 export class TokenDef {
 	readonly type: 'TokenDef' = 'TokenDef'
@@ -255,12 +236,12 @@ export class Rule {
 	constructor(
 		readonly name: string,
 		definition: Definition,
-		locking_args?: LockingArg[],
+		locking_args: LockingArg[] = [],
 	) {
 		// this.always_optional = Definition.all_optional(definition)
 		this.definition = Definition.screen_all_optional(t(definition)).unwrap()[0]
-		this.locking_args = index_locking_args(locking_args)
-		this.ordered_locking_args = locking_args || []
+		this.locking_args = locking_args.unique_index_by('name').unwrap()
+		this.ordered_locking_args = locking_args
 	}
 }
 
@@ -268,18 +249,20 @@ export class Macro {
 	readonly type: 'Macro' = 'Macro'
 	// readonly always_optional: boolean
 	readonly definition: Definition
+	readonly args_by_name: Dict<Arg>
 	readonly locking_args: Dict<LockingArg>
 	readonly ordered_locking_args: LockingArg[]
 	constructor(
 		readonly name: string,
 		readonly args: NonEmpty<Arg>,
 		definition: Definition,
-		locking_args?: LockingArg[],
+		locking_args: LockingArg[] = [],
 	) {
 		// this.always_optional = Definition.all_optional(definition)
 		this.definition = Definition.screen_all_optional(t(definition)).unwrap()[0]
-		this.locking_args = index_locking_args(locking_args)
-		this.ordered_locking_args = locking_args || []
+		this.args_by_name = args.unique_index_by('name').unwrap()
+		this.locking_args = locking_args.unique_index_by('name').unwrap()
+		this.ordered_locking_args = locking_args
 	}
 }
 
@@ -366,9 +349,11 @@ export namespace Scope {
 	export function for_rule<P = {}>(rule: Rule, payload?: P): ScopeStack<P> {
 		return { current: Scope(rule.locking_args, undefined, payload) as Scope<P>, previous: [] }
 	}
+
 	export function for_macro<P = {}>(macro: Macro, payload?: P): ScopeStack<P> {
 		return { current: Scope(macro.locking_args, undefined, payload) as Scope<P>, previous: [] }
 	}
+
 	export function for_macro_call<P = {}>(
 		{ current, previous }: ScopeStack<P>,
 		macro: Macro,
@@ -381,6 +366,7 @@ export namespace Scope {
 			previous: [...previous, current],
 		}
 	}
+
 	export function for_var<P = {}>(
 		{ current, previous }: ScopeStack<P>,
 		var_node: Var,
@@ -394,6 +380,23 @@ export namespace Scope {
 			},
 		)
 	}
+	export function try_for_var<P = {}>(
+		{ current, previous }: ScopeStack<P>,
+		var_node: Var,
+		payload?: P,
+	): [Definition, ScopeStack<P>] | undefined {
+		return Maybe.join(
+			Maybe.from_nillable(current.args[var_node.arg_name]),
+			previous.maybe_get(-1),
+		).combine((def, new_current) => t(
+			def,
+			{
+				current: { ...new_current, ...(payload || {} as P) },
+				previous: previous.slice(0, previous.length - 1),
+			}
+		)).to_undef()
+	}
+
 	export function for_locking_var<P = {}>(
 		{ current }: ScopeStack<P>,
 		locking_var: LockingVar,
@@ -406,6 +409,7 @@ export namespace Scope {
 	): TForL<[Definition, ScopeStack<P>], L> {
 		return definitions.map(d => t(d, scope)) as TForL<[Definition, ScopeStack<P>], L>
 	}
+
 	export function zip_nodes<L extends Node[], P = {}>(
 		nodes: L, scope: ScopeStack<P>,
 	): TForL<[Node, ScopeStack<P>], L> {

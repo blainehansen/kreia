@@ -10,7 +10,7 @@
     "dev": "ts-node lib/ast/ast_new.ts",
     "preversion": "npm test",
     "finalize-version": "git push origin master && git push origin master --tags && npm publish",
-    "test": "mocha -r ts-node/register lib/compiler/render.spec.ts",
+    "test": "mocha -r ts-node/register lib/compiler/ast_validate.spec.ts",
     "ts:ast": "ts-creator lib/compiler/_generate_from.ts --use-tabs true --trailing-comma 'all' -o lib/compiler/_generate_to.ts"
   },
   "keywords": [

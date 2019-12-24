@@ -16,13 +16,16 @@ export function log(obj: any, depth = null as number | null) {
 
 export class LogError extends Error {
 	constructor(lines: (string | any)[], depth = null as number | null) {
-		const message = lines.map(line => {
-			return typeof line === 'string'
-				? line
-				: debug(line, depth)
-		}).join('\n')
+		const message = log_error_message(lines, depth)
 		super(message)
 	}
+}
+export function log_error_message(lines: (string | any)[], depth = null as number | null) {
+	return lines.map(line => {
+		return typeof line === 'string'
+			? line
+			: debug(line, depth)
+	}).join('\n')
 }
 
 export interface Cls<T, A extends any[]> {

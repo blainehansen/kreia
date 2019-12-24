@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import { log } from './utils'
 import { tuple as t } from '@ts-std/types'
 
-import { render_grammar } from './render'
+import { print_grammar } from './render_codegen'
 import {
 	TokenDef, VirtualLexerUsage, Rule, Macro, Arg,
 	consume, maybe, maybe_many, maybe_consume, maybe_many_consume, many_consume, or, many, _var, many_separated,
@@ -207,6 +207,4 @@ const KreiaGrammar = [
 	// ]),
 ]
 
-const rendered = render_grammar(KreiaGrammar)
-
-fs.writeFileSync('./lib/grammar_out.ts', rendered)
+fs.writeFileSync('./lib/compiler/grammar_out.ts', print_grammar(KreiaGrammar))
