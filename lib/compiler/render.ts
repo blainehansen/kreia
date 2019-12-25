@@ -67,10 +67,19 @@ function rendered_args_initializer() {
 type RenderContext = {
 	macro_definition_count: { count: number } | undefined,
 	maximizing_var: { current_point: number, points: MaxDict<AstDecidable> } | undefined,
-	receiving_macro_call: {
+	receiving_macro_calls: {
 		body_decidables: ts.Identifier[],
 		rendered_args: DefaultDict<{ arrow: ts.Expression | undefined, points: MaxDict<AstDecidable> }>,
-	} | undefined,
+	}[],
+}
+function push_macro_call_decidable(scope: Scope, decidable_ident: ts.Identifier) {
+	// for (const receiving_macro_call of scope.receiving_macro_calls) {
+	// 	// it might really be that only the bottom one truly needs it
+	// 	// or rather, only macro_calls inside of top level vars need it
+	// 	receiving_macro_call.body_decidables.push(decidable_ident)
+	// }
+	if (scope.receiving_macro_calls.length !== 0)
+		scope.receiving_macro_calls[0].body_decidables.push(decidable_ident)
 }
 type Scope = AstScope<RenderContext>
 type ScopeStack = { current: Scope, previous: Scope[] }
@@ -86,8 +95,7 @@ function generate_decidable(
 	const current_scope = main_scope.current
 	if (current_scope.macro_definition_count !== undefined) {
 		const fake_decidable_ident = generate_fake_decidable(current_scope.macro_definition_count)
-		if (current_scope.receiving_macro_call !== undefined)
-			current_scope.receiving_macro_call.body_decidables.push(fake_decidable_ident)
+		push_macro_call_decidable(current_scope, fake_decidable_ident)
 		return fake_decidable_ident
 	}
 
@@ -107,8 +115,7 @@ function generate_decidable(
 	const rendered_decidable = render_decidable(decidable)
 	global_decidables[decidable_name] = rendered_decidable
 
-	if (current_scope.receiving_macro_call !== undefined)
-		current_scope.receiving_macro_call.body_decidables.push(decidable_ident)
+	push_macro_call_decidable(current_scope, decidable_ident)
 
 	return decidable_ident
 }
@@ -241,7 +248,7 @@ function render_node(
 		const rule_scope = AstScope.for_rule(rule, {
 			macro_definition_count: scope.current.macro_definition_count,
 			maximizing_var: scope.current.maximizing_var,
-			receiving_macro_call: scope.current.receiving_macro_call,
+			receiving_macro_calls: scope.current.receiving_macro_calls,
 		} as RenderContext)
 
 		const maybe_function_name = wrapping_name(node.modifier)
@@ -257,20 +264,23 @@ function render_node(
 	case 'MacroCall': {
 		const macro = Registry.get_macro(node.macro_name).unwrap()
 
-		const receiving_macro_call = { body_decidables: [], rendered_args: new DefaultDict(rendered_args_initializer) }
+		// when we push a new macro call, it and all of its ancestors must receive body decidables
+		// however when we render a Var, only the ancestors get that information
+
+		const this_macro_call = { body_decidables: [], rendered_args: new DefaultDict(rendered_args_initializer) }
 		const macro_scope = AstScope.for_macro_call(scope, macro, node, {
 			macro_definition_count: scope.current.macro_definition_count,
 			maximizing_var: scope.current.maximizing_var,
-			receiving_macro_call,
+			receiving_macro_calls: [...scope.current.receiving_macro_calls, this_macro_call],
 		} as RenderContext)
 		// console.log('macro_scope', macro_scope)
 
 		render_definition(macro.definition, macro_scope, next, parent_other_choices)
 
-		// console.log('receiving_macro_call', receiving_macro_call)
+		// console.log('this_macro_call', this_macro_call)
 		// TODO this is the place to put the optimization of flattening a var that only has a single var in it
-		const rendered_args = macro.args.map(arg => Maybe.from_nillable(receiving_macro_call.rendered_args.get(arg.name).arrow).unwrap())
-		const macro_args = [...rendered_args, ...receiving_macro_call.body_decidables]
+		const rendered_args = macro.args.map(arg => Maybe.from_nillable(this_macro_call.rendered_args.get(arg.name).arrow).unwrap())
+		const macro_args = [...rendered_args, ...this_macro_call.body_decidables]
 
 		const maybe_function_name = wrapping_name(node.modifier)
 		if (maybe_function_name === undefined)
@@ -281,30 +291,31 @@ function render_node(
 	}
 
 	case 'Var': {
-		// first check if we're in a scope.current.receiving_macro_call
+		// first check if we have a current receiving_macro_call
 		// if we are, then we *must* have a scope to pop, so go forward with that
 		// if we aren't, we *must* have a count to fall back to
 
-		if (scope.current.receiving_macro_call !== undefined) {
+		if (scope.current.receiving_macro_calls.length !== 0) {
 			// console.log('scope.current.receiving_macro_call', scope.current.receiving_macro_call)
 			// since the for_var *pops* the scope, we should only provide the things that we must override
 			// and let the parent scope determine the rest
 			// this isn't true with for_rule and for_macro,
 			// since they're pushing and therefore must propagate what they have downward
+			const current_receiving_macro_call = scope.current.receiving_macro_calls.maybe_get(-1).unwrap()
 			const [arg_definition, arg_scope] = AstScope.for_var(scope, node, {
 				maximizing_var: {
 					current_point: 0,
-					points: scope.current.receiving_macro_call.rendered_args.get(node.arg_name).points,
+					points: current_receiving_macro_call.rendered_args.get(node.arg_name).points,
 				},
 			} as RenderContext)
 
 			// console.log('arg_scope', arg_scope)
 			const rendered_arrow = render_definition_arrow(arg_definition, arg_scope, next, parent_other_choices)
-			scope.current.receiving_macro_call.rendered_args.get(node.arg_name).arrow = rendered_arrow
+			current_receiving_macro_call.rendered_args.get(node.arg_name).arrow = rendered_arrow
 
 			if (node.modifier !== undefined) {
 				const [arg_definition, arg_scope] = AstScope.for_var(scope, node, {
-					receiving_macro_call: scope.current.receiving_macro_call,
+					receiving_macro_calls: scope.current.receiving_macro_calls,
 				} as RenderContext)
 				generate_decidable(arg_definition, arg_scope, parent_other_choices, next, node.modifier)
 			}
@@ -464,7 +475,7 @@ export function render_rule(rule: Rule) {
 	const scope = AstScope.for_rule(rule, {
 		macro_definition_count: undefined,
 		maximizing_var: undefined,
-		receiving_macro_call: undefined,
+		receiving_macro_calls: [],
 	})
 	const rendered_definition = render_definition(rule.definition, scope, [], [])
 
@@ -508,7 +519,7 @@ export function render_macro(macro: Macro) {
 	const macro_definition_scope = AstScope.for_macro(macro, {
 		macro_definition_count,
 		maximizing_var: undefined,
-		receiving_macro_call: undefined,
+		receiving_macro_calls: [],
 	})
 	const rendered_definition = render_definition(macro.definition, macro_definition_scope, [], [])
 

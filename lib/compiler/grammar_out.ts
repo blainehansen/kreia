@@ -39,7 +39,7 @@ export function simple_rule_line() {
 	many_separated(() => {
 		space_sep(() => {
 			rule_atom()
-		})
+		}, _18dAOU)
 	}, () => {
 		consume(tok.space, tok.bar, tok.space)
 	}, _7U1Cw)
@@ -92,5 +92,5 @@ function block<BLOCK_LINE extends ParseArg>(block_line: BLOCK_LINE, _d1: Decidab
 		block_line()
 	}, () => {
 		block_line()
-	}, _d1, _d2)
+	}, _d1, _d2, _d3)
 }
