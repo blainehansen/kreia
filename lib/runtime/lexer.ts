@@ -94,10 +94,15 @@ export type TokensForDefinitions<L extends TokenDefinition[]> = {
 		: RawToken
 }
 
-// TODO make VirtualLexer a function that can be called, essentially replacing the `use` function
-// that means that a usage in the final generated code will simply be a function call
-export type VirtualLexer<S, T extends Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, A extends any[]> = Readonly<{
-	use(...args: A): T,
+
+export type VirtualLexerCreator<S, T extends Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, A extends any[]> =
+	(...args: A) => [T, VirtualLexer<S>]
+
+type VirtualLexerOutput<S, T extends Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>> = [T, VirtualLexer<S>]
+export type VirtualLexerOutputs = Dict<VirtualLexerOutput<any, Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>>>
+
+
+export type VirtualLexer<S> = Readonly<{
 	initialize(): S,
 	request(
 		virtual_token: VirtualTokenDefinition,
@@ -109,59 +114,50 @@ export type VirtualLexer<S, T extends Dict<ExposedRawTokenDefinition | VirtualTo
 }>
 
 
-export type VirtualLexers =
-	Dict<VirtualLexer<any, Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, any[]>>
+type VirtualLexerState<S> =
+	{ readonly virtual_lexer: VirtualLexer<S>, state: S }
 
-type VirtualLexerState<S, T extends Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, A extends any[]> =
-	{ readonly virtual_lexer: VirtualLexer<S, T, A>, state: S }
-
-type VirtualLexerStateDict<V extends VirtualLexers> = {
-	[K in keyof V]: V[K] extends VirtualLexer<infer S, infer T, infer A>
-		? VirtualLexerState<S, T, A>
+type VirtualLexerStateDict<V extends VirtualLexerOutputs> = {
+	[K in keyof V]: V[K] extends VirtualLexerOutput<infer S, any>
+		? VirtualLexerState<S>
 		: never
 }
 
-export type VirtualLexerWithArgs<V extends VirtualLexers> = {
-	[K in keyof V]: V[K] extends VirtualLexer<any, Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, infer A>
-		? [V[K], A] : never
-}
-
-
-type TokensForVirtualLexers<V extends VirtualLexers> = UnionToIntersection<{
-	[K in keyof V]: V[K] extends VirtualLexer<any, infer T, any[]> ? T : never
+type TokensForVirtualLexers<V extends VirtualLexerOutputs> = UnionToIntersection<{
+	[K in keyof V]: V[K] extends VirtualLexerOutput<any, infer T> ? T : never
 }[keyof V]>
 
+type VirtualLexersFromOutputs<V extends VirtualLexerOutputs> = {
+	[K in keyof V]: V[K] extends VirtualLexerOutput<infer S, any> ? VirtualLexer<S> : never
+}
 
 export type SourceState = Readonly<{
 	source: string, index: number,
 	line: number, column: number,
 }>
 
-export type LexerState<V extends VirtualLexers> = Readonly<{
+export type LexerState<V extends VirtualLexerOutputs> = Readonly<{
 	source_state: SourceState,
 	virtual_lexers: VirtualLexerStateDict<V>,
 }>
 
 type NonEmpty<T> = [T, ...T[]]
 
-export class Lexer<V extends VirtualLexers> {
+export class Lexer<V extends VirtualLexerOutputs> {
 	private readonly ignored_token_definitions: RawTokenDefinition[]
+	private readonly raw_virtual_lexers: VirtualLexersFromOutputs<V>
 	private constructor(
 		token_definitions: UserRawTokenDefinition[],
-		private readonly raw_virtual_lexers: VirtualLexerWithArgs<V>,
+		virtual_lexer_outputs: V,
 	) {
-		const ignored_token_definitions = [] as RawTokenDefinition[]
-		for (const token_definition of token_definitions) {
-			if (token_definition.ignore)
-				ignored_token_definitions.push(token_definition)
-		}
+		const ignored_token_definitions = token_definitions.filter(d => d.ignore) as RawTokenDefinition[]
 
-		const virtual_lexers = {} as VirtualLexerStateDict<V>
-		for (const virtual_lexer_name in raw_virtual_lexers) {
-			const [virtual_lexer, virtual_lexer_args] = raw_virtual_lexers[virtual_lexer_name]
-			;(virtual_lexers as any)[virtual_lexer_name] = { virtual_lexer, state: virtual_lexer.initialize() }
+		const raw_virtual_lexers = {} as VirtualLexersFromOutputs<V>
+		for (const virtual_lexer_name in virtual_lexer_outputs) {
+			const [toks, virtual_lexer] = virtual_lexer_outputs[virtual_lexer_name]
+			;(raw_virtual_lexers as any)[virtual_lexer_name] = virtual_lexer
 
-			for (const token of Object.values(virtual_lexer.use(...virtual_lexer_args))) {
+			for (const token of Object.values(toks)) {
 				if (token.is_virtual || !token.ignore)
 					continue
 				ignored_token_definitions.push(token)
@@ -169,21 +165,22 @@ export class Lexer<V extends VirtualLexers> {
 		}
 
 		this.ignored_token_definitions = ignored_token_definitions
+		this.raw_virtual_lexers = raw_virtual_lexers
 	}
 
-	static create<D extends Dict<TokenSpec>, V extends VirtualLexers = {}>(
-		tokens: D, raw_virtual_lexers: VirtualLexerWithArgs<V>,
+	static create<D extends Dict<TokenSpec>, V extends VirtualLexerOutputs = {}>(
+		tokens: D,
+		virtual_lexer_outputs: V,
 	): [TokensForSpecs<D> & TokensForVirtualLexers<V>, Lexer<V>] {
 		const user_toks = Tokens(tokens)
 
 		const tok = { ...user_toks } as TokensForSpecs<D> & TokensForVirtualLexers<V>
-		for (const virtual_lexer_name in raw_virtual_lexers) {
-			const [virtual_lexer, virtual_lexer_args] = raw_virtual_lexers[virtual_lexer_name]
-			const toks = virtual_lexer.use(...virtual_lexer_args)
+		for (const virtual_lexer_name in virtual_lexer_outputs) {
+			const [toks,] = virtual_lexer_outputs[virtual_lexer_name]
 			for (const key in toks)
 				(tok as any)[key] = toks[key]
 		}
-		const lexer = new Lexer(Object.values(user_toks), raw_virtual_lexers)
+		const lexer = new Lexer(Object.values(user_toks), virtual_lexer_outputs)
 
 		return t(tok, lexer)
 	}
@@ -193,7 +190,7 @@ export class Lexer<V extends VirtualLexers> {
 	reset(source: string, filename?: string) {
 		const virtual_lexers = {} as VirtualLexerStateDict<V>
 		for (const virtual_lexer_name in this.raw_virtual_lexers) {
-			const [virtual_lexer, ] = this.raw_virtual_lexers[virtual_lexer_name]
+			const virtual_lexer = this.raw_virtual_lexers[virtual_lexer_name]
 			;(virtual_lexers as any)[virtual_lexer_name] = { virtual_lexer, state: virtual_lexer.initialize() }
 		}
 
@@ -251,7 +248,7 @@ export class Lexer<V extends VirtualLexers> {
 		return t(token, new_source_state)
 	}
 
-	protected static request<V extends VirtualLexers>(
+	protected static request<V extends VirtualLexerOutputs>(
 		token_definitions: TokenDefinition[],
 		input_state: LexerState<V>,
 		file: SourceFile,

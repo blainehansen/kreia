@@ -1,6 +1,6 @@
 import '@ts-std/extensions/dist/array'
 
-import { Lexer, LexerState, VirtualLexers, TokenDefinition, Token, match_and_trim } from './lexer'
+import { Lexer, LexerState, VirtualLexerOutputs, TokenDefinition, Token, match_and_trim } from './lexer'
 
 export interface HasTestLength {
 	readonly test_length: number
@@ -15,7 +15,7 @@ export function compute_path_test_length<T>(path: readonly (T[] | HasTestLength)
 
 export abstract class Decidable {
 	abstract readonly test_length: number
-	abstract test<V extends VirtualLexers>(
+	abstract test<V extends VirtualLexerOutputs>(
 		lexer: Lexer<V>,
 		lexer_state?: LexerState<V>,
 	): [Token[], LexerState<V>] | undefined
@@ -35,7 +35,7 @@ class DecisionPath extends Decidable {
 		this.test_length = compute_path_test_length(path as (TokenDefinition[] | HasTestLength)[])
 	}
 
-	test<V extends VirtualLexers>(
+	test<V extends VirtualLexerOutputs>(
 		lexer: Lexer<V>,
 		input_lexer_state?: LexerState<V>,
 	): [Token[], LexerState<V>] | undefined {
@@ -80,7 +80,7 @@ class DecisionBranch extends Decidable {
 		this.test_length = Math.max(...paths.map(p => p.test_length))
 	}
 
-	test<V extends VirtualLexers>(
+	test<V extends VirtualLexerOutputs>(
 		lexer: Lexer<V>,
 		lexer_state?: LexerState<V>,
 	): [Token[], LexerState<V>] | undefined {

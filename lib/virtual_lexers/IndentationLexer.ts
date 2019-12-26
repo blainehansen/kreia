@@ -1,9 +1,9 @@
 import '@ts-std/extensions/dist/array'
 import { Dict, tuple as t } from '@ts-std/types'
 import {
-	Lexer, SourceState, VirtualLexer, make_regex,
+	Lexer, SourceState, VirtualLexerCreator, make_regex,
 	UserToken, HiddenToken, VirtualTokenDefinition, VirtualToken, ExposedToken,
-} from './lexer'
+} from '../runtime/lexer'
 
 export const newline = HiddenToken('newline', /[\t ]*\n+/)
 export const tab = HiddenToken('tab', /\t+/)
@@ -20,10 +20,7 @@ export type IndentationState =
 	| { type: 'unbuffered', indentation: number }
 
 type Toks = { indent: VirtualTokenDefinition, deindent: VirtualTokenDefinition, indent_continue: VirtualTokenDefinition }
-export const IndentationLexer: VirtualLexer<IndentationState, Toks, []> = {
-	use() {
-		return { indent, deindent, indent_continue }
-	},
+export const IndentationLexer: VirtualLexerCreator<IndentationState, Toks, []> = () => t({ indent, deindent, indent_continue }, {
 	initialize() {
 		return { type: 'unbuffered', indentation: 0 }
 	},
@@ -91,7 +88,7 @@ export const IndentationLexer: VirtualLexer<IndentationState, Toks, []> = {
 	notify(_token, state) {
 		return state
 	},
-}
+})
 
 
 export function make_indents(

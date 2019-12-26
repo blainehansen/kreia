@@ -427,8 +427,9 @@ export function render_grammar(grammar: Grammar) {
 	))
 
 	const destructured_parser_names = [
-		'tok', 'reset', 'exit', 'arg', 'maybe', 'consume', 'many', 'maybe_many',
-		'or', 'maybe_or', 'many_separated', 'maybe_many_separated',
+		'tok', 'reset', 'exit', 'maybe', 'consume', 'many', 'maybe_many',
+		'or', 'maybe_or',
+		// 'many_separated', 'maybe_many_separated',
 	]
 
 	const parser_statement = ts.createVariableStatement(
@@ -557,10 +558,12 @@ export function render_macro(macro: Macro) {
 
 
 function render_virtual_lexer_usage(virtual_lexer: VirtualLexerUsage) {
-	const name = ts.createIdentifier(virtual_lexer.virtual_lexer_name)
+	// const name = ts.createIdentifier(virtual_lexer.virtual_lexer_name)
+	const name = virtual_lexer.virtual_lexer_name
 	return ts.createPropertyAssignment(
 		name,
-		create_call('t', [name, create_call('t', virtual_lexer.args.map(render_token_spec))]),
+		// create_call('t', [, create_call('t', virtual_lexer.args.map(render_token_spec))]),
+		create_call(name, virtual_lexer.args.map(render_token_spec)),
 	)
 }
 

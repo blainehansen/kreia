@@ -2,7 +2,7 @@ import 'mocha'
 import { expect } from 'chai'
 import { tuple as t } from '@ts-std/types'
 
-import { Lexer, UserToken } from './lexer'
+import { Lexer, UserToken } from '../runtime/lexer'
 import { IndentationLexer } from './IndentationLexer'
 
 const source = `\
@@ -20,10 +20,10 @@ a
 
 describe('IndentationLexer', () => {
 	it('basically works', () => {
-		const { indent, deindent, indent_continue } = IndentationLexer.use()
+		const [{ indent, deindent, indent_continue }, ] = IndentationLexer()
 
 		const name = UserToken('name', /[a-z]+/)
-		const [, lexer] = Lexer.create({}, { IndentationLexer: t(IndentationLexer, t()) })
+		const [, lexer] = Lexer.create({}, { IndentationLexer: IndentationLexer() })
 		lexer.reset(source)
 
 		expect(lexer.test([name, indent_continue])).eql(undefined)

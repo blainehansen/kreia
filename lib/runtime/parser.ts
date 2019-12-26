@@ -1,34 +1,27 @@
 import { Maybe } from '@ts-std/monads'
 import { Dict, Cast, tuple as t } from '@ts-std/types'
 
-import { debug } from './utils'
-import { Decidable } from './ast/decision'
+import { debug } from '../utils'
+import { Decidable } from './decision'
 import {
 	Lexer as _Lexer,
 	TokenDefinition, RawTokenDefinition, TokensForDefinitions, RawToken, TokenSpec,
-	VirtualLexers, VirtualLexerWithArgs,
+	VirtualLexerOutputs,
 } from './lexer'
 
-type Lexer = _Lexer<VirtualLexers>
+type Lexer = _Lexer<VirtualLexerOutputs>
 
-export function Parser<D extends Dict<TokenSpec>, V extends VirtualLexers = {}>(
-	tokens: D, raw_virtual_lexers: VirtualLexerWithArgs<V>,
+export function Parser<D extends Dict<TokenSpec>, V extends VirtualLexerOutputs = {}>(
+	tokens: D,
+	virtual_lexer_outputs: V,
 ) {
-	const [tok, lexer] = _Lexer.create(tokens, raw_virtual_lexers)
+	const [tok, lexer] = _Lexer.create(tokens, virtual_lexer_outputs)
 
 	return {
 		tok,
 		reset(...args: Parameters<Lexer['reset']>) {
 			lexer.reset(...args)
 		},
-		// arg<A extends ParseArg>(parse_arg: A, ...arg_args: A extends Func ? Parameters<A> : []): ArgReturn<A> {
-		// TODO until this can hold flattened token_definitions, it isn't useful
-		// arg<A extends ParseArg>(parse_arg: A): ReturnType<A> {
-		// 	// return Array.isArray(parse_arg)
-		// 	// 	? lexer.require(parse_arg) as ArgReturn<A>
-		// 	// 	: (parse_arg as Func)(...arg_args)
-		// 	return parse_arg()
-		// },
 		lock(token_definition: RawTokenDefinition) {
 			return lock(lexer, token_definition)
 		},
@@ -166,12 +159,12 @@ function lock(lexer: Lexer, token_definition: RawTokenDefinition) {
 		return token
 	}
 }
-function lock(lexer: Lexer, locker: Locker) {
-	return locker.perform(lexer).match({
-		ok: token => token,
-		err: token => { throw new Error(`unexpected locked Token, expected ${locked} got ${token}`) }
-	})
-}
+// function lock(lexer: Lexer, locker: Locker) {
+// 	return locker.perform(lexer).match({
+// 		ok: token => token,
+// 		err: token => { throw new Error(`unexpected locked Token, expected ${locked} got ${token}`) }
+// 	})
+// }
 
 
 type Optional<T, B extends boolean> = B extends true ? T | undefined : T

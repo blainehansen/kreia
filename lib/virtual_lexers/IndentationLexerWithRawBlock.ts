@@ -1,11 +1,11 @@
 import '@ts-std/extensions/dist/array'
 import { Dict, tuple as t } from '@ts-std/types'
 import {
-	Lexer, SourceState, VirtualLexer, make_regex, ContentVirtualToken,
+	Lexer, SourceState, VirtualLexerCreator, make_regex, ContentVirtualToken,
 	UserToken, HiddenToken, VirtualToken, ExposedToken, VirtualTokenDefinition, ExposedRawTokenDefinition,
-} from './lexer'
+} from '../runtime/lexer'
 import {
-	IndentationLexer, IndentationState, make_indents,
+	IndentationLexer as IndentationLexerCreator, IndentationState, make_indents,
 	any_non_whitespace, indent, deindent, indent_continue, tab,
 } from './IndentationLexer'
 
@@ -16,6 +16,7 @@ const raw_block_begin = ExposedToken('raw_block_begin', 'IndentationLexer', /\|\
 const raw_block_content = VirtualToken('raw_block_content', 'IndentationLexer', [/[^\n]*\n+/, /[^\n]+\n*/])
 const raw_block_end = VirtualToken('raw_block_end', 'IndentationLexer')
 
+const [, IndentationLexer] = IndentationLexerCreator()
 
 type IndentationStateWithRawBlock =
 	| { in_block: false, indentation_state: IndentationState }
@@ -26,10 +27,8 @@ type Toks = {
 	indent: VirtualTokenDefinition, deindent: VirtualTokenDefinition, indent_continue: VirtualTokenDefinition,
 	raw_block_begin: ExposedRawTokenDefinition, raw_block_content: VirtualTokenDefinition, raw_block_end: VirtualTokenDefinition,
 }
-export const IndentationLexerWithRawBlock: VirtualLexer<IndentationStateWithRawBlock, Toks, []> = {
-	use() {
-		return { indent, deindent, indent_continue, raw_block_begin, raw_block_content, raw_block_end }
-	},
+export const IndentationLexerWithRawBlock: VirtualLexerCreator<IndentationStateWithRawBlock, Toks, []> = () => t(
+	{ indent, deindent, indent_continue, raw_block_begin, raw_block_content, raw_block_end }, {
 	initialize() {
 		return { in_block: false, indentation_state: { type: 'unbuffered', indentation: 0 } }
 	},
@@ -123,4 +122,4 @@ export const IndentationLexerWithRawBlock: VirtualLexer<IndentationStateWithRawB
 
 		return { in_block: true as const, block_indentation: indentation_state.indentation + 1 }
 	},
-}
+})

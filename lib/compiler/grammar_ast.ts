@@ -191,21 +191,20 @@ const KreiaGrammar = [
 		or(
 			[consume('token_name')],
 			[consume('var_name')],
-			// [consume('locked_name')],
+			[consume('locked_name')],
 			// [subrule('macro_call')],
-			// [consume('open_paren'), subrule('simple_rule_line'), consume('close_paren')],
+			[consume('open_paren'), subrule('simple_rule_line'), consume('close_paren')],
 		),
-		// maybe_subrule('modifier'),
+		maybe_subrule('modifier'),
 	]),
 
-
-	// new Rule('modifier', [
-	// 	Or([
-	// 		[Consume(['plus'])],
-	// 		[Consume(['star'])],
-	// 		[Consume(['maybe'])],
-	// 	]),
-	// ]),
+	new Rule('modifier', [
+		or(
+			[consume('plus')],
+			[consume('star')],
+			[consume('maybe')],
+		),
+	]),
 ]
 
 fs.writeFileSync('./lib/compiler/grammar_out.ts', print_grammar(KreiaGrammar))

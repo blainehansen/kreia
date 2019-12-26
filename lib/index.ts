@@ -1,2 +1,2 @@
-export { Parser, c, ParseArg } from './parser'
-export { path, branch, Decidable } from './ast/decision'
+export { Parser, c, ParseArg } from './runtime/parser'
+export { path, branch, Decidable } from './runtime/decision'
