@@ -81,12 +81,12 @@ function is_decidable_func<F extends Func>(
 	return typeof fl[0] === 'function'
 }
 
-export function f<F extends Func>(
-	fn: F, d: Decidable,
-	...args: Parameters<F>
-): DecidableFunc<F> {
-	return [fn, d, ...args] as DecidableFunc<F>
-}
+// export function f<F extends Func>(
+// 	fn: F, d: Decidable,
+// 	...args: Parameters<F>
+// ): DecidableFunc<F> {
+// 	return [fn, d, ...args] as DecidableFunc<F>
+// }
 
 export function c<C extends ParseEntity>(...choice: C): C {
 	return choice

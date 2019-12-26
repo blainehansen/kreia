@@ -170,6 +170,8 @@ function render_definition_arrow(
 	nodes: NonEmpty<Node>, scope: ScopeStack, parent_next: [Node, ScopeStack][],
 	parent_other_choices: [Definition, ScopeStack][],
 ) {
+	// if nodes.length === 1 && nodes[]
+
 	return ts.createArrowFunction(
 		undefined, undefined, [], undefined,
 		ts.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
@@ -229,10 +231,10 @@ function render_node(
 			if (flattened.type === 'Or')
 				throw new Error("an unmodified Or is the only node in a choice of an Or")
 
-			// if (flattened.type === 'Consume') {
-			// 	choices.push(create_call('t', render_token_tuple(flattened.token_names)))
-			// 	continue
-			// }
+			if (flattened.type === 'Consume') {
+				choices.push(create_call('c', render_token_tuple(flattened.token_names)))
+				continue
+			}
 
 			// since we know that the modifier is undefined, this will only return the args
 			// flattened.type === 'Subrule' || flattened.type === 'MacroCall'
@@ -278,7 +280,6 @@ function render_node(
 		render_definition(macro.definition, macro_scope, next, parent_other_choices)
 
 		// console.log('this_macro_call', this_macro_call)
-		// TODO this is the place to put the optimization of flattening a var that only has a single var in it
 		const rendered_args = macro.args.map(arg => Maybe.from_nillable(this_macro_call.rendered_args.get(arg.name).arrow).unwrap())
 		const macro_args = [...rendered_args, ...this_macro_call.body_decidables]
 
@@ -310,8 +311,13 @@ function render_node(
 			} as RenderContext)
 
 			// console.log('arg_scope', arg_scope)
+			// we always have to call this for the side effects produced with the above maximizing_var
 			const rendered_arrow = render_definition_arrow(arg_definition, arg_scope, next, parent_other_choices)
-			current_receiving_macro_call.rendered_args.get(node.arg_name).arrow = rendered_arrow
+			const used_rendered_arrow = arg_definition.length === 1 && arg_definition[0].type === 'Var' && arg_definition[0].modifier === undefined
+				? ts.createIdentifier(arg_definition[0].arg_name)
+				: rendered_arrow
+
+			current_receiving_macro_call.rendered_args.get(node.arg_name).arrow = used_rendered_arrow
 
 			if (node.modifier !== undefined) {
 				const [arg_definition, arg_scope] = AstScope.for_var(scope, node, {
@@ -443,11 +449,11 @@ export function render_grammar(grammar: Grammar) {
 		ts.createImportClause(
 			undefined,
 			ts.createNamedImports(
-				['Parser', 'ParseArg', 'Decidable', 'path', 'branch', 't', 'f'].map(i =>
+				['Parser', 'ParseArg', 'Decidable', 'path', 'branch', 'c'].map(i =>
 					ts.createImportSpecifier(undefined, ts.createIdentifier(i)),
 				)
 			),
-		), ts.createStringLiteral('./index'),
+		), ts.createStringLiteral('../index'),
 		// ), ts.createStringLiteral('kreia'),
 	)
 
@@ -587,14 +593,14 @@ function render_token_spec(spec: TokenSpec) {
 	return render_base_spec(spec)
 }
 
-function render_regex(def: RegExp | string) {
-	return typeof def === 'string'
-		? ts.createStringLiteral(def)
-		: ts.createRegularExpressionLiteral(`/${def.source}/`)
-}
-
 function render_base_spec(spec: BaseTokenSpec) {
 	return Array.isArray(spec)
 		? ts.createArrayLiteral(spec.map(render_regex), false)
 		: render_regex(spec)
+}
+
+function render_regex(def: RegExp | string) {
+	return typeof def === 'string'
+		? ts.createStringLiteral(def)
+		: ts.createRegularExpressionLiteral(`/${def.source}/`)
 }

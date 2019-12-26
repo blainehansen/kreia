@@ -177,7 +177,7 @@ describe('macro in macro', () => it('works', () => {
 	b(rendered_macros[1]).eql(boil_string(`
 		function space_separated<BODY extends ParseArg>(body: BODY, _d1: Decidable) {
 			many_separated(
-				() => { body() },
+				body,
 				() => { consume(tok.space) },
 				_d1
 			)
@@ -212,13 +212,13 @@ describe('macros deeply nested', () => it('works', () => {
 
 	b(rendered_macros[1]).eql(boil_string(`
 		function two<TWO_BODY extends ParseArg>(two_body: TWO_BODY) {
-			one(() => { two_body() })
+			one(two_body)
 		}
 	`))
 
 	b(rendered_macros[2]).eql(boil_string(`
 		function three<THREE_BODY extends ParseArg>(three_body: THREE_BODY) {
-			two(() => { three_body() })
+			two(three_body)
 		}
 	`))
 }))
@@ -251,13 +251,13 @@ describe('macros deeply nested with decidables', () => it('works', () => {
 
 	b(rendered_macros[1]).eql(boil_string(`
 		function two<TWO_BODY extends ParseArg>(two_body: TWO_BODY, _d1: Decidable) {
-			one(() => { two_body() }, _d1)
+			one(two_body, _d1)
 		}
 	`))
 
 	b(rendered_macros[2]).eql(boil_string(`
 		function three<THREE_BODY extends ParseArg>(three_body: THREE_BODY, _d1: Decidable) {
-			two(() => { three_body() }, _d1)
+			two(three_body, _d1)
 		}
 	`))
 }))
