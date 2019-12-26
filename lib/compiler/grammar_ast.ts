@@ -93,89 +93,92 @@ const KreiaGrammar = [
 		macro_call('diff_block', [_var('block_line')], [_var('block_line')]),
 	]),
 
+
 	// new Rule('kreia_grammar', [
 	// 	sep(
-	// 		[Or([
-	// 			[Subrule('token_definition')],
-	// 			[Subrule('virtual_lexer_usage')],
-	// 			[Subrule('macro_definition')],
-	// 			[Subrule('rule_definition')],
+	// 		[or([
+	// 			[subrule('token_definition')],
+	// 			[subrule('virtual_lexer_usage')],
+	// 			[subrule('macro_definition')],
+	// 			[subrule('rule_definition')],
 	// 		])],
-	// 		[Consume(['indent_continue'])]
+	// 		[consume(['indent_continue'])]
 	// 	),
 	// ]),
 
 	// new Rule('token_definition', [
-	// 	Consume(['token_name', 'space', 'eq', 'space']),
-	// 	Subrule('token_specification'),
-	// 	// Maybe([Consume(['space']), Many([Subrule('token_option')])]),
+	// 	consume(['token_name', 'space', 'eq', 'space']),
+	// 	subrule('token_specification'),
+	// 	// Maybe([consume(['space']), Many([subrule('token_option')])]),
 	// ]),
 
 	// new Rule('base_token_specification', [
-	// 	Or([
-	// 		[Consume(['regex_source'])],
-	// 		[Consume(['str'])],
+	// 	or([
+	// 		[consume(['regex_source'])],
+	// 		[consume(['str'])],
 	// 	]),
 	// ]),
 
 	// new Rule('token_specification', [
-	// 	Or([
-	// 		[Subrule('base_token_specification')],
+	// 	or([
+	// 		[subrule('base_token_specification')],
 	// 		[
-	// 			Consume(['open_bracket']),
-	// 			comma_sep([Subrule('base_token_specification')]),
-	// 			Consume(['close_bracket']),
+	// 			consume(['open_bracket']),
+	// 			comma_sep([subrule('base_token_specification')]),
+	// 			consume(['close_bracket']),
 	// 		],
 	// 	]),
 	// ]),
 
 	// new Rule('virtual_lexer_usage', [
-	// 	Consume(['open_brace']),
-	// 	comma_sep([Consume(['token_name'])]),
-	// 	Consume(['close_brace', 'space', 'eq', 'space', 'use_keyword', 'space', 'str']),
-	// 	// Maybe([Consume(['space', 'with_keyword', 'space']), comma_sep([Subrule('token_specification')])]),
+	// 	consume(['open_brace']),
+	// 	comma_sep([consume(['token_name'])]),
+	// 	consume(['close_brace', 'space', 'eq', 'space', 'use_keyword', 'space', 'str']),
+	// 	// Maybe([consume(['space', 'with_keyword', 'space']), comma_sep([subrule('token_specification')])]),
 	// ]),
 
 
 	// new Rule('macro_definition', [
-	// 	Consume(['macro_name']),
-	// 	Maybe([Subrule('locking_definitions')]),
+	// 	consume(['macro_name']),
+	// 	Maybe([subrule('locking_definitions')]),
 
-	// 	Consume(['open_bracket'])
-	// 	comma_sep([Consume(['var_name'])]),
-	// 	Consume(['close_bracket']),
+	// 	consume(['open_bracket'])
+	// 	comma_sep([consume(['var_name'])]),
+	// 	consume(['close_bracket']),
 
-	// 	Subrule('rule_block'),
+	// 	subrule('rule_block'),
 	// ]),
 
 	// new Rule('macro_call', [
-	// 	Consume(['macro_name', 'open_bracket']),
-	// 	comma_sep([Subrule('simple_rule_line')]),
-	// 	Consume(['close_bracket']),
+	// 	consume(['macro_name', 'open_bracket']),
+	// 	comma_sep([subrule('simple_rule_line')]),
+	// 	consume(['close_bracket']),
 	// ]),
 
 	// new Rule('rule_definition', [
-	// 	Consume(['rule_name']),
-	// 	Maybe([Subrule('locking_definitions')]),
+	// 	consume(['rule_name']),
+	// 	Maybe([subrule('locking_definitions')]),
 
-	// 	Subrule('rule_block'),
+	// 	subrule('rule_block'),
 	// ]),
 
-	// new Rule('locking_definitions', [
-	// 	Consume(['open_angle']),
-	// 	block([comma_sep([Consume(['locked_name', 'space', 'eq', 'space', 'token_name'])])]),
-	// 	Consume(['close_angle']),
-	// ]),
+	new Rule('locking_definitions', [
+		consume('open_angle'),
+		macro_call('block', [
+			macro_call('comma_sep', [consume('locked_name', 'space', 'eq', 'space', 'token_name')]),
+		]),
+		consume('close_angle'),
+	]),
 
 	// new Rule('rule_block', [
-	// 	Consume(['space', 'eq']),
-	// 	diff_block([Subrule('rule_line')], [Consume(['space']), Subrule('simple_rule_line')]),
+	// 	consume(['space', 'eq']),
+	// 	diff_block([subrule('rule_line')], [consume(['space']), subrule('simple_rule_line')]),
 	// ]),
 
 	// new Rule('rule_line', [
-	// 	Or([
-	// 		[Subrule('modifier'), block([Subrule('rule_line')])],
-	// 		[Maybe([Consume(['bar', 'space'])]), Subrule('simple_rule_line')],
+	// 	or([
+	// 		[subrule('modifier'), block([subrule('rule_line')])],
+	// 		[Maybe([consume(['bar', 'space'])]), subrule('simple_rule_line')],
 	// 	]),
 	// ]),
 
@@ -207,4 +210,4 @@ const KreiaGrammar = [
 	]),
 ]
 
-fs.writeFileSync('./lib/compiler/grammar_out.ts', print_grammar(KreiaGrammar))
+fs.writeFileSync('./lib/compiler/grammar_blank.ts', print_grammar(KreiaGrammar))

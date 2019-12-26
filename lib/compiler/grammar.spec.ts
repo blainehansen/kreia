@@ -1,8 +1,7 @@
 import 'mocha'
 import { expect } from 'chai'
 
-// import { reset, exit, locking_definitions, simple_rule_line, rule_atom } from './grammar_out'
-import { reset, exit, simple_rule_line, rule_atom } from './grammar_out'
+import { reset, exit, locking_definitions, simple_rule_line, rule_atom } from './grammar_out'
 
 function parse(fn: () => any, input: string) {
 	reset(input)
@@ -10,32 +9,32 @@ function parse(fn: () => any, input: string) {
 	exit()
 }
 
-// const locking_definitions_single = `<!locked = :token>`
-// const locking_definitions_multiple = `<!locked = :token, !other = :diff, !some = :whatever>`
-// const locking_definitions_indented_separated = `<
-// 	!locked = :token
-// 	!other = :diff
-// 	!some = :whatever
-// >`
+const locking_definitions_single = `<!locked = :token>`
+const locking_definitions_multiple = `<!locked = :token, !other = :diff, !some = :whatever>`
+const locking_definitions_indented_separated = `<
+	!locked = :token
+	!other = :diff
+	!some = :whatever
+>`
 
-// const locking_definitions_indented_commad = `<
-// 	!locked = :token, !other = :diff, !some = :whatever
-// >`
+const locking_definitions_indented_commad = `<
+	!locked = :token, !other = :diff, !some = :whatever
+>`
 
-// const locking_definitions_indented_mixed = `<
-// 	!locked = :token, !other = :diff
-// 	!some = :whatever
-// 	!dude = :thing, !stuff = :howdy
-// >`
+const locking_definitions_indented_mixed = `<
+	!locked = :token, !other = :diff
+	!some = :whatever
+	!dude = :thing, !stuff = :howdy
+>`
 
-// describe('locking_definitions', () => it('works', () => {
-// 	parse(locking_definitions, locking_definitions_single)
-// 	parse(locking_definitions, locking_definitions_multiple)
+describe('locking_definitions', () => it('works', () => {
+	parse(locking_definitions, locking_definitions_single)
+	parse(locking_definitions, locking_definitions_multiple)
 
-// 	parse(locking_definitions, locking_definitions_indented_separated)
-// 	parse(locking_definitions, locking_definitions_indented_commad)
-// 	parse(locking_definitions, locking_definitions_indented_mixed)
-// }))
+	parse(locking_definitions, locking_definitions_indented_separated)
+	parse(locking_definitions, locking_definitions_indented_commad)
+	parse(locking_definitions, locking_definitions_indented_mixed)
+}))
 
 
 const rule_atom_token_name = `:yoyo`
