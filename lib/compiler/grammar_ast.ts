@@ -10,14 +10,16 @@ import {
 
 
 const KreiaGrammar = [
+	// new TokenDef('atom_token', [/\$\w+/, /\:\w+/])
 	new TokenDef('var_name', /\$\w+/),
 	new TokenDef('token_name', /\:\w+/),
 	new TokenDef('locked_name', /\!\w+/),
 
 	new TokenDef('rule_name', /\w+/),
 	new TokenDef('macro_name', /\@\w+/),
+	new TokenDef('modifier_token', ['*', '+', '?']),
 
-	new TokenDef('space', / +/),
+	new TokenDef('space', { match: / +/, ignore: true }),
 	new TokenDef('primitive', ['true']),
 	new TokenDef('str', [
 		/"(?:\\["\\]|[^\n"\\])*"/,
@@ -31,12 +33,13 @@ const KreiaGrammar = [
 
 	new TokenDef('eq', '='),
 	new TokenDef('bar', '|'),
-	new TokenDef('star', '*'),
-	new TokenDef('plus', '+'),
-	new TokenDef('maybe', '?'),
+	// new TokenDef('star', '*'),
+	// new TokenDef('plus', '+'),
+	// new TokenDef('maybe', '?'),
 	new TokenDef('colon', ':'),
 	new TokenDef('comma', ','),
 	new TokenDef('slash', '/'),
+
 
 	new TokenDef('open_angle', '<'),
 	new TokenDef('close_angle', '>'),
@@ -75,7 +78,7 @@ const KreiaGrammar = [
 		),
 	]),
 
-	new Macro('diff_block', [new Arg('in_indent'), new Arg('not_in_indent')], [
+	new Macro('diff_block', [new Arg('not_in_indent'), new Arg('in_indent')], [
 		or(
 			[_var('not_in_indent')],
 			[
@@ -93,6 +96,12 @@ const KreiaGrammar = [
 		macro_call('diff_block', [_var('block_line')], [_var('block_line')]),
 	]),
 
+	new Macro('lines_block', [new Arg('line_item')], [
+		macro_call('block', [
+			macro_call('comma_sep', [_var('line_item')]),
+		]),
+	]),
+
 
 	// new Rule('kreia_grammar', [
 	// 	sep(
@@ -106,81 +115,99 @@ const KreiaGrammar = [
 	// 	),
 	// ]),
 
-	// new Rule('token_definition', [
-	// 	consume(['token_name', 'space', 'eq', 'space']),
-	// 	subrule('token_specification'),
-	// 	// Maybe([consume(['space']), Many([subrule('token_option')])]),
-	// ]),
+	new Rule('token_definition', [
+		consume('token_name', 'space', 'eq', 'space'),
+		subrule('token_specification'),
+		// maybe(consume('space'), macro_call('space_sep', [subrule('token_option')])),
+	]),
 
-	// new Rule('base_token_specification', [
-	// 	or([
-	// 		[consume(['regex_source'])],
-	// 		[consume(['str'])],
-	// 	]),
-	// ]),
+	new Rule('token_specification', [
+		or(
+			[subrule('base_token_specification')],
+			[
+				consume('open_bracket'),
+				macro_call('comma_sep', [subrule('base_token_specification')]),
+				consume('close_bracket'),
+			],
+		),
+	]),
 
-	// new Rule('token_specification', [
-	// 	or([
-	// 		[subrule('base_token_specification')],
-	// 		[
-	// 			consume(['open_bracket']),
-	// 			comma_sep([subrule('base_token_specification')]),
-	// 			consume(['close_bracket']),
-	// 		],
-	// 	]),
-	// ]),
+	new Rule('base_token_specification', [
+		or(
+			[consume('regex_source')],
+			[consume('str')],
+		),
+	]),
 
-	// new Rule('virtual_lexer_usage', [
-	// 	consume(['open_brace']),
-	// 	comma_sep([consume(['token_name'])]),
-	// 	consume(['close_brace', 'space', 'eq', 'space', 'use_keyword', 'space', 'str']),
-	// 	// Maybe([consume(['space', 'with_keyword', 'space']), comma_sep([subrule('token_specification')])]),
-	// ]),
+	new Rule('virtual_lexer_usage', [
+		consume('open_brace'),
+		macro_call('lines_block', [consume('token_name')]),
+		consume('close_brace', 'space', 'eq', 'space', 'use_keyword', 'space', 'str'),
+		// maybe(
+		// 	consume('space', 'with_keyword', 'space'),
+		// 	macro_call('comma_sep', [subrule('token_specification')]),
+		// ),
+	]),
 
 
-	// new Rule('macro_definition', [
-	// 	consume(['macro_name']),
-	// 	Maybe([subrule('locking_definitions')]),
+	// // new Rule('macro_definition', [
+	// // 	consume('macro_name'),
+	// // 	maybe_subrule('locking_definitions'),
 
-	// 	consume(['open_bracket'])
-	// 	comma_sep([consume(['var_name'])]),
-	// 	consume(['close_bracket']),
+	// // 	consume('open_bracket'),
+	// // 	macro_call('comma_sep', [consume('var_name')])
+	// // 	consume('close_bracket'),
 
-	// 	subrule('rule_block'),
-	// ]),
+	// // 	subrule('rule_block'),
+	// // ]),
 
-	// new Rule('macro_call', [
-	// 	consume(['macro_name', 'open_bracket']),
-	// 	comma_sep([subrule('simple_rule_line')]),
-	// 	consume(['close_bracket']),
-	// ]),
+	new Rule('macro_call', [
+		consume('macro_name', 'open_bracket'),
+		macro_call('comma_sep', [subrule('simple_rule_line')]),
+		consume('close_bracket'),
+	]),
 
-	// new Rule('rule_definition', [
-	// 	consume(['rule_name']),
-	// 	Maybe([subrule('locking_definitions')]),
 
-	// 	subrule('rule_block'),
-	// ]),
+	// // new Rule('rule_definition', [
+	// // 	consume('rule_name'),
+	// // 	maybe_subrule('locking_definitions')
+	// // 	subrule('rule_block'),
+	// // ]),
 
 	new Rule('locking_definitions', [
 		consume('open_angle'),
-		macro_call('block', [
-			macro_call('comma_sep', [consume('locked_name', 'space', 'eq', 'space', 'token_name')]),
+		macro_call('lines_block', [
+			consume('locked_name', 'space', 'eq', 'space', 'token_name')
 		]),
 		consume('close_angle'),
 	]),
 
 	// new Rule('rule_block', [
-	// 	consume(['space', 'eq']),
-	// 	diff_block([subrule('rule_line')], [consume(['space']), subrule('simple_rule_line')]),
+	// 	consume('space', 'eq'),
+	// 	macro_call('diff_block',
+	// 		[consume('space'), subrule('simple_rule_line')],
+	// 		[subrule('rule_line')],
+	// 	),
 	// ]),
 
-	// new Rule('rule_line', [
-	// 	or([
-	// 		[subrule('modifier'), block([subrule('rule_line')])],
-	// 		[Maybe([consume(['bar', 'space'])]), subrule('simple_rule_line')],
-	// 	]),
-	// ]),
+	new Rule('rule_block', [
+		macro_call('many_separated',
+			[
+				or(
+					[macro_call('many_separated',
+						[consume('bar', 'space'), subrule('simple_rule_line')],
+						[consume('indent_continue')],
+					)],
+					[
+						subrule('modifier'),
+						macro_call('diff_block', [consume('space'), subrule('simple_rule_line')], [subrule('rule_block')])
+					],
+					[subrule('simple_rule_line')],
+				),
+			],
+			[consume('indent_continue')],
+		),
+	]),
 
 
 	new Rule('simple_rule_line', [
@@ -192,21 +219,18 @@ const KreiaGrammar = [
 
 	new Rule('rule_atom', [
 		or(
+			[consume('rule_name')],
 			[consume('token_name')],
 			[consume('var_name')],
 			[consume('locked_name')],
-			// [subrule('macro_call')],
+			[subrule('macro_call')],
 			[consume('open_paren'), subrule('simple_rule_line'), consume('close_paren')],
 		),
 		maybe_subrule('modifier'),
 	]),
 
 	new Rule('modifier', [
-		or(
-			[consume('plus')],
-			[consume('star')],
-			[consume('maybe')],
-		),
+		consume('modifier_token')
 	]),
 ]
 

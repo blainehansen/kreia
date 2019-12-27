@@ -222,7 +222,7 @@ function render_node(
 				|| flattened.type === 'LockingVar'
 			) {
 				const decidable = generate_decidable(choice, scope, other_choices, next, node.modifier)
-				choices.push(create_call('c', [render_definition_arrow(choice, scope, next, other_choices), decidable]))
+				choices.push(create_call('c', [render_definition_arrow(choice, scope, next, []), decidable]))
 				continue
 			}
 			// it correctly narrowed!
@@ -236,10 +236,10 @@ function render_node(
 				continue
 			}
 
-			// since we know that the modifier is undefined, this will only return the args
 			// flattened.type === 'Subrule' || flattened.type === 'MacroCall'
 			const sub_call = render_node(flattened, scope, next, other_choices)
-			choices.push(create_call('c', [sub_call.expression, ...sub_call.arguments]))
+			const decidable = generate_decidable(choice, scope, other_choices, next, node.modifier)
+			choices.push(create_call('c', [sub_call.expression, decidable, ...sub_call.arguments]))
 		}
 
 		return create_call(wrap_function_name('or', node.modifier), choices)

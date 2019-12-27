@@ -279,12 +279,15 @@ function EternalAstIter(definition_tuple: [Definition, ScopeStack]): AstIter {
 	return IterWrapper.create_eternal(() => iterate_definition(...definition_tuple))
 }
 
+// let call_count = 0
 export function compute_decidable(
 	main: [Definition, ScopeStack],
 	known_against: [Definition, ScopeStack][],
 	next: [Node, ScopeStack][],
 	should_gather: boolean,
 ) {
+	// call_count = 0
+
 	const against = should_gather
 		? [...known_against, ...gather_branches(next)]
 		: known_against
@@ -297,14 +300,24 @@ export function compute_decidable(
 		against.map(AstIter),
 		new PathBuilder(),
 	)
+	// console.log()
+	// console.log()
+	// console.log()
+	// console.log()
+	// console.log()
+	// console.log()
+	// console.log()
+	// console.log()
 	return path
 }
+
 
 function _compute_decidable(
 	main: AstIter,
 	input_against: AstIter[],
 	builder: PathBuilder,
 ) {
+	// if (++call_count > 8) throw new Error()
 	let against = input_against.slice()
 
 	let item

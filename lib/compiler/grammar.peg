@@ -1,0 +1,10 @@
+rule_definition =
+	:rule_name locking_definitions? :space :eq
+	| :indent @many_separated[rule_line, :indent_continue] :deindent
+	| simple_rule_line
+
+rule_line =
+
+simple_rule_line = @many_separated[
+	d
+]

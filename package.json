@@ -9,7 +9,7 @@
     "parse": "ts-node lib/compiler/grammar_out.ts",
     "preversion": "npm test",
     "finalize-version": "git push origin master && git push origin master --tags && npm publish",
-    "test": "npm run main && mocha -r ts-node/register lib/compiler/grammar.spec.ts",
+    "test": "mocha -r ts-node/register lib/compiler/grammar.spec.ts",
     "ts:ast": "ts-creator lib/compiler/_generate_from.ts --use-tabs true --trailing-comma 'all' -o lib/compiler/_generate_to.ts"
   },
   "keywords": [
