@@ -4,14 +4,14 @@
 :close_angle = '>'
 :slash = '/'
 :eq = '='
-:str = '/"(?:\\["\\]|[^\n"\\])*"/'
+:str = /"(?:\\["\\]|[^\n"\\])*"/
 
 :not_open_angle = [/[^<]/, '\\<']
 
 :whitespace = /\s+/ ignore: true
 
 html_file =
-	html_tag*
+	html_tag+
 
 html_tag<!tag_name = :html_tag_ident> =
 	:open_angle !tag_name

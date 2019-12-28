@@ -3,8 +3,9 @@ import { expect } from 'chai'
 
 import {
 	reset, exit,
-	rule_block,
-	token_definition, token_specification, base_token_specification,
+	kreia_grammar,
+	rule_block, rule_item, rule_definition, macro_definition,
+	token_definition, token_specification, base_token_specification, token_option,
 	virtual_lexer_usage, macro_call,
 	locking_definitions, simple_rule_line, rule_atom,
 } from './grammar_blank'
@@ -21,46 +22,10 @@ function bad(fn: () => any, input: string) {
 }
 
 
-const rule_block_simple = `yoyo thing`
-const rule_block_bar_front = `| yoyo thing`
-const rule_block_bar_section = `\
-| yoyo thing
-| yoyo thing
-| yoyo thing`
-const rule_block_modified_line = `? thing other :stuff`
-const rule_block_modified_indented_single = `\
-?
-	thing other :stuff
-`
-const rule_block_modified_indented_multiple = `\
-?
-	thing other :stuff
-	thing other+ :stuff
-	(thing other)+ :stuff
-`
-
-const rule_block_modified_indented_nested = `\
-+
-	thing other :stuff
-	| stuff
-	| different !option
-	*
-		$thingy | dude
-	thing other+ :stuff
-	(thing other)+ :stuff
-`
-
-describe('rule_block', () => it('works', () => {
-	// parse(rule_block, rule_block_simple)
-	// parse(rule_block, rule_block_bar_front)
-	// parse(rule_block, rule_block_bar_section)
-	// parse(rule_block, rule_block_modified_line)
-	// parse(rule_block, rule_block_modified_indented_single)
-	// parse(rule_block, rule_block_modified_indented_multiple)
-	parse(rule_block, rule_block_modified_indented_nested)
+describe('token_option', () => it('works', () => {
+	parse(token_option, 'ignore: true')
+	parse(token_option, 'something_else: true')
 }))
-
-
 
 const base_token_specification_regex_simple = `/\\w+/`
 const base_token_specification_regex_complex = `/(\\w\\/)|(.{5})+/`
@@ -103,6 +68,9 @@ describe('token_definition', () => it('works', () => {
 	parse(token_definition, token_definition_str_double)
 	parse(token_definition, token_definition_array_regex_complex)
 	parse(token_definition, token_definition_array_str_single_multiple)
+
+	parse(token_definition, token_definition_array_regex_complex + ' ignore: true')
+	parse(token_definition, token_definition_array_str_single_multiple + ' ignore: true')
 }))
 
 
@@ -168,6 +136,9 @@ describe('locking_definitions', () => it('works', () => {
 }))
 
 
+
+
+
 const rule_atom_rule_name = `yoyo`
 const rule_atom_token_name = `:yoyo`
 const rule_atom_var_name = `$yoyo`
@@ -210,4 +181,147 @@ describe('simple_rule_line', () => it('works', () => {
 	parse(simple_rule_line, simple_rule_line_spaces)
 	parse(simple_rule_line, simple_rule_line_or)
 	parse(simple_rule_line, simple_rule_line_macro_call)
+}))
+
+
+const rule_item_bar_front = `| yoyo thing`
+const rule_item_modified = `+ stuff :thing $var !dude (some things)?`
+const rule_item_modified_or = `* stuff :thing | $var | !dude (some things)?`
+const rule_item_modified_indented = `\
+*
+	stuff :thing | $var | !dude (some things)?`
+const rule_item_modified_indented_multiple = `\
+*
+	stuff :thing | $var | !dude
+	(some things)?
+	| stuff | :other`
+const rule_item_modified_indented_nested = `\
+*
+	stuff :thing | $var | !dude
+	(some things)?
+	| stuff | :other
+	| hmmm
+	!something
+	+
+		things stuff
+		:other
+	|
+		here we go
+	| @something[here, :therefore]
+`
+
+describe('rule_item', () => it('works', () => {
+	parse(rule_item, rule_atom_var_name)
+	parse(rule_item, rule_atom_paren)
+	parse(rule_item, simple_rule_line_spaces)
+	parse(rule_item, simple_rule_line_macro_call)
+
+	parse(rule_item, rule_item_bar_front)
+	parse(rule_item, rule_item_modified)
+	parse(rule_item, rule_item_modified_or)
+	parse(rule_item, rule_item_modified_indented)
+	parse(rule_item, rule_item_modified_indented_multiple)
+	parse(rule_item, rule_item_modified_indented_nested)
+}))
+
+
+const rule_block_html_tag = ` =
+	:open_angle !tag_name
+	(:ident :eq :str)*
+	| :slash :close_angle
+	|
+		:close_angle
+		(text | html_tag)*
+		:open_angle !tag_name :slash :close_angle`
+
+const rule_block_complex = ` =
+	:something !different (this $and :that)+
+	*
+		here are :some @rules[$that, :we can :use]
+		|
+			therefore here
+			? :something !is
+		| :this is (stuff that? :works :hopefully)*
+	?
+		then whatever this (:thing | also !works | $here you go)?
+		something
+`
+
+describe('rule_block', () => it('works', () => {
+	parse(rule_block, ` = ${rule_atom_token_name}`)
+	parse(rule_block, ` = ${rule_atom_paren}`)
+	parse(rule_block, ` = ${simple_rule_line_spaces}`)
+	parse(rule_block, ` = ${simple_rule_line_macro_call}`)
+
+	parse(rule_block, rule_block_html_tag)
+	parse(rule_block, rule_block_complex)
+}))
+
+
+const rule_definition_html_file = `html_file =
+	html_tag+`
+
+const rule_definition_html_tag = `html_tag<!tag_name = :html_tag_ident> =
+	:open_angle !tag_name
+	(:ident :eq :str)*
+	| :slash :close_angle
+	|
+		:close_angle
+		(text | html_tag)*
+		:open_angle !tag_name :slash :close_angle
+	`
+const rule_definition_html_tag_indented_locker = `html_tag<
+	!tag_name = :html_tag_ident
+> =
+	:open_angle !tag_name
+	(:ident :eq :str)*
+	| :slash :close_angle
+	|
+		:close_angle
+		(text | html_tag)*
+		:open_angle !tag_name :slash :close_angle
+`
+const rule_definition_html_text = `text = (:whitespace | :not_open_angle)+`
+
+describe('rule_definition', () => it('works', () => {
+	parse(rule_definition, rule_definition_html_file)
+	parse(rule_definition, rule_definition_html_tag)
+	parse(rule_definition, rule_definition_html_tag_indented_locker)
+	parse(rule_definition, rule_definition_html_text)
+}))
+
+
+const macro_definition_many_separated_one_line = `@many_separated[$body, $separator] = $body ($separator $body)*`
+const macro_definition_many_separated_indented_def = `@many_separated[$body, $separator] =
+	$body ($separator $body)*`
+const macro_definition_many_separated_blocked_vars_one_line = `@many_separated[
+	$body, $separator
+] = $body ($separator $body)*`
+
+const macro_definition_many_separated_blocked_vars_indented_def = `@many_separated[
+	$body, $separator
+] =
+	$body ($separator $body)*`
+
+const macro_definition_many_separated_lined_vars_indented_def = `@many_separated[
+	$body
+	$separator
+] =
+	$body ($separator $body)*`
+
+describe('macro_definition', () => it('works', () => {
+	parse(macro_definition, macro_definition_many_separated_one_line)
+	parse(macro_definition, macro_definition_many_separated_indented_def)
+	parse(macro_definition, macro_definition_many_separated_blocked_vars_one_line)
+	parse(macro_definition, macro_definition_many_separated_blocked_vars_indented_def)
+	parse(macro_definition, macro_definition_many_separated_lined_vars_indented_def)
+}))
+
+
+import * as fs from 'fs'
+
+describe('kreia_grammar', () => it('works', () => {
+	parse(kreia_grammar, fs.readFileSync('./examples/html.peg', 'utf-8'))
+	parse(kreia_grammar, fs.readFileSync('./examples/json.peg', 'utf-8'))
+	parse(kreia_grammar, fs.readFileSync('./examples/yml.peg', 'utf-8'))
 }))

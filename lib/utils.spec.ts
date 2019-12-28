@@ -30,7 +30,7 @@ describe('IterWrapper', () => {
 	})
 
 	it('chain', () => {
-		const c = IterWrapper.chain(IterWrapper.create(nums), IterWrapper.create(nums))
+		const c = IterWrapper.chain(nums, nums)
 		expect(c.next()).eql(1)
 		expect(c.next()).eql(2)
 		expect(c.next()).eql(3)

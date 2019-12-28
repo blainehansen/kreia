@@ -5,7 +5,7 @@
 :EntitySeparator = '---'
 
 :Primitive = ["null", "undefined", "true", "false"]
-:Str = '/"(?:\\["\\]|[^\n"\\])*"/'
+:Str = /"(?:\\["\\]|[^\n"\\])*"/
 :Num = /[0-9]+(\.[0-9]+)?/
 
 { :indent, :deindent, :indent_continue } = use './IndentationLexer'

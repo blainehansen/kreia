@@ -10,7 +10,6 @@ import {
 
 
 const KreiaGrammar = [
-	// new TokenDef('atom_token', [/\$\w+/, /\:\w+/])
 	new TokenDef('var_name', /\$\w+/),
 	new TokenDef('token_name', /\:\w+/),
 	new TokenDef('locked_name', /\!\w+/),
@@ -20,6 +19,7 @@ const KreiaGrammar = [
 	new TokenDef('modifier_token', ['*', '+', '?']),
 
 	new TokenDef('space', { match: / +/, ignore: true }),
+	new TokenDef('comment', { match: /\/\/[^\n]*/, ignore: true }),
 	new TokenDef('primitive', ['true']),
 	new TokenDef('str', [
 		/"(?:\\["\\]|[^\n"\\])*"/,
@@ -33,17 +33,12 @@ const KreiaGrammar = [
 
 	new TokenDef('eq', '='),
 	new TokenDef('bar', '|'),
-	// new TokenDef('star', '*'),
-	// new TokenDef('plus', '+'),
-	// new TokenDef('maybe', '?'),
 	new TokenDef('colon', ':'),
 	new TokenDef('comma', ','),
 	new TokenDef('slash', '/'),
 
-
 	new TokenDef('open_angle', '<'),
 	new TokenDef('close_angle', '>'),
-
 	new TokenDef('open_paren', '('),
 	new TokenDef('close_paren', ')'),
 	new TokenDef('open_brace', '{'),
@@ -92,33 +87,54 @@ const KreiaGrammar = [
 		),
 	]),
 
+	new Macro('enclosed_diff_block', [new Arg('not_in_indent'), new Arg('in_indent')], [
+		or(
+			[_var('not_in_indent')],
+			[
+				consume('indent'),
+				macro_call('many_separated',
+					[_var('in_indent')],
+					[consume('indent_continue')],
+				),
+				consume('deindent', 'indent_continue'),
+			],
+		),
+	]),
+
 	new Macro('block', [new Arg('block_line')], [
 		macro_call('diff_block', [_var('block_line')], [_var('block_line')]),
 	]),
 
 	new Macro('lines_block', [new Arg('line_item')], [
-		macro_call('block', [
-			macro_call('comma_sep', [_var('line_item')]),
-		]),
+		macro_call('enclosed_diff_block',
+			[macro_call('comma_sep', [_var('line_item')])],
+			[macro_call('comma_sep', [_var('line_item')])],
+		),
 	]),
 
 
-	// new Rule('kreia_grammar', [
-	// 	sep(
-	// 		[or([
-	// 			[subrule('token_definition')],
-	// 			[subrule('virtual_lexer_usage')],
-	// 			[subrule('macro_definition')],
-	// 			[subrule('rule_definition')],
-	// 		])],
-	// 		[consume(['indent_continue'])]
-	// 	),
-	// ]),
+	new Rule('kreia_grammar', [
+		maybe_consume('indent_continue'),
+		macro_call('many_separated',
+			[or(
+				[subrule('token_definition')],
+				[subrule('virtual_lexer_usage')],
+				[subrule('macro_definition')],
+				[subrule('rule_definition')],
+			)],
+			[consume('indent_continue')],
+		),
+		maybe_consume('indent_continue'),
+	]),
 
 	new Rule('token_definition', [
 		consume('token_name', 'space', 'eq', 'space'),
 		subrule('token_specification'),
-		// maybe(consume('space'), macro_call('space_sep', [subrule('token_option')])),
+		maybe(consume('space'), macro_call('space_sep', [subrule('token_option')])),
+	]),
+
+	new Rule('token_option', [
+		consume('rule_name', 'colon', 'space', 'primitive')
 	]),
 
 	new Rule('token_specification', [
@@ -150,16 +166,16 @@ const KreiaGrammar = [
 	]),
 
 
-	// // new Rule('macro_definition', [
-	// // 	consume('macro_name'),
-	// // 	maybe_subrule('locking_definitions'),
+	new Rule('macro_definition', [
+		consume('macro_name'),
+		maybe_subrule('locking_definitions'),
 
-	// // 	consume('open_bracket'),
-	// // 	macro_call('comma_sep', [consume('var_name')])
-	// // 	consume('close_bracket'),
+		consume('open_bracket'),
+		macro_call('lines_block', [consume('var_name')]),
+		consume('close_bracket'),
 
-	// // 	subrule('rule_block'),
-	// // ]),
+		subrule('rule_block'),
+	]),
 
 	new Rule('macro_call', [
 		consume('macro_name', 'open_bracket'),
@@ -168,47 +184,32 @@ const KreiaGrammar = [
 	]),
 
 
-	// // new Rule('rule_definition', [
-	// // 	consume('rule_name'),
-	// // 	maybe_subrule('locking_definitions')
-	// // 	subrule('rule_block'),
-	// // ]),
-
-	new Rule('locking_definitions', [
-		consume('open_angle'),
-		macro_call('lines_block', [
-			consume('locked_name', 'space', 'eq', 'space', 'token_name')
-		]),
-		consume('close_angle'),
+	new Rule('rule_definition', [
+		consume('rule_name'),
+		maybe_subrule('locking_definitions'),
+		subrule('rule_block'),
 	]),
 
-	// new Rule('rule_block', [
-	// 	consume('space', 'eq'),
-	// 	macro_call('diff_block',
-	// 		[consume('space'), subrule('simple_rule_line')],
-	// 		[subrule('rule_line')],
-	// 	),
-	// ]),
-
 	new Rule('rule_block', [
-		macro_call('many_separated',
-			[
-				or(
-					[macro_call('many_separated',
-						[consume('bar', 'space'), subrule('simple_rule_line')],
-						[consume('indent_continue')],
-					)],
-					[
-						subrule('modifier'),
-						macro_call('diff_block', [consume('space'), subrule('simple_rule_line')], [subrule('rule_block')])
-					],
-					[subrule('simple_rule_line')],
-				),
-			],
-			[consume('indent_continue')],
+		consume('space', 'eq'),
+		macro_call('diff_block',
+			[consume('space'), subrule('simple_rule_line')],
+			[subrule('rule_item')],
 		),
 	]),
 
+	new Rule('rule_item', [
+		or(
+			[
+				or([consume('bar')], [subrule('modifier')]),
+				macro_call('diff_block',
+					[consume('space'), subrule('simple_rule_line')],
+					[subrule('rule_item')],
+				),
+			],
+			[subrule('simple_rule_line')],
+		)
+	]),
 
 	new Rule('simple_rule_line', [
 		macro_call('many_separated',
@@ -224,9 +225,21 @@ const KreiaGrammar = [
 			[consume('var_name')],
 			[consume('locked_name')],
 			[subrule('macro_call')],
-			[consume('open_paren'), subrule('simple_rule_line'), consume('close_paren')],
+			[
+				consume('open_paren'),
+				macro_call('block', [subrule('simple_rule_line')]),
+				consume('close_paren'),
+			],
 		),
 		maybe_subrule('modifier'),
+	]),
+
+	new Rule('locking_definitions', [
+		consume('open_angle'),
+		macro_call('lines_block', [
+			consume('locked_name', 'space', 'eq', 'space', 'token_name')
+		]),
+		consume('close_angle'),
 	]),
 
 	new Rule('modifier', [

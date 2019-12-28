@@ -3,6 +3,9 @@ import { Dict, tuple as t, UnionToIntersection } from '@ts-std/types'
 
 import { debug } from '../utils'
 
+import { Console } from 'console'
+const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
+
 export type UserRawTokenDefinition = {
 	name: string,
 	regex: RegExp,
@@ -324,18 +327,18 @@ export class Lexer<V extends VirtualLexerOutputs> {
 		if (this.state === undefined)
 			throw new Error()
 
-		console.log('test')
-		console.log('token_definitions', token_definitions)
-		console.log('input_lexer_state ? input_lexer_state.source_state : undefined', input_lexer_state ? input_lexer_state.source_state : undefined)
-		console.log('this.state.source_state', this.state.source_state)
+		// console.log('test')
+		// console.log('token_definitions', token_definitions)
+		// console.log('input_lexer_state ? input_lexer_state.source_state : undefined', input_lexer_state ? input_lexer_state.source_state : undefined)
+		// console.log('this.state.source_state', this.state.source_state)
 
 		const attempt = Lexer.request(
 			token_definitions, input_lexer_state || this.state,
 			this.file, this.ignored_token_definitions,
 		)
-		console.log('attempt', attempt)
-		console.log('exiting test')
-		console.log()
+		// console.log('attempt', attempt)
+		// console.log('exiting test')
+		// console.log()
 		return attempt
 	}
 
@@ -345,9 +348,9 @@ export class Lexer<V extends VirtualLexerOutputs> {
 		if (this.state === undefined)
 			throw new Error()
 
-		console.log('require')
-		console.log('token_definitions', token_definitions)
-		console.log('this.state.source_state', this.state.source_state)
+		// console.log('require')
+		// console.log('token_definitions', token_definitions)
+		// console.log('this.state.source_state', this.state.source_state)
 
 		const attempt = Lexer.request(
 			token_definitions, this.state,
@@ -360,10 +363,10 @@ export class Lexer<V extends VirtualLexerOutputs> {
 		}
 
 		this.state = attempt[1]
-		console.log('this.state.source_state', this.state.source_state)
-		console.log('attempt[0]', attempt[0])
-		console.log('exiting require')
-		console.log()
+		// console.log('this.state.source_state', this.state.source_state)
+		// console.log('attempt', attempt)
+		// console.log('exiting require')
+		// console.log()
 		return attempt[0]
 	}
 
@@ -373,9 +376,9 @@ export class Lexer<V extends VirtualLexerOutputs> {
 		if (this.state === undefined)
 			throw new Error()
 
-		console.log(this.state.source_state.source)
+		// console.log(this.state.source_state.source)
 		if (this.state.source_state.source.length !== 0)
-			throw new Error("the source wasn't entirely consumed")
+			throw new Error(`the source wasn't entirely consumed:\n\n${this.get_next_source()}`)
 	}
 
 	get_next_source() {

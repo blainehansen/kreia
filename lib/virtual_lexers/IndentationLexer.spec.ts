@@ -18,12 +18,16 @@ a
 	b
 		c`
 
+const padded_source = `\
+a
+`
+
+const name = UserToken('name', /[a-z]+/)
+const [{ indent, deindent, indent_continue }, ] = IndentationLexer()
+const [, lexer] = Lexer.create({}, { IndentationLexer: IndentationLexer() })
+
 describe('IndentationLexer', () => {
 	it('basically works', () => {
-		const [{ indent, deindent, indent_continue }, ] = IndentationLexer()
-
-		const name = UserToken('name', /[a-z]+/)
-		const [, lexer] = Lexer.create({}, { IndentationLexer: IndentationLexer() })
 		lexer.reset(source)
 
 		expect(lexer.test([name, indent_continue])).eql(undefined)
@@ -48,4 +52,20 @@ describe('IndentationLexer', () => {
 
 		expect(() => lexer.exit()).not.throw()
 	})
+
+	// it('handles padded', () => {
+	// 	lexer.reset(padded_source)
+
+	// 	const toks = lexer.require([
+	// 		name
+	// 	])
+	// 	expect(toks.length).eql(1)
+
+	// 	expect(lexer.test([name])).eql(undefined)
+	// 	expect(lexer.test([indent])).eql(undefined)
+	// 	expect(lexer.test([deindent])).eql(undefined)
+	// 	expect(lexer.test([indent_continue])).eql(undefined)
+
+	// 	expect(() => lexer.exit()).not.throw()
+	// })
 })

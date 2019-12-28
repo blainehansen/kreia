@@ -5,6 +5,9 @@ import {
 	UserToken, HiddenToken, VirtualTokenDefinition, VirtualToken, ExposedToken,
 } from '../runtime/lexer'
 
+import { Console } from 'console'
+const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
+
 export const newline = HiddenToken('newline', /[\t ]*\n+/)
 export const tab = HiddenToken('tab', /\t+/)
 
@@ -25,6 +28,10 @@ export const IndentationLexer: VirtualLexerCreator<IndentationState, Toks, []> =
 		return { type: 'unbuffered', indentation: 0 }
 	},
 	request(virtual_requested, state, input_source_state, file) {
+		// console.log('virtual_requested', virtual_requested)
+		// console.log('state', state)
+		// console.log('input_source_state', input_source_state)
+		// console.log()
 		if (state.type === 'buffered') {
 			const { buffer: [[new_indentation, virtual_token], ...remaining_buffer] } = state
 			if (virtual_token.type.name !== virtual_requested.name)
