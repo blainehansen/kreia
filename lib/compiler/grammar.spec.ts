@@ -3,9 +3,11 @@ import { expect } from 'chai'
 
 import {
 	reset, exit,
+	tok,
 	kreia_grammar,
 	rule_block, rule_item, rule_definition, macro_definition,
-	token_definition, token_specification, base_token_specification, token_option,
+	token_definition, token_specification, token_atom,
+	// base_token_specification, token_option,
 	virtual_lexer_usage, macro_call,
 	locking_definitions, simple_rule_line, rule_atom,
 } from './grammar_blank'
@@ -22,55 +24,77 @@ function bad(fn: () => any, input: string) {
 }
 
 
-describe('token_option', () => it('works', () => {
-	parse(token_option, 'ignore: true')
-	parse(token_option, 'something_else: true')
+describe('character regex', () => it('works', () => {
+	for (const char of `!@#$%^&*()_-+={[}]|\\:;"'<>,.?/\`~1234567890azAZ `)
+		expect(tok.character.regex.test(`'${char}'`)).eql(true)
+
+	for (const mod of `aftnrv`)
+		expect(tok.character.regex.test(`'\\${mod}'`)).eql(true)
+	expect(tok.character.regex.test(`'\x07'`)).eql(false)
+	expect(tok.character.regex.test(`'\f'`)).eql(false)
+	expect(tok.character.regex.test(`'\t'`)).eql(false)
+	expect(tok.character.regex.test(`'\n'`)).eql(false)
+	expect(tok.character.regex.test(`'\r'`)).eql(false)
+	expect(tok.character.regex.test(`'\v'`)).eql(false)
+
+	expect(tok.character.regex.test(`'we'`)).eql(false)
+
+	expect(tok.character.regex.test(`'\\x0F'`)).eql(true)
+	expect(tok.character.regex.test(`'\\xAa'`)).eql(true)
+
+	expect(tok.character.regex.test(`'\\x4'`)).eql(false)
+	expect(tok.character.regex.test(`'\\x4f3'`)).eql(false)
+	expect(tok.character.regex.test(`'\\xnm'`)).eql(false)
+
+	expect(tok.character.regex.test(`'\\u{Aa}'`)).eql(true)
+	expect(tok.character.regex.test(`'\\u{A}'`)).eql(true)
+	expect(tok.character.regex.test(`'\\u{a}'`)).eql(true)
+	expect(tok.character.regex.test(`'\\u{053FDEA}'`)).eql(true)
+
+	expect(tok.character.regex.test(`'\\u{z}'`)).eql(false)
+	expect(tok.character.regex.test(`'\\u{Z}'`)).eql(false)
 }))
 
-const base_token_specification_regex_simple = `/\\w+/`
-const base_token_specification_regex_complex = `/(\\w\\/)|(.{5})+/`
-const base_token_specification_str_double = `"yo"`
-const base_token_specification_str_single = `'yo'`
+describe('token_atom', () => it('works', () => {
+	parse(token_atom, `'a'`)
+	parse(token_atom, `'\\x9d'`)
+	parse(token_atom, `'a' - 'Z'`)
+	parse(token_atom, `'\\x9d' - '\\u{FF33}'`)
 
-describe('base_token_specification', () => it('works', () => {
-	parse(base_token_specification, base_token_specification_regex_simple)
-	parse(base_token_specification, base_token_specification_regex_complex)
-	parse(base_token_specification, base_token_specification_str_double)
-	parse(base_token_specification, base_token_specification_str_single)
+	parse(token_atom, `:some_token`)
+
+	parse(token_atom, `"stuff"`)
+	parse(token_atom, `"different sdlkfjasdk ;;;%%"`)
 }))
 
 
-const token_specification_array_regex_simple = `[${base_token_specification_regex_simple}]`
-const token_specification_array_regex_complex = `[${base_token_specification_regex_complex}]`
-const token_specification_array_str_double = `[${base_token_specification_str_double}]`
-const token_specification_array_str_single = `[${base_token_specification_str_single}]`
-const token_specification_array_str_single_multiple = `[${base_token_specification_str_single}, ${base_token_specification_str_single}]`
-const token_specification_array_bad = `[]`
+const token_specification_single_range = `'a' - 'z'`
+const token_specification_range_concat_string = `'a' - 'z' "span"`
+const token_specification_range_header = `'h' '1' - '6'`
+const token_specification_concat_token = `'$' :identifier`
+const token_specification_concat_token_or_range = `'$' :identifier | '_' 'a' - 'z' :something`
 
 describe('token_specification', () => it('works', () => {
-	parse(token_specification, token_specification_array_regex_simple)
-	parse(token_specification, token_specification_array_regex_complex)
-	parse(token_specification, token_specification_array_str_double)
-	parse(token_specification, token_specification_array_str_single)
-	parse(token_specification, token_specification_array_str_single_multiple)
-
-	bad(token_specification, token_specification_array_bad)
+	parse(token_specification, token_specification_single_range)
+	parse(token_specification, token_specification_range_concat_string)
+	parse(token_specification, token_specification_range_header)
+	parse(token_specification, token_specification_concat_token)
+	parse(token_specification, token_specification_concat_token_or_range)
 }))
 
 
-const token_definition_regex_simple = `:yoyo = ${base_token_specification_regex_simple}`
-const token_definition_str_double = `:yoyo = ${base_token_specification_str_double}`
-const token_definition_array_regex_complex = `:yoyo = ${token_specification_array_regex_complex}`
-const token_definition_array_str_single_multiple = `:yoyo = ${token_specification_array_str_single_multiple}`
-
 describe('token_definition', () => it('works', () => {
-	parse(token_definition, token_definition_regex_simple)
-	parse(token_definition, token_definition_str_double)
-	parse(token_definition, token_definition_array_regex_complex)
-	parse(token_definition, token_definition_array_str_single_multiple)
+	parse(token_definition, ':yoyo = ' + token_specification_single_range)
+	parse(token_definition, ':yoyo = ' + token_specification_range_concat_string)
+	parse(token_definition, ':yoyo = ' + token_specification_range_header)
+	parse(token_definition, ':yoyo = ' + token_specification_concat_token)
+	parse(token_definition, ':yoyo = ' + token_specification_concat_token_or_range)
 
-	parse(token_definition, token_definition_array_regex_complex + ' ignore: true')
-	parse(token_definition, token_definition_array_str_single_multiple + ' ignore: true')
+	parse(token_definition, ':yoyo _= ' + token_specification_single_range)
+	parse(token_definition, ':yoyo _= ' + token_specification_range_concat_string)
+	parse(token_definition, ':yoyo _= ' + token_specification_range_header)
+	parse(token_definition, ':yoyo _= ' + token_specification_concat_token)
+	parse(token_definition, ':yoyo _= ' + token_specification_concat_token_or_range)
 }))
 
 

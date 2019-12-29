@@ -19,14 +19,17 @@ const KreiaGrammar = [
 	new TokenDef('modifier_token', ['*', '+', '?']),
 
 	new TokenDef('space', { match: / +/, ignore: true }),
-	new TokenDef('comment', { match: /\/\/[^\n]*/, ignore: true }),
-	new TokenDef('primitive', ['true']),
-	new TokenDef('str', [
-		/"(?:\\["\\]|[^\n"\\])*"/,
-		/'(?:\\['\\]|[^\n'\\])*'/,
-	]),
+	new TokenDef('comment', { match: /\s*\/\/[^\n]*\n+/, ignore: true }),
+	// new TokenDef('primitive', ['true']),
+	// this is overly simplified, and won't allow for literal emojis or other complex unicode characters to be used directly
+	new TokenDef('character', /\'(?:\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[aftnrv]|[\x20-\x7E])\'/),
+	new TokenDef('str', /"(?:\\["\\]|[^\n"\\])*"/),
+	// new TokenDef('str', [
+	// 	/"(?:\\["\\]|[^\n"\\])*"/,
+	// 	/'(?:\\['\\]|[^\n'\\])*'/,
+	// ]),
 
-	new TokenDef('regex_source', /\/(?![*+?])(?:[^\r\n\[/\\]|\\.|\[(?:[^\r\n\]\\]|\\.)*\])+\//),
+	// new TokenDef('regex_source', /\/(?![*+?])(?:[^\r\n\[/\\]|\\.|\[(?:[^\r\n\]\\]|\\.)*\])+\//),
 
 	new TokenDef('use_keyword', 'use'),
 	// new TokenDef('with_keyword', 'with'),
@@ -36,6 +39,8 @@ const KreiaGrammar = [
 	new TokenDef('colon', ':'),
 	new TokenDef('comma', ','),
 	new TokenDef('slash', '/'),
+	new TokenDef('dash', '-'),
+	new TokenDef('underscore', '_'),
 
 	new TokenDef('open_angle', '<'),
 	new TokenDef('close_angle', '>'),
@@ -127,33 +132,58 @@ const KreiaGrammar = [
 		maybe_consume('indent_continue'),
 	]),
 
-	new Rule('token_definition', [
-		consume('token_name', 'space', 'eq', 'space'),
-		subrule('token_specification'),
-		maybe(consume('space'), macro_call('space_sep', [subrule('token_option')])),
-	]),
 
-	new Rule('token_option', [
-		consume('rule_name', 'colon', 'space', 'primitive')
+	new Rule('token_definition', [
+		consume('token_name', 'space'),
+		// this is where a case insensitivity modifier could go?
+		maybe_consume('underscore'),
+		consume('eq', 'space'),
+		// here is where we could branch out and allow multiline token_specifications
+		subrule('token_specification'),
 	]),
 
 	new Rule('token_specification', [
-		or(
-			[subrule('base_token_specification')],
-			[
-				consume('open_bracket'),
-				macro_call('comma_sep', [subrule('base_token_specification')]),
-				consume('close_bracket'),
-			],
+		macro_call('many_separated',
+			[macro_call('space_sep', [subrule('token_atom')])],
+			[consume('space', 'bar', 'space')],
 		),
 	]),
 
-	new Rule('base_token_specification', [
+	new Rule('token_atom', [
 		or(
-			[consume('regex_source')],
+			[consume('character'), maybe_consume('dash', 'character')],
+			[consume('token_name')],
 			[consume('str')],
 		),
 	]),
+
+	// new Rule('token_definition', [
+	// 	consume('token_name', 'space', 'eq', 'space'),
+	// 	subrule('token_specification'),
+	// 	maybe(consume('space'), macro_call('space_sep', [subrule('token_option')])),
+	// ]),
+
+	// new Rule('token_option', [
+	// 	consume('rule_name', 'colon', 'space', 'primitive')
+	// ]),
+
+	// new Rule('token_specification', [
+	// 	or(
+	// 		[subrule('base_token_specification')],
+	// 		[
+	// 			consume('open_bracket'),
+	// 			macro_call('comma_sep', [subrule('base_token_specification')]),
+	// 			consume('close_bracket'),
+	// 		],
+	// 	),
+	// ]),
+
+	// new Rule('base_token_specification', [
+	// 	or(
+	// 		[consume('regex_source')],
+	// 		[consume('str')],
+	// 	),
+	// ]),
 
 	new Rule('virtual_lexer_usage', [
 		consume('open_brace'),
@@ -187,6 +217,8 @@ const KreiaGrammar = [
 	new Rule('rule_definition', [
 		consume('rule_name'),
 		maybe_subrule('locking_definitions'),
+		// consume('space'),
+		// maybe_consume('underscore'),
 		subrule('rule_block'),
 	]),
 
