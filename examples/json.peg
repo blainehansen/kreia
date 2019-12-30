@@ -1,13 +1,17 @@
-:Str = /"(?:\\["\\]|[^\n"\\])*"/
+// :Str = /"(?:\\["\\]|[^\n"\\])*"/
+:Str = '"' ('\\' ["\\] | ^[\n"\\])* '"'
 :Comma = ","
 :Colon = ":"
 :LeftBrace = "{"
 :RightBrace = "}"
 :LeftBracket = "["
 :RightBracket = "]"
-:Num = /[0-9]+(\.[0-9]+)?/
-:Primitive = ["null", "undefined", "true", "false"]
-:Whitespace = /\s+/ ignore: true
+// :Num = /[0-9]+(\.[0-9]+)?/
+:Num = [0-9]+ ('.' [0-9]+)?
+// :Primitive = ["null", "undefined", "true", "false"]
+:Primitive = 'null' | 'undefined' | 'true' | 'false'
+// :Whitespace = /\s+/ ignore: true
+:Whitespace _= &ascii_whitespace+
 
 json_entity =
 	| array

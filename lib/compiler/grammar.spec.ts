@@ -7,7 +7,6 @@ import {
 	kreia_grammar,
 	rule_block, rule_item, rule_definition, macro_definition,
 	token_definition, token_specification, token_atom,
-	// base_token_specification, token_option,
 	virtual_lexer_usage, macro_call,
 	locking_definitions, simple_rule_line, rule_atom,
 } from './grammar_blank'
@@ -22,57 +21,108 @@ function bad(fn: () => any, input: string) {
 	reset(input)
 	expect(fn).throw()
 }
+function incomplete(fn: () => any, input: string) {
+	reset(input)
+	fn()
+	expect(exit).throw()
+}
 
 
-describe('character regex', () => it('works', () => {
-	for (const char of `!@#$%^&*()_-+={[}]|\\:;"'<>,.?/\`~1234567890azAZ `)
-		expect(tok.character.regex.test(`'${char}'`)).eql(true)
+describe('character_class regex', () => it('works', () => {
+	for (const char of `!@#$%^&*()_-+={[}|:;"'<>,.?/\`~1234567890azAZ `) {
+		expect(tok.character_class.regex.test(`[${char}]`)).eql(true)
+		expect(tok.character_class.regex.test(`^[${char}]`)).eql(true)
+	}
+	expect(tok.character_class.regex.test(`[\\]]`)).eql(true)
+	expect(tok.character_class.regex.test(`^[\\]]`)).eql(true)
+	expect(tok.character_class.regex.test(`[\\\\]`)).eql(true)
+	expect(tok.character_class.regex.test(`^[\\\\]`)).eql(true)
 
-	for (const mod of `aftnrv`)
-		expect(tok.character.regex.test(`'\\${mod}'`)).eql(true)
-	expect(tok.character.regex.test(`'\x07'`)).eql(false)
-	expect(tok.character.regex.test(`'\f'`)).eql(false)
-	expect(tok.character.regex.test(`'\t'`)).eql(false)
-	expect(tok.character.regex.test(`'\n'`)).eql(false)
-	expect(tok.character.regex.test(`'\r'`)).eql(false)
-	expect(tok.character.regex.test(`'\v'`)).eql(false)
+	for (const mod of `ftnrv`) {
+		expect(tok.character_class.regex.test(`[\\${mod}]`)).eql(true)
+		expect(tok.character_class.regex.test(`^[\\${mod}]`)).eql(true)
+	}
+	expect(tok.character_class.regex.test(`[\x07]`)).eql(false)
+	expect(tok.character_class.regex.test(`[\f]`)).eql(false)
+	expect(tok.character_class.regex.test(`[\t]`)).eql(false)
+	expect(tok.character_class.regex.test(`[\n]`)).eql(false)
+	expect(tok.character_class.regex.test(`[\r]`)).eql(false)
+	expect(tok.character_class.regex.test(`[\v]`)).eql(false)
 
-	expect(tok.character.regex.test(`'we'`)).eql(false)
+	expect(tok.character_class.regex.test(`[we]`)).eql(true)
 
-	expect(tok.character.regex.test(`'\\x0F'`)).eql(true)
-	expect(tok.character.regex.test(`'\\xAa'`)).eql(true)
+	expect(tok.character_class.regex.test(`[\\x0F]`)).eql(true)
+	expect(tok.character_class.regex.test(`[\\xAa]`)).eql(true)
+	expect(tok.character_class.regex.test(`^[\\x0F]`)).eql(true)
+	expect(tok.character_class.regex.test(`^[\\xAa]`)).eql(true)
 
-	expect(tok.character.regex.test(`'\\x4'`)).eql(false)
-	expect(tok.character.regex.test(`'\\x4f3'`)).eql(false)
-	expect(tok.character.regex.test(`'\\xnm'`)).eql(false)
+	expect(tok.character_class.regex.test(`[\\x4]`)).eql(false)
+	expect(tok.character_class.regex.test(`[\\xnm]`)).eql(false)
 
-	expect(tok.character.regex.test(`'\\u{Aa}'`)).eql(true)
-	expect(tok.character.regex.test(`'\\u{A}'`)).eql(true)
-	expect(tok.character.regex.test(`'\\u{a}'`)).eql(true)
-	expect(tok.character.regex.test(`'\\u{053FDEA}'`)).eql(true)
+	expect(tok.character_class.regex.test(`[\\u{Aa}]`)).eql(true)
+	expect(tok.character_class.regex.test(`[\\u{A}]`)).eql(true)
+	expect(tok.character_class.regex.test(`[\\u{a}]`)).eql(true)
+	expect(tok.character_class.regex.test(`[\\u{053FDEA}]`)).eql(true)
+	expect(tok.character_class.regex.test(`^[\\u{Aa}]`)).eql(true)
+	expect(tok.character_class.regex.test(`^[\\u{A}]`)).eql(true)
+	expect(tok.character_class.regex.test(`^[\\u{a}]`)).eql(true)
+	expect(tok.character_class.regex.test(`^[\\u{053FDEA}]`)).eql(true)
 
-	expect(tok.character.regex.test(`'\\u{z}'`)).eql(false)
-	expect(tok.character.regex.test(`'\\u{Z}'`)).eql(false)
+	expect(tok.character_class.regex.test(`[\\u{z}]`)).eql(false)
+	expect(tok.character_class.regex.test(`[\\u{Z}]`)).eql(false)
+
+
+	expect(tok.character_class.regex.test(`["\]\\\\]`)).eql(true)
+	expect(tok.character_class.regex.test(`["\\\\]`)).eql(true)
+	expect(tok.character_class.regex.test(`^[\\n"\\\\]`)).eql(true)
+	expect(tok.character_class.regex.test(`[1-6a-f\\xFF\\u{FF}-\\u{5577}]`)).eql(true)
+	expect(tok.character_class.regex.test(`[\\x9d-\\u{FF33}]`)).eql(true)
+	expect(tok.character_class.regex.test(`^[\\x9d-\\u{FF33}]`)).eql(true)
+	expect(tok.character_class.regex.test(`^[\\x9d-\\u{FF33}]`)).eql(true)
 }))
 
 describe('token_atom', () => it('works', () => {
+	parse(token_atom, `["\\]\\\\]`)
+	incomplete(token_atom, `["]\\]`)
+	incomplete(token_atom, `["]\\\\]`)
 	parse(token_atom, `'a'`)
-	parse(token_atom, `'\\x9d'`)
-	parse(token_atom, `'a' - 'Z'`)
-	parse(token_atom, `'\\x9d' - '\\u{FF33}'`)
+	parse(token_atom, `'a'?`)
+	parse(token_atom, `'a'{3,5}`)
+	parse(token_atom, `^[a]`)
+	parse(token_atom, `[\\x9d]`)
+	// parse(token_atom, `'\\x9d'`)
+	parse(token_atom, `[a-Z]`)
+	parse(token_atom, `^[a-Z]`)
+	parse(token_atom, `[\\x9d-\\u{FF33}]`)
+	parse(token_atom, `[\\x9d-\\u{FF33}]+`)
+	parse(token_atom, `[\\x9d-\\u{FF33}]{2}`)
+	parse(token_atom, `[\\x9d-\\u{FF33}]{6,}`)
+	parse(token_atom, `[\\x9d-\\u{FF33}]{6,9}`)
+	parse(token_atom, `^[\\x9d-\\u{FF33}]`)
+	parse(token_atom, `^[\\x9d-\\u{FF33}]`)
+	bad(token_atom, `^'a'`)
+
+	parse(token_atom, `&something`)
+	parse(token_atom, `^&something`)
 
 	parse(token_atom, `:some_token`)
+	bad(token_atom, `^:some_token`)
 
 	parse(token_atom, `"stuff"`)
 	parse(token_atom, `"different sdlkfjasdk ;;;%%"`)
+	bad(token_atom, `^"different sdlkfjasdk ;;;%%"`)
+
+	parse(token_atom, `([a-z] :something | ^&whitespace)*`)
+	parse(token_atom, `(^[a-z] :something | ^&whitespace){3}`)
 }))
 
 
-const token_specification_single_range = `'a' - 'z'`
-const token_specification_range_concat_string = `'a' - 'z' "span"`
-const token_specification_range_header = `'h' '1' - '6'`
-const token_specification_concat_token = `'$' :identifier`
-const token_specification_concat_token_or_range = `'$' :identifier | '_' 'a' - 'z' :something`
+const token_specification_single_range = `[a-z]`
+const token_specification_range_concat_string = `[a-z] "span"`
+const token_specification_range_header = `'h' [1-6]`
+const token_specification_concat_token = `'$' :identifier{5}`
+const token_specification_concat_token_or_range = `'$' :identifier{4} | '_' [a-z]+ :something?`
+const token_specification_concat_token_or_range_paren = `'$' :identifier | '_' (^[a-z]* &dudes | ^&whitespace) :something{4,}`
 
 describe('token_specification', () => it('works', () => {
 	parse(token_specification, token_specification_single_range)
@@ -80,6 +130,7 @@ describe('token_specification', () => it('works', () => {
 	parse(token_specification, token_specification_range_header)
 	parse(token_specification, token_specification_concat_token)
 	parse(token_specification, token_specification_concat_token_or_range)
+	parse(token_specification, token_specification_concat_token_or_range_paren)
 }))
 
 
@@ -89,12 +140,14 @@ describe('token_definition', () => it('works', () => {
 	parse(token_definition, ':yoyo = ' + token_specification_range_header)
 	parse(token_definition, ':yoyo = ' + token_specification_concat_token)
 	parse(token_definition, ':yoyo = ' + token_specification_concat_token_or_range)
+	parse(token_definition, ':yoyo = ' + token_specification_concat_token_or_range_paren)
 
 	parse(token_definition, ':yoyo _= ' + token_specification_single_range)
 	parse(token_definition, ':yoyo _= ' + token_specification_range_concat_string)
 	parse(token_definition, ':yoyo _= ' + token_specification_range_header)
 	parse(token_definition, ':yoyo _= ' + token_specification_concat_token)
 	parse(token_definition, ':yoyo _= ' + token_specification_concat_token_or_range)
+	parse(token_definition, ':yoyo _= ' + token_specification_concat_token_or_range_paren)
 }))
 
 

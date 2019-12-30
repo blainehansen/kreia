@@ -1,19 +1,17 @@
-:html_tag_ident = ['h1', 'h2', 'a', 'p', 'div', 'span']
-// :html_tag_ident = #exact('h1' | 'h2' | 'a' | 'p' | 'div' | 'span')
-:ident = /[\w-]+/
-// :ident = (&ascii_alphanumeric | '-')+
+:html_tag_ident = ('h' [1-6]) | "a" | "p" | "div" | "span"
+:ident = (&ascii_alphanumeric | '-')+
 :open_angle = '<'
 :close_angle = '>'
 :slash = '/'
 :eq = '='
-:str = /"(?:\\["\\]|[^\n"\\])*"/
-// :str = #enclosed('"')
+// :str = /"(?:\\["\\]|[^\n"\\])*"/
+:str = '"' ('\\' ["\\] | ^[\n"\\])* '"'
 
-:not_open_angle = [/[^<]/, '\\<']
-// :not_open_angle = #not('<')
+// :not_open_angle = [/[^<]/, '\\<']
+:not_open_angle = (^[<] | "\\<")+
 
-:whitespace = /\s+/ ignore: true
-// :whitespace = &ascii_whitespace+ ignore: true
+// :whitespace = /\s+/ ignore: true
+:whitespace _= &ascii_whitespace+
 
 html_file =
 	html_tag+

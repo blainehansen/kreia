@@ -1,10 +1,11 @@
+// https://www.ascii-code.com/
 import * as fs from 'fs'
 import { tuple as t } from '@ts-std/types'
 
 import { print_grammar } from './render_codegen'
 import {
 	TokenDef, VirtualLexerUsage, Rule, Macro, Arg,
-	consume, maybe, maybe_many, maybe_consume, maybe_many_consume, many_consume, or, many, _var, many_separated,
+	consume, maybe, maybe_many, maybe_consume, maybe_many_consume, many_consume, or, maybe_or, many, _var, many_separated,
 	macro_call, subrule, maybe_subrule,
 } from './ast'
 
@@ -17,29 +18,31 @@ const KreiaGrammar = [
 	new TokenDef('rule_name', /\w+/),
 	new TokenDef('macro_name', /\@\w+/),
 	new TokenDef('modifier_token', ['*', '+', '?']),
+	new TokenDef('repetitions_modifier', /{\d+(,\d*)?}/),
 
 	new TokenDef('space', { match: / +/, ignore: true }),
 	new TokenDef('comment', { match: /\s*\/\/[^\n]*\n+/, ignore: true }),
-	// new TokenDef('primitive', ['true']),
-	// this is overly simplified, and won't allow for literal emojis or other complex unicode characters to be used directly
-	new TokenDef('character', /\'(?:\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[aftnrv]|[\x20-\x7E])\'/),
-	new TokenDef('str', /"(?:\\["\\]|[^\n"\\])*"/),
-	// new TokenDef('str', [
-	// 	/"(?:\\["\\]|[^\n"\\])*"/,
-	// 	/'(?:\\['\\]|[^\n'\\])*'/,
-	// ]),
 
-	// new TokenDef('regex_source', /\/(?![*+?])(?:[^\r\n\[/\\]|\\.|\[(?:[^\r\n\]\\]|\\.)*\])+\//),
+	// new TokenDef('character', /\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[aftnrv]|[\x20-\x7E]/),
+	// new TokenDef('character_class', /\^?\[(?:\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[ftnrv]|\\]|[\x20-\x5C\x5E-\x7E])+\]/), // 5D is ]
+
+	// this is overly simplified, and won't allow for literal emojis or other complex unicode characters to be used directly
+	// 5C is \, 5D is ]
+	new TokenDef('character_class', /\^?\[(?:\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[ftnrv]|\\]|\\\\|[\x20-\x5B\x5E-\x7E])+\]/),
+	new TokenDef('character_class_name', /\^?\&\w+/),
+	new TokenDef('str', [
+		/"(?:\\["\\]|[^\n"\\])*"/,
+		/'(?:\\['\\]|[^\n'\\])*'/,
+	]),
 
 	new TokenDef('use_keyword', 'use'),
 	// new TokenDef('with_keyword', 'with'),
 
 	new TokenDef('eq', '='),
 	new TokenDef('bar', '|'),
-	new TokenDef('colon', ':'),
 	new TokenDef('comma', ','),
-	new TokenDef('slash', '/'),
 	new TokenDef('dash', '-'),
+	new TokenDef('caret', '^'),
 	new TokenDef('underscore', '_'),
 
 	new TokenDef('open_angle', '<'),
@@ -92,13 +95,13 @@ const KreiaGrammar = [
 		),
 	]),
 
-	new Macro('enclosed_diff_block', [new Arg('not_in_indent'), new Arg('in_indent')], [
+	new Macro('enclosed_diff_block', [new Arg('line_item')], [
 		or(
-			[_var('not_in_indent')],
+			[_var('line_item')],
 			[
 				consume('indent'),
 				macro_call('many_separated',
-					[_var('in_indent')],
+					[_var('line_item')],
 					[consume('indent_continue')],
 				),
 				consume('deindent', 'indent_continue'),
@@ -112,7 +115,6 @@ const KreiaGrammar = [
 
 	new Macro('lines_block', [new Arg('line_item')], [
 		macro_call('enclosed_diff_block',
-			[macro_call('comma_sep', [_var('line_item')])],
 			[macro_call('comma_sep', [_var('line_item')])],
 		),
 	]),
@@ -151,39 +153,18 @@ const KreiaGrammar = [
 
 	new Rule('token_atom', [
 		or(
-			[consume('character'), maybe_consume('dash', 'character')],
+			[consume('character_class')],
+			[consume('character_class_name')],
 			[consume('token_name')],
 			[consume('str')],
+			[consume('open_paren'), subrule('token_specification'), consume('close_paren')],
+		),
+		maybe_or(
+			[consume('modifier_token')],
+			[consume('repetitions_modifier')],
 		),
 	]),
 
-	// new Rule('token_definition', [
-	// 	consume('token_name', 'space', 'eq', 'space'),
-	// 	subrule('token_specification'),
-	// 	maybe(consume('space'), macro_call('space_sep', [subrule('token_option')])),
-	// ]),
-
-	// new Rule('token_option', [
-	// 	consume('rule_name', 'colon', 'space', 'primitive')
-	// ]),
-
-	// new Rule('token_specification', [
-	// 	or(
-	// 		[subrule('base_token_specification')],
-	// 		[
-	// 			consume('open_bracket'),
-	// 			macro_call('comma_sep', [subrule('base_token_specification')]),
-	// 			consume('close_bracket'),
-	// 		],
-	// 	),
-	// ]),
-
-	// new Rule('base_token_specification', [
-	// 	or(
-	// 		[consume('regex_source')],
-	// 		[consume('str')],
-	// 	),
-	// ]),
 
 	new Rule('virtual_lexer_usage', [
 		consume('open_brace'),

@@ -1,12 +1,17 @@
-:Ident = /\w+/
+// :Ident = /\w+/
+:Ident = &ascii_word+
 :Colon = ':'
 :Dash = '-'
-:Space = / +/ ignore: true
+// :Space = / +/ ignore: true
+:Space _= ' '
 :EntitySeparator = '---'
 
-:Primitive = ["null", "undefined", "true", "false"]
-:Str = /"(?:\\["\\]|[^\n"\\])*"/
-:Num = /[0-9]+(\.[0-9]+)?/
+// :Primitive = ["null", "undefined", "true", "false"]
+:Primitive = 'null' | 'undefined' | 'true' | 'false'
+// :Str = /"(?:\\["\\]|[^\n"\\])*"/
+:Str = '"' ('\\' ["\\] | ^[\n"\\])* '"'
+// :Num = /[0-9]+(\.[0-9]+)?/
+:Num = [0-9]+ ('.' [0-9]+)?
 
 { :indent, :deindent, :indent_continue } = use './IndentationLexer'
 // { :indent, :deindent, :indent_continue } = use './IndentationLexerWithRawBlock' with '|"', /\$\w+/, '${', '}', /#+"/, /"#+/
