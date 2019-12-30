@@ -3,7 +3,7 @@ import { Result, Ok, Err, Maybe, Some, None } from '@ts-std/monads'
 
 import { debug, NonEmpty, NonLone } from '../utils'
 import { TokenSpec } from '../runtime/lexer'
-// import { RegexComponent } from './ast_tokens'
+import { RegexComponent } from './ast_tokens'
 
 export enum BaseModifier {
 	Many = '+',
@@ -223,10 +223,10 @@ export class LockingArg {
 }
 
 
-export class TokenDef {
-	readonly type: 'TokenDef' = 'TokenDef'
-	constructor(readonly name: string, readonly def: TokenSpec) {}
-}
+// export class TokenDef {
+// 	readonly type: 'TokenDef' = 'TokenDef'
+// 	constructor(readonly name: string, readonly def: TokenSpec) {}
+// }
 
 
 // so it sounds like we're bootstrapping
@@ -236,10 +236,10 @@ export class TokenDef {
 // - then, change the ast and render to use the new token specification system
 // - then fill in the logic for `grammar.ts` with the completed new system
 
-// export class TokenDef {
-// 	readonly type: 'TokenDef' = 'TokenDef'
-// 	constructor(readonly name: string, readonly def: RegexComponent, readonly ignore: boolean) {}
-// }
+export class TokenDef {
+	readonly type: 'TokenDef' = 'TokenDef'
+	constructor(readonly name: string, readonly def: RegexComponent, readonly ignore: boolean) {}
+}
 
 
 export class Rule {
@@ -286,7 +286,8 @@ export class VirtualLexerUsage {
 	constructor(
 		readonly virtual_lexer_name: string,
 		readonly path: string,
-		readonly args: TokenSpec[],
+		// readonly args: TokenSpec[],
+		readonly args: RegexComponent[],
 		readonly exposed_tokens: Dict<true>,
 	) {}
 }

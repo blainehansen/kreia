@@ -5,7 +5,7 @@
   "main": "./kreia.js",
   "types": "./kreia.d.ts",
   "scripts": {
-    "generate:grammar": "ts-node lib/compiler/grammar_ast.ts",
+    "generate:grammar": "ts-node lib/compiler/grammar.compile.ts",
     "parse": "ts-node lib/compiler/grammar_out.ts",
     "preversion": "npm test",
     "finalize-version": "git push origin master && git push origin master --tags && npm publish",

@@ -1,6 +1,7 @@
 import { Dict } from '@ts-std/types'
 import { debug, NonLone } from '../utils'
 import { validate_regex } from '../runtime/lexer'
+import { Registry } from './ast'
 
 function escape_string(def: string) {
 	return def.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // $& means the whole matched string
@@ -22,7 +23,7 @@ function modifier_to_source(modifier: Modifier): string {
 }
 
 
-abstract class RegexComponent {
+export abstract class RegexComponent {
 	abstract readonly modifier: Modifier
 	abstract _source(): string
 	into_regex_source(): string {
@@ -54,13 +55,13 @@ export class TokenString extends RegexComponent {
 	}
 }
 
-// export class TokenReference extends RegexComponent {
-// 	constructor(readonly token_name: string) { super() }
+export class TokenReference extends RegexComponent {
+	constructor(readonly token_name: string, readonly modifier: Modifier) { super() }
 
-// 	_source() {
-// 		return Registry.get_token_def(this.token_name).unwrap().def.into_regex_source()
-// 	}
-// }
+	_source() {
+		return Registry.get_token_def(this.token_name).unwrap().def.into_regex_source()
+	}
+}
 
 // export class SpecialCharacter extends RegexComponent {
 // 	// constructor(readonly character: '[^]' | '^' | '$') {}

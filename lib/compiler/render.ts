@@ -4,7 +4,7 @@ import { Dict, tuple as t } from '@ts-std/types'
 import { UniqueDict, DefaultDict } from '@ts-std/collections'
 import { MaxDict, NonEmpty, exhaustive, array_of, exec } from '../utils'
 
-import * as ast from './ast'
+import { make_regex, RegexComponent } from './ast_tokens'
 import { validate_references, check_left_recursive } from './ast_validate'
 import {
 	BaseModifier, Modifier, Scope as AstScope, ScopeStack as AstScopeStack, Node, Definition, Registry,
@@ -429,7 +429,6 @@ export function render_grammar(grammar: Grammar) {
 	const destructured_parser_names = [
 		'tok', 'reset', 'lock', 'consume', 'maybe',
 		'or', 'maybe_or', 'many_or', 'maybe_many_or', 'many', 'maybe_many', 'exit',
-		// 'many_separated', 'maybe_many_separated',
 	]
 
 	const parser_statement = ts.createVariableStatement(
@@ -561,57 +560,23 @@ function render_virtual_lexer_usage(virtual_lexer: VirtualLexerUsage) {
 	const name = virtual_lexer.virtual_lexer_name
 	return ts.createPropertyAssignment(
 		name,
-		create_call(name, virtual_lexer.args.map(render_token_spec)),
+		create_call(name, virtual_lexer.args.map(render_regex_component)),
 	)
 }
 
 
 function render_token_def(token_def: TokenDef) {
-	// this will be the new form
-	// and all the render_token_spec stuff will go away
-	// this also means all the parser and lexer code that processes all this will have to change
-	// const regex_literal = ts.createRegularExpressionLiteral(`/${make_regex(token_def.def).source}/`)
+	const regex_literal = render_regex_component(token_def.def)
 	return ts.createPropertyAssignment(
-		ts.createIdentifier(token_def.name),
-		render_token_spec(token_def.def),
-		// token_def.ignore
-		// 	? ts.createObjectLiteral([
-		// 		ts.createPropertyAssignment('regex', regex_literal),
-		// 		ts.createPropertyAssignment('ignore', ts.createTrue())
-		// 	], false)
-		// 	: regex_literal
+		token_def.ignore
+			? ts.createObjectLiteral([
+				ts.createPropertyAssignment('regex', regex_literal),
+				ts.createPropertyAssignment('ignore', ts.createTrue())
+			], false)
+			: regex_literal
 	)
 }
 
-function render_token_spec(spec: TokenSpec) {
-	if (typeof spec === 'object' && 'match' in spec) {
-		const assignments = [
-			ts.createPropertyAssignment(
-				ts.createIdentifier('match'),
-				render_base_spec(spec.match),
-			),
-		]
-		if (spec.ignore)
-			assignments.push(ts.createPropertyAssignment(
-				ts.createIdentifier('ignore'),
-				ts.createTrue(),
-			))
-
-		// TODO this is where the keyword: true argument would go
-		return ts.createObjectLiteral(assignments, false)
-	}
-
-	return render_base_spec(spec)
-}
-
-function render_base_spec(spec: BaseTokenSpec) {
-	return Array.isArray(spec)
-		? ts.createArrayLiteral(spec.map(render_regex), false)
-		: render_regex(spec)
-}
-
-function render_regex(def: RegExp | string) {
-	return typeof def === 'string'
-		? ts.createStringLiteral(def)
-		: ts.createRegularExpressionLiteral(`/${def.source}/`)
+function render_regex_component(regex_component: RegexComponent) {
+	return ts.createRegularExpressionLiteral(`/${make_regex(regex_component).source}/`)
 }

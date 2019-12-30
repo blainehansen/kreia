@@ -4,22 +4,27 @@ import { expect } from 'chai'
 import { check_left_recursive, validate_references } from './ast_validate'
 import {
 	Definition, Scope, ScopeStack, Node, Registry,
-	TokenDef, VirtualLexerUsage, Rule, Macro, Arg,
+	TokenDef as _TokenDef, VirtualLexerUsage, Rule, Macro, Arg,
 	consume, maybe, maybe_many, maybe_consume, maybe_many_consume, many_consume,
 	or, maybe_or, maybe_many_or, many, _var, many_separated,
 	macro_call, subrule, maybe_subrule,
 } from './ast'
+import { RegexComponent, TokenString } from './ast_tokens'
 
+
+function TokenDef(name: string, def: string) {
+	return new _TokenDef(name, new TokenString(def, undefined), false)
+}
 
 const token_defs = [
-	new TokenDef('A', 'A'),
-	new TokenDef('B', 'B'),
-	new TokenDef('C', 'C'),
-	new TokenDef('D', 'D'),
-	new TokenDef('E', 'E'),
-	new TokenDef('F', 'F'),
-	new TokenDef('G', 'G'),
-	new TokenDef('H', 'H'),
+	TokenDef('A', 'A'),
+	TokenDef('B', 'B'),
+	TokenDef('C', 'C'),
+	TokenDef('D', 'D'),
+	TokenDef('E', 'E'),
+	TokenDef('F', 'F'),
+	TokenDef('G', 'G'),
+	TokenDef('H', 'H'),
 ]
 Registry.register_tokens(token_defs)
 

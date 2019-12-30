@@ -415,37 +415,7 @@ export function match_and_trim(tokens: Token[], token_definitions: TokenDefiniti
 }
 
 
-export type TokenOptions = { ignore?: true }
-export type BaseTokenSpec = RegExp | string | (RegExp | string)[]
-export type TokenSpec = BaseTokenSpec | { match: BaseTokenSpec } & TokenOptions
-// after these changes are made, we won't have to have much of this runtime code to produce token regexes
-// in a way these will be more debuggable, since they'll have the real runtime regex and can copy paste it or change it
-// export type TokenSpec = RegExp | { regex: RegExp, ignore: true }
-
-function source_regex(def: RegExp | string) {
-	return typeof def === 'string'
-		? def.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // $& means the whole matched string
-		: def.source
-}
-
-function denature_spec(spec: TokenSpec): [BaseTokenSpec, TokenOptions] {
-	if (typeof spec === 'object' && 'match' in spec) {
-		const { match, ...options } = spec
-		return [match, options]
-	}
-	return [spec, {}]
-}
-
-export function make_regex(regex: BaseTokenSpec) {
-	const base_source = Array.isArray(regex)
-		? regex.map(r => `(?:${source_regex(r)})`).join('|')
-		: source_regex(regex)
-
-	const final_regex = new RegExp(`^(?:${base_source})`)
-	if (final_regex.test(''))
-		throw new Error(`attempted to create a token that matches the empty string ${regex}`)
-	return final_regex
-}
+export type TokenSpec = RegExp | { regex: RegExp, ignore: true }
 
 export function Tokens<D extends Dict<TokenSpec>>(
 	tokens: D,
@@ -459,31 +429,18 @@ export function Tokens<D extends Dict<TokenSpec>>(
 type TokensForSpecs<D extends Dict<TokenSpec>> =
 	{ [K in keyof D]: UserRawTokenDefinition }
 
-export function UserToken(name: string, spec: TokenSpec) {
-	const [regex, { ignore }] = denature_spec(spec)
 
-	const token_definition = {
-		type: 'Token', name, is_virtual: false,
-		regex: make_regex(regex),
-	} as UserRawTokenDefinition
-
-	if (ignore !== undefined)
-		(token_definition as any).ignore = ignore
-
-	return token_definition
-}
-
-
+// export function validate_regex(regex: RegExp): Result<RegExp> {
 export function validate_regex(regex: RegExp) {
 	if (regex.test(''))
 		throw new Error(`attempted to create a token that matches the empty string:\n${debug(regex)}`)
 	return regex
 }
-// export function UserToken(name: string, spec: TokenSpec): UserRawTokenDefinition {
-// 	return 'ignore' in spec
-// 		? { type: 'Token', name, is_virtual: false, regex: validate_regex(spec.regex), ignore: true }
-// 		: { type: 'Token', name, is_virtual: false, regex: validate_regex(spec) }
-// }
+export function UserToken(name: string, spec: TokenSpec): UserRawTokenDefinition {
+	return 'ignore' in spec
+		? { name, is_virtual: false, regex: validate_regex(spec.regex), ignore: true }
+		: { name, is_virtual: false, regex: validate_regex(spec) }
+}
 
 
 export function ExposedToken(name: string, virtual_lexer_name: string, spec: TokenSpec) {
@@ -493,22 +450,18 @@ export function ExposedToken(name: string, virtual_lexer_name: string, spec: Tok
 }
 
 export function VirtualToken(name: string, virtual_lexer_name: string): EmptyVirtualTokenDefinition
-export function VirtualToken(name: string, virtual_lexer_name: string, regex: BaseTokenSpec): ContentVirtualTokenDefinition
-export function VirtualToken(name: string, virtual_lexer_name: string, regex?: BaseTokenSpec): any {
+export function VirtualToken(name: string, virtual_lexer_name: string, regex: RegExp): ContentVirtualTokenDefinition
+export function VirtualToken(name: string, virtual_lexer_name: string, regex?: RegExp): any {
 	const token_definition = { type: 'Token', name, virtual_lexer_name, is_virtual: true }
 	if (regex !== undefined)
-		(token_definition as any).regex = make_regex(regex)
+		(token_definition as any).regex = validate_regex(regex)
 
 	return token_definition
 }
 
-export function HiddenToken(name: string, regex: BaseTokenSpec): HiddenTokenDefinition {
+export function HiddenToken(name: string, regex: RegExp): HiddenTokenDefinition {
 	return {
 		name, ignore: true, is_virtual: false,
-		regex: make_regex(regex),
+		regex: validate_regex(regex),
 	}
 }
-
-// export function ConcatTokens(tokens: TestableTokenDefinition[]) {
-// 	// basically just extract the sources (without the ^) and put them together
-// }
