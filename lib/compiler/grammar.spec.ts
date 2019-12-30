@@ -102,8 +102,8 @@ describe('token_atom', () => it('works', () => {
 	parse(token_atom, `^[\\x9d-\\u{FF33}]`)
 	bad(token_atom, `^'a'`)
 
-	parse(token_atom, `&something`)
-	parse(token_atom, `^&something`)
+	parse(token_atom, `#something`)
+	parse(token_atom, `^#something`)
 
 	parse(token_atom, `:some_token`)
 	bad(token_atom, `^:some_token`)
@@ -112,8 +112,8 @@ describe('token_atom', () => it('works', () => {
 	parse(token_atom, `"different sdlkfjasdk ;;;%%"`)
 	bad(token_atom, `^"different sdlkfjasdk ;;;%%"`)
 
-	parse(token_atom, `([a-z] :something | ^&whitespace)*`)
-	parse(token_atom, `(^[a-z] :something | ^&whitespace){3}`)
+	parse(token_atom, `([a-z] :something | ^#whitespace)*`)
+	parse(token_atom, `(^[a-z] :something | ^#whitespace){3}`)
 }))
 
 
@@ -122,7 +122,7 @@ const token_specification_range_concat_string = `[a-z] "span"`
 const token_specification_range_header = `'h' [1-6]`
 const token_specification_concat_token = `'$' :identifier{5}`
 const token_specification_concat_token_or_range = `'$' :identifier{4} | '_' [a-z]+ :something?`
-const token_specification_concat_token_or_range_paren = `'$' :identifier | '_' (^[a-z]* &dudes | ^&whitespace) :something{4,}`
+const token_specification_concat_token_or_range_paren = `'$' :identifier | '_' (^[a-z]* #dudes | ^#whitespace) :something{4,}`
 
 describe('token_specification', () => it('works', () => {
 	parse(token_specification, token_specification_single_range)

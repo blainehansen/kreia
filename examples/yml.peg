@@ -1,5 +1,5 @@
 // :Ident = /\w+/
-:Ident = &ascii_word+
+:Ident = #word+
 :Colon = ':'
 :Dash = '-'
 // :Space = / +/ ignore: true

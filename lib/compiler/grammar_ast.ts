@@ -29,7 +29,7 @@ const KreiaGrammar = [
 	// this is overly simplified, and won't allow for literal emojis or other complex unicode characters to be used directly
 	// 5C is \, 5D is ]
 	new TokenDef('character_class', /\^?\[(?:\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[ftnrv]|\\]|\\\\|[\x20-\x5B\x5E-\x7E])+\]/),
-	new TokenDef('character_class_name', /\^?\&\w+/),
+	new TokenDef('character_class_name', /\^?\#\w+/),
 	new TokenDef('str', [
 		/"(?:\\["\\]|[^\n"\\])*"/,
 		/'(?:\\['\\]|[^\n'\\])*'/,

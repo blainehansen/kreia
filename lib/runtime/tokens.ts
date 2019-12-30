@@ -1,99 +1,145 @@
-// can do individual characters 'a' which can be any ascii character and the escape sequences supported by rust
-// keep it simple for now a unicode character is '\u{any amount of }'
+import { Dict } from '@ts-std/types'
+import { debug, NonLone } from '../utils'
 
-// eventually expand to this:
-// \x7F        hex character code (exactly two digits)
-// \x{10FFFF}  any hex character code corresponding to a Unicode code point
-// \u007F      hex character code (exactly four digits)
-// \u{7F}      any hex character code corresponding to a Unicode code point
-// \U0000007F  hex character code (exactly eight digits)
-// \U{7F}      any hex character code corresponding to a Unicode code point
-
-// then there are ranges, which are always expressed by themselves in brackets []
+function escape_string(def: string) {
+	return def.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // $& means the whole matched string
+}
 
 
+type Modifier =
+	| undefined
+	| '+' | '*' | '?'
+	| number
+	| [number, number | undefined]
+
+function modifier_to_source(modifier: Modifier): string {
+	if (modifier === undefined) return ''
+	if (typeof modifier === 'string') return modifier
+	if (typeof modifier === 'number') return `{${modifier}}`
+	const [begin, end] = modifier
+	return `{${begin},${end !== undefined ? '' + end : ''}}`
+}
 
 
+abstract class RegexComponent {
+	abstract readonly modifier: Modifier
+	abstract _source(): string
+	into_regex_source(): string {
+		return this._source() + modifier_to_source(this.modifier)
+	}
+}
 
+export class Concat extends RegexComponent {
+	constructor(readonly segments: NonLone<RegexComponent>, readonly modifier: Modifier) { super() }
 
+	_source() {
+		return '(?:' + this.segments.map(p => p.into_regex_source()).join('') + ')'
+	}
+}
 
+export class Union extends RegexComponent {
+	constructor(readonly segments: NonLone<RegexComponent>, readonly modifier: Modifier) { super() }
 
+	_source() {
+		return this.segments.map(p => p.into_regex_source()).join('|')
+	}
+}
 
+export class TokenString extends RegexComponent {
+	constructor(readonly value: string, readonly modifier: Modifier) { super() }
 
-// // the "base terminals" are all either CharacterClass or a String
-// // but abstracted from any particular language and implementation
+	_source() {
+		return `(?:${escape_string(this.value)})`
+	}
+}
 
-// // the most basic is simply a string using '' or ""
-// // then there are all the base included "character classes"
+// export class SpecialCharacter extends RegexComponent {
+// 	// constructor(readonly character: '[^]' | '^' | '$') {}
+// 	constructor(readonly character: '[^]' | '$') { super() }
 
-// // they can be concatenated
-// // &ascii_alphanumeric 'thing'
-// // they can be unioned
-// // &ascii_word | 'something'
-// // they can be simply negated
-// // ^&ascii_whitespace
-// // they can be modified with ?, +, *, {n}, {n,}, {n,m}
-
-// // strings can be made case-insensitive with i after
-// // "span"i
-// // something to make things exact....
-// // !("span"i, "div"i)
-
-// // here's a list of all the language's base regulars
-// const any = new SpecialCharacter('[^]')
-// const begin = new SpecialCharacter('^')
-// const end = new SpecialCharacter('$')
-// const word = new CharacterClass('0-9a-zA-Z_')
-// const alphanumeric = new CharacterClass('0-9a-zA-Z')
-// const alphabetic = new CharacterClass('a-zA-Z')
-// const numeric = new CharacterClass('0-9')
-// const lowercase = new CharacterClass('a-z')
-// const uppercase = new CharacterClass('A-Z')
-// const whitespace = new CharacterClass('\\t\\n\\v\\f\\r ')
-
-
-// // here's a list of all the base token macros (allow people to define their own?)
-// // #not(a: CharacterClass) // negates this CharacterClass, allowing for escaping with \
-// // #not_custom_escape(a: CharacterClass, escape: Character) // negates, but requires custom escape
-// // #exact(a: Regex) // wraps it in word boundaries \b
-// // #enclosed(a: Character) // creates a regex that matches anything enclosed in a, allowing escape with /
-// // #enclosed_except(a: Character, d: CharacterClass) // same as #enclosed, but disallows anything matching d within the enclosure
-// // #enclosed_non_empty(a: Regex) // same as enclosed but uses + instead of * for the enclosure content
-// // #open_close(begin: Character, end: Character) // creates a regex that matches anything enclosed by begin then end
-// // #open_close_except(begin: Character, end: Character, d: CharacterClass)
-
-// // all of the above that allow escaping also have a custom_escape version
-
-// interface IntoRegex {
-// 	into_regex(): RegExp,
-// }
-
-// class SpecialCharacter implements IntoRegex {
-// 	constructor(readonly special: string) {}
-// 	into_regex() {
-// 		return new RegExp(this.char)
+// 	_source() {
+// 		return character
 // 	}
 // }
 
-// class Character implements IntoRegex {
-// 	constructor(readonly char: string) {
-// 		if (char.length !== 1)
-// 			throw new Error(`invalid character: ${char}`)
-// 	}
-// 	into_regex() {
-// 		return new RegExp('\\' + this.char)
-// 	}
-// }
+export class CharacterClass extends RegexComponent {
+	constructor(readonly source: string, readonly negated: boolean, readonly modifier: Modifier) { super() }
 
-// class CharacterClass implements IntoRegex {
-// 	constructor(readonly codes: string[], readonly negated = false) {
-// 		if (char.length !== 1)
-// 			throw new Error(`invalid character: ${char}`)
-// 	}
-// 	into_regex() {
-// 		const code = this.codes.join('')
-// 		return this.negated
-// 			? new RegExp(`[^${code}]`)
-// 			: new RegExp(`[${code}]`)
-// 	}
-// }
+	_source() {
+		return `[${this.negated ? '^' : ''}${this.source.replace(/\^/g, '\\^')}]`
+	}
+}
+
+export function make_regex(entry: RegexComponent) {
+	// const final_regex = new RegExp(`^(?:${entry.into_regex_source()})`, 'u')
+	const final_regex = new RegExp(`^${entry.into_regex_source()}`, 'u')
+	if (final_regex.test(''))
+		throw new Error(`attempted to create a token that matches the empty string:\n\n${debug(entry)}`)
+	return final_regex
+}
+
+
+export const builtins = {
+	// any: new SpecialCharacter('[^]'),
+	// begin: new SpecialCharacter('^'),
+	// end: new SpecialCharacter('$'),
+	// boundary: new SpecialCharacter('\\b'),
+
+	alphanumeric: new CharacterClass('0-9a-zA-Z', false, undefined),
+	alnum: new CharacterClass('0-9A-Za-z', false, undefined),
+
+	alphabetic: new CharacterClass('a-zA-Z', false, undefined),
+	alpha: new CharacterClass('A-Za-z', false, undefined),
+
+	numeric: new CharacterClass('0-9', false, undefined),
+	digit: new CharacterClass('0-9', false, undefined),
+
+	lower: new CharacterClass('a-z', false, undefined),
+	lowercase: new CharacterClass('a-z', false, undefined),
+
+	uppercase: new CharacterClass('A-Z', false, undefined),
+	upper: new CharacterClass('A-Z', false, undefined),
+
+	whitespace: new CharacterClass('\\t\\n\\v\\f\\r ', false, undefined),
+	space: new CharacterClass('\\t\\n\\v\\f\\r ', false, undefined),
+
+	ascii: new CharacterClass('\\x00-\\x7F', false, undefined),
+	blank: new CharacterClass('\\t ', false, undefined),
+	cntrl: new CharacterClass('\\x00-\\x1F\\x7F', false, undefined),
+	graph: new CharacterClass('!-~', false, undefined),
+	print: new CharacterClass(' -~', false, undefined),
+	punct: new CharacterClass('!-/:-@[-`{-~', false, undefined),
+	word: new CharacterClass('0-9A-Za-z_', false, undefined),
+	xdigit: new CharacterClass('0-9A-Fa-f', false, undefined),
+
+	// https://www.compart.com/en/unicode/category
+	// https://2ality.com/2017/07/regexp-unicode-property-escapes.html
+	// https://mathiasbynens.be/notes/es-unicode-property-escapes
+	unicode_digit: new CharacterClass('\\p{Decimal_Number}', false, undefined),
+	unicode_numeric: new CharacterClass('\\p{Number}', false, undefined),
+	unicode_word: new CharacterClass('\\p{Alphabetic}\\p{Mark}\\p{Decimal_Number}\\p{Connector_Punctuation}\\p{Join_Control}', false, undefined),
+	// unicode_whitespace: new CharacterClass('\\s', false, undefined),
+	unicode_whitespace: new CharacterClass('\\p{White_Space}', false, undefined),
+
+	// \d digit (\p{Nd})
+	// \s whitespace (\p{White_Space})
+	// \w word character (\p{Alphabetic} + \p{M} + \d + \p{Pc} + \p{Join_Control})
+} as Readonly<Dict<RegexComponent>>
+
+
+// eventually add property escapes
+// \p{words}
+
+// strings can be made case-insensitive with i after
+// "span"i
+// something to make things exact....
+// !("span"i, "div"i)
+
+
+// here's a list of all the base token macros (allow people to define their own?)
+// #exact(a: Regex) // wraps it in word boundaries \b
+// #enclosed(a: Character) // creates a regex that matches anything enclosed in a, allowing escape with /
+// #enclosed_except(a: Character, d: CharacterClass) // same as #enclosed, but disallows anything matching d within the enclosure
+// #enclosed_non_empty(a: Regex) // same as enclosed but uses + instead of * for the enclosure content
+// #open_close(begin: Character, end: Character) // creates a regex that matches anything enclosed by begin then end
+// #open_close_except(begin: Character, end: Character, d: CharacterClass)

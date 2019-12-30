@@ -11,7 +11,7 @@
 // :Primitive = ["null", "undefined", "true", "false"]
 :Primitive = 'null' | 'undefined' | 'true' | 'false'
 // :Whitespace = /\s+/ ignore: true
-:Whitespace _= &ascii_whitespace+
+:Whitespace _= #whitespace+
 
 json_entity =
 	| array

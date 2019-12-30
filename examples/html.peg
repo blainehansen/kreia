@@ -1,5 +1,5 @@
 :html_tag_ident = ('h' [1-6]) | "a" | "p" | "div" | "span"
-:ident = (&ascii_alphanumeric | '-')+
+:ident = (#alphanumeric | '-')+
 :open_angle = '<'
 :close_angle = '>'
 :slash = '/'
@@ -11,7 +11,7 @@
 :not_open_angle = (^[<] | "\\<")+
 
 // :whitespace = /\s+/ ignore: true
-:whitespace _= &ascii_whitespace+
+:whitespace _= #whitespace+
 
 html_file =
 	html_tag+
