@@ -1,5 +1,6 @@
 import { Dict } from '@ts-std/types'
 import { debug, NonLone } from '../utils'
+import { validate_regex } from '../runtime/lexer'
 
 function escape_string(def: string) {
 	return def.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // $& means the whole matched string
@@ -53,6 +54,14 @@ export class TokenString extends RegexComponent {
 	}
 }
 
+// export class TokenReference extends RegexComponent {
+// 	constructor(readonly token_name: string) { super() }
+
+// 	_source() {
+// 		return Registry.get_token_def(this.token_name).unwrap().def.into_regex_source()
+// 	}
+// }
+
 // export class SpecialCharacter extends RegexComponent {
 // 	// constructor(readonly character: '[^]' | '^' | '$') {}
 // 	constructor(readonly character: '[^]' | '$') { super() }
@@ -73,9 +82,7 @@ export class CharacterClass extends RegexComponent {
 export function make_regex(entry: RegexComponent) {
 	// const final_regex = new RegExp(`^(?:${entry.into_regex_source()})`, 'u')
 	const final_regex = new RegExp(`^${entry.into_regex_source()}`, 'u')
-	if (final_regex.test(''))
-		throw new Error(`attempted to create a token that matches the empty string:\n\n${debug(entry)}`)
-	return final_regex
+	return validate_regex(final_regex)
 }
 
 
@@ -117,7 +124,10 @@ export const builtins = {
 	// https://mathiasbynens.be/notes/es-unicode-property-escapes
 	unicode_digit: new CharacterClass('\\p{Decimal_Number}', false, undefined),
 	unicode_numeric: new CharacterClass('\\p{Number}', false, undefined),
-	unicode_word: new CharacterClass('\\p{Alphabetic}\\p{Mark}\\p{Decimal_Number}\\p{Connector_Punctuation}\\p{Join_Control}', false, undefined),
+	unicode_word: new CharacterClass(
+		'\\p{Alphabetic}\\p{Mark}\\p{Decimal_Number}\\p{Connector_Punctuation}\\p{Join_Control}',
+		false, undefined,
+	),
 	// unicode_whitespace: new CharacterClass('\\s', false, undefined),
 	unicode_whitespace: new CharacterClass('\\p{White_Space}', false, undefined),
 

@@ -285,7 +285,7 @@ export function compute_decidable(
 	known_against: [Definition, ScopeStack][],
 	next: [Node, ScopeStack][],
 	should_gather: boolean,
-) {
+): AstDecidable {
 	// call_count = 0
 
 	const against = should_gather
@@ -308,7 +308,9 @@ export function compute_decidable(
 	// console.log()
 	// console.log()
 	// console.log()
-	return path
+	return path.path.length === 1 && !Array.isArray(path.path[0])
+		? path.path[0]
+		: path
 }
 
 

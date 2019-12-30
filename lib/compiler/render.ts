@@ -427,8 +427,8 @@ export function render_grammar(grammar: Grammar) {
 	))
 
 	const destructured_parser_names = [
-		'tok', 'reset', 'exit', 'maybe', 'consume', 'many', 'maybe_many',
-		'or', 'maybe_or',
+		'tok', 'reset', 'lock', 'consume', 'maybe',
+		'or', 'maybe_or', 'many_or', 'maybe_many_or', 'many', 'maybe_many', 'exit',
 		// 'many_separated', 'maybe_many_separated',
 	]
 
@@ -558,20 +558,28 @@ export function render_macro(macro: Macro) {
 
 
 function render_virtual_lexer_usage(virtual_lexer: VirtualLexerUsage) {
-	// const name = ts.createIdentifier(virtual_lexer.virtual_lexer_name)
 	const name = virtual_lexer.virtual_lexer_name
 	return ts.createPropertyAssignment(
 		name,
-		// create_call('t', [, create_call('t', virtual_lexer.args.map(render_token_spec))]),
 		create_call(name, virtual_lexer.args.map(render_token_spec)),
 	)
 }
 
 
 function render_token_def(token_def: TokenDef) {
+	// this will be the new form
+	// and all the render_token_spec stuff will go away
+	// this also means all the parser and lexer code that processes all this will have to change
+	// const regex_literal = ts.createRegularExpressionLiteral(`/${make_regex(token_def.def).source}/`)
 	return ts.createPropertyAssignment(
 		ts.createIdentifier(token_def.name),
 		render_token_spec(token_def.def),
+		// token_def.ignore
+		// 	? ts.createObjectLiteral([
+		// 		ts.createPropertyAssignment('regex', regex_literal),
+		// 		ts.createPropertyAssignment('ignore', ts.createTrue())
+		// 	], false)
+		// 	: regex_literal
 	)
 }
 

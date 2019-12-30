@@ -1,7 +1,7 @@
 import { Maybe } from '@ts-std/monads'
 import { Dict, Cast, tuple as t } from '@ts-std/types'
 
-import { debug } from '../utils'
+import { debug, NonEmpty } from '../utils'
 import { Decidable } from './decision'
 import {
 	Lexer as _Lexer,
@@ -49,12 +49,12 @@ export function Parser<D extends Dict<TokenSpec>, V extends VirtualLexerOutputs 
 		maybe_many<E extends ParseEntity>(...entity: E) {
 			return maybe_many(lexer, entity)
 		},
-		many_separated<B extends ParseEntity, S extends ParseEntity>(body_rule: B, separator_rule: S) {
-			return many_separated(lexer, body_rule, separator_rule)
-		},
-		maybe_many_separated<B extends ParseEntity, S extends ParseEntity>(body_rule: B, separator_rule: S) {
-			return maybe_many_separated(lexer, body_rule, separator_rule)
-		},
+		// many_separated<B extends ParseEntity, S extends ParseEntity>(body_rule: B, separator_rule: S) {
+		// 	return many_separated(lexer, body_rule, separator_rule)
+		// },
+		// maybe_many_separated<B extends ParseEntity, S extends ParseEntity>(body_rule: B, separator_rule: S) {
+		// 	return maybe_many_separated(lexer, body_rule, separator_rule)
+		// },
 		exit() {
 			lexer.exit()
 		},
@@ -183,14 +183,14 @@ function maybe<E extends ParseEntity>(
 function many<E extends ParseEntity>(
 	lexer: Lexer,
 	entity: E
-): EntityReturn<E>[] {
+): NonEmpty<EntityReturn<E>> {
 	return _many(lexer, false, entity)
 }
 
 function maybe_many<E extends ParseEntity>(
 	lexer: Lexer,
 	entity: E
-): EntityReturn<E>[] | undefined {
+): NonEmpty<EntityReturn<E>> | undefined {
 	return _many(lexer, true, entity)
 }
 
@@ -198,19 +198,19 @@ function _many<E extends ParseEntity, B extends boolean>(
 	lexer: Lexer,
 	is_optional: B,
 	entity: E,
-): Optional<EntityReturn<E>[], B> {
+): Optional<NonEmpty<EntityReturn<E>>, B> {
 	let should_proceed = !is_optional || test_entity(lexer, entity)
 	if (is_optional && !should_proceed)
-		return undefined as Optional<EntityReturn<E>[], B>
+		return undefined as Optional<NonEmpty<EntityReturn<E>>, B>
 
-	const results = [] as EntityReturn<E>[]
+	const results = [] as unknown as NonEmpty<EntityReturn<E>>
 
 	while (should_proceed) {
 		results.push(perform_entity(lexer, entity))
 		should_proceed = test_entity(lexer, entity)
 	}
 
-	return results as Optional<EntityReturn<E>[], B>
+	return results as Optional<NonEmpty<EntityReturn<E>>, B>
 }
 
 
@@ -235,8 +235,8 @@ function maybe_or<C extends ParseEntity[]>(
 function many_or<C extends ParseEntity[]>(
 	lexer: Lexer,
 	choices: C,
-): ChoicesReturn<C>[] {
-	const results = [_or(lexer, false, choices)]
+): NonEmpty<ChoicesReturn<C>> {
+	const results = [_or(lexer, false, choices)] as NonEmpty<ChoicesReturn<C>>
 
 	let result
 	while (result = _or(lexer, true, choices))
@@ -247,13 +247,13 @@ function many_or<C extends ParseEntity[]>(
 function maybe_many_or<C extends ParseEntity[]>(
 	lexer: Lexer,
 	choices: C,
-): ChoicesReturn<C>[] | undefined {
+): NonEmpty<ChoicesReturn<C>> | undefined {
 	const results = [] as ChoicesReturn<C>[]
 	let result
 	while (result = _or(lexer, true, choices))
 		results.push(result)
 
-	return results.length !== 0 ? results : undefined
+	return results.length !== 0 ? results as NonEmpty<ChoicesReturn<C>> : undefined
 }
 
 function _or<C extends ParseEntity[], B extends boolean>(
@@ -276,42 +276,42 @@ function _or<C extends ParseEntity[], B extends boolean>(
 }
 
 
-function many_separated<B extends ParseEntity, S extends ParseEntity>(
-	lexer: Lexer,
-	body_rule: B,
-	separator_rule: S,
-): EntityReturn<B>[] {
-	return _many_separated(lexer, false, body_rule, separator_rule)
-}
+// function many_separated<B extends ParseEntity, S extends ParseEntity>(
+// 	lexer: Lexer,
+// 	body_rule: B,
+// 	separator_rule: S,
+// ): EntityReturn<B>[] {
+// 	return _many_separated(lexer, false, body_rule, separator_rule)
+// }
 
-function maybe_many_separated<B extends ParseEntity, S extends ParseEntity>(
-	lexer: Lexer,
-	body_rule: B,
-	separator_rule: S,
-): EntityReturn<B>[] | undefined {
-	return _many_separated(lexer, true, body_rule, separator_rule)
-}
+// function maybe_many_separated<B extends ParseEntity, S extends ParseEntity>(
+// 	lexer: Lexer,
+// 	body_rule: B,
+// 	separator_rule: S,
+// ): EntityReturn<B>[] | undefined {
+// 	return _many_separated(lexer, true, body_rule, separator_rule)
+// }
 
-function _many_separated<B extends ParseEntity, S extends ParseEntity, O extends boolean>(
-	lexer: Lexer,
-	is_optional: O,
-	body_rule: B,
-	separator_rule: S,
-): Optional<EntityReturn<B>[], O> {
-	const results = [] as EntityReturn<B>[]
+// function _many_separated<B extends ParseEntity, S extends ParseEntity, O extends boolean>(
+// 	lexer: Lexer,
+// 	is_optional: O,
+// 	body_rule: B,
+// 	separator_rule: S,
+// ): Optional<EntityReturn<B>[], O> {
+// 	const results = [] as EntityReturn<B>[]
 
-	if (is_optional && !test_entity(lexer, body_rule))
-		return undefined as Optional<EntityReturn<B>[], O>
+// 	if (is_optional && !test_entity(lexer, body_rule))
+// 		return undefined as Optional<EntityReturn<B>[], O>
 
-	results.push(perform_entity(lexer, body_rule))
+// 	results.push(perform_entity(lexer, body_rule))
 
-	let should_proceed = test_entity(lexer, separator_rule)
-	while (should_proceed) {
-		perform_entity(lexer, separator_rule)
+// 	let should_proceed = test_entity(lexer, separator_rule)
+// 	while (should_proceed) {
+// 		perform_entity(lexer, separator_rule)
 
-		results.push(perform_entity(lexer, body_rule))
-		should_proceed = test_entity(lexer, separator_rule)
-	}
+// 		results.push(perform_entity(lexer, body_rule))
+// 		should_proceed = test_entity(lexer, separator_rule)
+// 	}
 
-	return results as Optional<EntityReturn<B>[], O>
-}
+// 	return results as Optional<EntityReturn<B>[], O>
+// }

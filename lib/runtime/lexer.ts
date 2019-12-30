@@ -418,6 +418,9 @@ export function match_and_trim(tokens: Token[], token_definitions: TokenDefiniti
 export type TokenOptions = { ignore?: true }
 export type BaseTokenSpec = RegExp | string | (RegExp | string)[]
 export type TokenSpec = BaseTokenSpec | { match: BaseTokenSpec } & TokenOptions
+// after these changes are made, we won't have to have much of this runtime code to produce token regexes
+// in a way these will be more debuggable, since they'll have the real runtime regex and can copy paste it or change it
+// export type TokenSpec = RegExp | { regex: RegExp, ignore: true }
 
 function source_regex(def: RegExp | string) {
 	return typeof def === 'string'
@@ -469,6 +472,19 @@ export function UserToken(name: string, spec: TokenSpec) {
 
 	return token_definition
 }
+
+
+export function validate_regex(regex: RegExp) {
+	if (regex.test(''))
+		throw new Error(`attempted to create a token that matches the empty string:\n${debug(regex)}`)
+	return regex
+}
+// export function UserToken(name: string, spec: TokenSpec): UserRawTokenDefinition {
+// 	return 'ignore' in spec
+// 		? { type: 'Token', name, is_virtual: false, regex: validate_regex(spec.regex), ignore: true }
+// 		: { type: 'Token', name, is_virtual: false, regex: validate_regex(spec) }
+// }
+
 
 export function ExposedToken(name: string, virtual_lexer_name: string, spec: TokenSpec) {
 	const token_definition = UserToken(name, spec) as unknown as ExposedRawTokenDefinition

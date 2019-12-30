@@ -1,7 +1,7 @@
 import 'mocha'
 import { expect } from 'chai'
 
-import { Concat, Union, TokenString, CharacterClass, builtins, make_regex } from './tokens'
+import { Concat, Union, TokenString, CharacterClass, builtins, make_regex } from './ast_tokens'
 
 describe('make_regex', () => it('works', () => {
 	expect(make_regex(new Union([

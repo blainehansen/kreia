@@ -1,4 +1,3 @@
-// https://www.ascii-code.com/
 import * as fs from 'fs'
 import { tuple as t } from '@ts-std/types'
 
@@ -23,6 +22,7 @@ const KreiaGrammar = [
 	new TokenDef('space', { match: / +/, ignore: true }),
 	new TokenDef('comment', { match: /\s*\/\/[^\n]*\n+/, ignore: true }),
 
+	// https://www.ascii-code.com/
 	// new TokenDef('character', /\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[aftnrv]|[\x20-\x7E]/),
 	// new TokenDef('character_class', /\^?\[(?:\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[ftnrv]|\\]|[\x20-\x5C\x5E-\x7E])+\]/), // 5D is ]
 

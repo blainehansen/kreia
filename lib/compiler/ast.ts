@@ -3,6 +3,7 @@ import { Result, Ok, Err, Maybe, Some, None } from '@ts-std/monads'
 
 import { debug, NonEmpty, NonLone } from '../utils'
 import { TokenSpec } from '../runtime/lexer'
+// import { RegexComponent } from './ast_tokens'
 
 export enum BaseModifier {
 	Many = '+',
@@ -227,6 +228,20 @@ export class TokenDef {
 	constructor(readonly name: string, readonly def: TokenSpec) {}
 }
 
+
+// so it sounds like we're bootstrapping
+// what that means is these steps:
+// - X get fully happy with the grammar_ast as it is
+// - X use it to generate a parser file *which you commit at `grammar.ts` in this current form*
+// - then, change the ast and render to use the new token specification system
+// - then fill in the logic for `grammar.ts` with the completed new system
+
+// export class TokenDef {
+// 	readonly type: 'TokenDef' = 'TokenDef'
+// 	constructor(readonly name: string, readonly def: RegexComponent, readonly ignore: boolean) {}
+// }
+
+
 export class Rule {
 	readonly type: 'Rule' = 'Rule'
 	// readonly always_optional: boolean
@@ -312,6 +327,9 @@ export namespace Registry {
 				return Some(token_name)
 
 		return None
+	}
+	export function get_token_def(token_name: string): Maybe<TokenDef> {
+		return Maybe.from_nillable(registered_tokens[token_name])
 	}
 	export function get_rule(rule_name: string): Maybe<Rule> {
 		return Maybe.from_nillable(registered_rules[rule_name])
