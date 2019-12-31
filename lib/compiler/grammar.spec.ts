@@ -9,7 +9,7 @@ import {
 	token_definition, token_specification, token_atom,
 	virtual_lexer_usage, macro_call,
 	locking_definitions, simple_rule_line, rule_atom,
-} from './grammar.staging'
+} from './grammar'
 
 function parse(fn: () => any, input: string) {
 	reset(input)

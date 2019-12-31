@@ -23,47 +23,78 @@ function modifier_to_source(modifier: Modifier): string {
 }
 
 
-export abstract class RegexComponent {
-	abstract readonly modifier: Modifier
+export abstract class _RegexComponent {
+	protected abstract modifier: Modifier
 	abstract _source(): string
 	into_regex_source(): string {
-		return this._source() + modifier_to_source(this.modifier)
+		const rendered_modifier = modifier_to_source(this.modifier)
+		return rendered_modifier.length !== 0
+			? `(?:${this._source()})${rendered_modifier}`
+			: this._source()
 	}
 }
 
-export class Concat extends RegexComponent {
-	constructor(readonly segments: NonLone<RegexComponent>, readonly modifier: Modifier) { super() }
+export type RegexComponent =
+	| Concat
+	| Union
+	| TokenString
+	| TokenReference
+	| CharacterClass
+	// | SpecialCharacter
+
+
+export class Concat extends _RegexComponent {
+	constructor(readonly segments: NonLone<_RegexComponent>, protected modifier: Modifier) { super() }
 
 	_source() {
-		return '(?:' + this.segments.map(p => p.into_regex_source()).join('') + ')'
+		// return '(?:' + this.segments.map(p => p.into_regex_source()).join('') + ')'
+		return this.segments.map(p => p.into_regex_source()).join('')
+	}
+	modify(modifier: Modifier) {
+		this.modifier = modifier
+		return this
 	}
 }
 
-export class Union extends RegexComponent {
-	constructor(readonly segments: NonLone<RegexComponent>, readonly modifier: Modifier) { super() }
+export class Union extends _RegexComponent {
+	constructor(readonly segments: NonLone<_RegexComponent>, protected modifier: Modifier) { super() }
 
 	_source() {
+		// return `(?:${this.segments.map(p => p.into_regex_source()).join('|')})`
 		return this.segments.map(p => p.into_regex_source()).join('|')
 	}
-}
-
-export class TokenString extends RegexComponent {
-	constructor(readonly value: string, readonly modifier: Modifier) { super() }
-
-	_source() {
-		return `(?:${escape_string(this.value)})`
+	modify(modifier: Modifier) {
+		this.modifier = modifier
+		return this
 	}
 }
 
-export class TokenReference extends RegexComponent {
-	constructor(readonly token_name: string, readonly modifier: Modifier) { super() }
+export class TokenString extends _RegexComponent {
+	constructor(readonly value: string, protected modifier: Modifier) { super() }
+
+	_source() {
+		// return `(?:${escape_string(this.value)})`
+		return escape_string(this.value)
+	}
+	modify(modifier: Modifier) {
+		this.modifier = modifier
+		return this
+	}
+}
+
+export class TokenReference extends _RegexComponent {
+	constructor(readonly token_name: string, protected modifier: Modifier) { super() }
 
 	_source() {
 		return Registry.get_token_def(this.token_name).unwrap().def.into_regex_source()
 	}
+	modify(modifier: Modifier) {
+		this.modifier = modifier
+		return this
+	}
 }
 
-// export class SpecialCharacter extends RegexComponent {
+// export class SpecialCharacter extends _RegexComponent {
 // 	// constructor(readonly character: '[^]' | '^' | '$') {}
 // 	constructor(readonly character: '[^]' | '$') { super() }
 
@@ -72,17 +103,24 @@ export class TokenReference extends RegexComponent {
 // 	}
 // }
 
-export class CharacterClass extends RegexComponent {
-	constructor(readonly source: string, readonly negated: boolean, readonly modifier: Modifier) { super() }
+export class CharacterClass extends _RegexComponent {
+	constructor(readonly source: string, readonly negated: boolean, protected modifier: Modifier) { super() }
 
 	_source() {
 		return `[${this.negated ? '^' : ''}${this.source.replace(/\^/g, '\\^')}]`
 	}
+	change(negated: boolean, modifier: Modifier) {
+		return new CharacterClass(this.source, negated, modifier)
+	}
+	modify(modifier: Modifier) {
+		return new CharacterClass(this.source, this.negated, modifier)
+	}
 }
 
-export function make_regex(entry: RegexComponent) {
-	// const final_regex = new RegExp(`^(?:${entry.into_regex_source()})`, 'u')
-	const final_regex = new RegExp(`^${entry.into_regex_source()}`, 'u')
+export function make_regex(entry: RegExp | _RegexComponent) {
+	const final_regex = 'modifier' in entry
+		? new RegExp(`^${entry.into_regex_source()}`, 'u')
+		: new RegExp(`^${entry.source}`)
 	return validate_regex(final_regex)
 }
 
@@ -135,7 +173,7 @@ export const builtins = {
 	// \d digit (\p{Nd})
 	// \s whitespace (\p{White_Space})
 	// \w word character (\p{Alphabetic} + \p{M} + \d + \p{Pc} + \p{Join_Control})
-} as Readonly<Dict<RegexComponent>>
+} as Readonly<Dict<CharacterClass>>
 
 
 // eventually add property escapes

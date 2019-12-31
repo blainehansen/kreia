@@ -1,13 +1,14 @@
 import '@ts-std/extensions/dist/array'
 import { Dict, tuple as t } from '@ts-std/types'
 import {
-	Lexer, SourceState, VirtualLexerCreator, make_regex, ContentVirtualToken,
+	Lexer, SourceState, VirtualLexerCreator, ContentVirtualToken,
 	UserToken, HiddenToken, VirtualToken, ExposedToken, VirtualTokenDefinition, ExposedRawTokenDefinition,
 } from '../runtime/lexer'
 import {
 	IndentationLexer as IndentationLexerCreator, IndentationState, make_indents,
 	any_non_whitespace, indent, deindent, indent_continue, tab,
 } from './IndentationLexer'
+import { make_regex } from '../compiler/ast_tokens'
 
 const need_tab_tester = make_regex(/\t/)
 

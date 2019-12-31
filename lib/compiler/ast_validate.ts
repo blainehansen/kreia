@@ -115,6 +115,8 @@ function _check_left_recursive(
 export function validate_references(thing: Rule | Macro) {
 	const validation_errors = [] as string[]
 
+	// TODO some extra work to do here now that TokenDefs can reference other TokenDefs
+
 	// TODO validate unique_index_by of args and locking_args
 	// function index_locking_args(input_locking_args: LockingArg[] | undefined):  Dict<LockingArg> {
 	// 	const locking_args = input_locking_args || []

@@ -97,6 +97,9 @@ export class Paren extends BaseNode {
 	purify() {
 		return this.nodes.slice() as Definition
 	}
+	modify(modifier: BaseModifier) {
+		return new Paren(modifier, this.nodes)
+	}
 }
 export function many(...nodes: NonLone<Node>) { return new Paren(BaseModifier.Many, nodes) }
 export function maybe(...nodes: NonLone<Node>) { return new Paren(BaseModifier.Maybe, nodes) }
@@ -111,6 +114,9 @@ export class Consume extends BaseNode {
 
 	purify() {
 		return [new Consume(undefined, this.token_names)] as Definition
+	}
+	modify(modifier: Modifier) {
+		return new Consume(modifier, this.token_names)
 	}
 }
 export function consume(...token_names: NonEmpty<string>) { return new Consume(undefined, token_names) }
@@ -132,6 +138,9 @@ export class Or extends BaseNode {
 	purify() {
 		return [new Or(undefined, this.choices)] as Definition
 	}
+	modify(modifier: Modifier) {
+		return new Or(modifier, this.choices)
+	}
 }
 export function or(...choices: NonLone<Definition>) { return new Or(undefined, choices) }
 export function many_or(...choices: NonLone<Definition>) { return new Or(BaseModifier.Many, choices) }
@@ -147,6 +156,9 @@ export class Subrule extends BaseNode {
 
 	purify() {
 		return [new Subrule(undefined, this.rule_name)] as Definition
+	}
+	modify(modifier: Modifier) {
+		return new Subrule(modifier, this.rule_name)
 	}
 }
 export function subrule(rule_name: string) { return new Subrule(undefined, rule_name) }
@@ -168,6 +180,9 @@ export class MacroCall extends BaseNode {
 
 	purify() {
 		return [new MacroCall(undefined, this.macro_name, this.args)] as Definition
+	}
+	modify(modifier: Modifier) {
+		return new MacroCall(modifier, this.macro_name, this.args)
 	}
 }
 export function macro_call(macro_name: string, ...args: NonEmpty<Definition>) { return new MacroCall(undefined, macro_name, args) }
@@ -191,6 +206,9 @@ export class Var extends BaseNode {
 	purify() {
 		return [new Var(undefined, this.arg_name)] as Definition
 	}
+	modify(modifier: Modifier) {
+		return new Var(modifier, this.arg_name)
+	}
 }
 export function _var(arg_name: string) { return new Var(undefined, arg_name) }
 export function many_var(arg_name: string) { return new Var(BaseModifier.Many, arg_name) }
@@ -206,6 +224,9 @@ export class LockingVar extends BaseNode {
 
 	purify() {
 		return [new LockingVar(undefined, this.locking_arg_name)] as Definition
+	}
+	modify(modifier: Modifier) {
+		return new LockingVar(modifier, this.locking_arg_name)
 	}
 }
 export function locking_var(locking_arg_name: string) { return new LockingVar(undefined, locking_arg_name) }
@@ -233,7 +254,7 @@ export class LockingArg {
 // what that means is these steps:
 // - X get fully happy with the grammar_ast as it is
 // - X use it to generate a parser file *which you commit at `grammar.ts` in this current form*
-// - then, change the ast and render to use the new token specification system
+// - X then, change the ast and render to use the new token specification system
 // - then fill in the logic for `grammar.ts` with the completed new system
 
 export class TokenDef {
@@ -439,3 +460,43 @@ export namespace Scope {
 
 type TForL<T, L extends any[]> = { [K in keyof L]: T }
 
+
+export function mut_cluster_consumes(nodes: NonEmpty<Node>) {
+	const give = [] as Node[]
+	let node
+	loop_tag: while (node = nodes.shift()) switch (node.type) {
+	case 'Consume':
+		if (node.modifier !== undefined) {
+			give.push(node)
+			continue
+		}
+
+		const final_token_names = [...node.token_names] as NonEmpty<string>
+		let next_node
+
+		while (next_node = nodes.shift()) switch (next_node.type) {
+		case 'Consume':
+			if (next_node.modifier === undefined) {
+				final_token_names.push_all(next_node.token_names)
+				continue
+			}
+			give.push(new Consume(undefined, final_token_names))
+			give.push(next_node)
+			continue loop_tag
+
+		default:
+			give.push(new Consume(undefined, final_token_names))
+			give.push(next_node)
+			continue loop_tag
+		}
+
+		give.push(new Consume(undefined, final_token_names))
+		continue
+
+	default:
+		give.push(node)
+		continue
+	}
+
+	return give as unknown as NonEmpty<Node>
+}

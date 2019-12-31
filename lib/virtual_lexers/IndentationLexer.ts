@@ -1,9 +1,10 @@
 import '@ts-std/extensions/dist/array'
 import { Dict, tuple as t } from '@ts-std/types'
 import {
-	Lexer, SourceState, VirtualLexerCreator, make_regex,
+	Lexer, SourceState, VirtualLexerCreator,
 	UserToken, HiddenToken, VirtualTokenDefinition, VirtualToken, ExposedToken,
 } from '../runtime/lexer'
+import { make_regex } from '../compiler/ast_tokens'
 
 import { Console } from 'console'
 const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })

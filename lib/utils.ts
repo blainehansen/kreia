@@ -10,9 +10,9 @@ export function log(obj: any, depth = null as number | null) {
 	console.log(debug(obj, depth))
 }
 
-// export function impossible(): never {
-// 	//
-// }
+export function impossible(): never {
+	throw new Error("something impossible happened")
+}
 
 export class LogError extends Error {
 	constructor(lines: (string | any)[], depth = null as number | null) {
@@ -38,6 +38,14 @@ export function exec<F extends (...args: any[]) => any>(fn: F, ...args: Paramete
 
 export function array_of(length: number): undefined[] {
 	return Array.from({ length })
+}
+
+export function flatten<T>(arr: T[][]): T[] {
+	const give = [] as T[]
+	for (const sub_arr of arr) {
+		give.push_all(sub_arr)
+	}
+	return give
 }
 
 export const empty_ordered_dict = OrderedDict.create<any>(t => '', [])

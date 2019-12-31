@@ -11,7 +11,7 @@
     "finalize-version": "git push origin master && git push origin master --tags && npm publish",
     "test": "mocha -r ts-node/register lib/**/*.spec.ts lib/*.spec.ts",
     "test:grammar": "npm run generate:grammar && mocha -r ts-node/register lib/compiler/grammar.spec.ts",
-    "test:dev": "mocha -r ts-node/register lib/compiler/ast_tokens.spec.ts",
+    "test:dev": "mocha -r ts-node/register lib/compiler/grammar.spec.ts",
     "ts:ast": "ts-creator lib/compiler/_generate_from.ts --use-tabs true --trailing-comma 'all' -o lib/compiler/_generate_to.ts"
   },
   "keywords": [
@@ -41,6 +41,7 @@
     "typescript": "^3.7.4"
   },
   "dependencies": {
+    "@ts-std/codec": "^0.1.1",
     "@ts-std/collections": "^1.1.1",
     "@ts-std/extensions": "^1.1.0",
     "@ts-std/monads": "^1.0.4",
