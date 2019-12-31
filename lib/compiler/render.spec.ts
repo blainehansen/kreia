@@ -4,10 +4,11 @@ import { expect } from 'chai'
 import { compute_decidable, AstDecisionPath as path, AstDecisionBranch as branch } from './decision_compute'
 import {
 	Definition, Scope, ScopeStack, Node,
-	TokenDef, VirtualLexerUsage, Rule, Macro, Arg,
+	TokenDef as _TokenDef, VirtualLexerUsage, Rule, Macro, Arg,
 	consume, maybe, maybe_many, maybe_consume, maybe_many_consume, many_consume, or, many, _var, many_var, many_separated,
 	macro_call,
 } from './ast'
+import { TokenString } from './ast_tokens'
 import { render_rule, render_grammar } from './render'
 import { print_node } from './render_codegen'
 
@@ -25,6 +26,10 @@ export function boil_string(value: string) {
 		.replace(/\[ /g, '[')
 		.replace(/ \]/g, ']')
 		.trim()
+}
+
+function TokenDef(name: string, def: string) {
+	return new _TokenDef(name, new TokenString(def, undefined), false)
 }
 
 function b(node: Parameters<typeof print_node>[0]) {
@@ -55,9 +60,9 @@ describe('render_rule', () => it('works', () => {
 
 describe('basic gathering in render_grammar', () => it('works', () => {
 	const { rendered_decidables, rendered_rules } = render_grammar([
-		new TokenDef('A', 'A'),
-		new TokenDef('B', 'B'),
-		new TokenDef('C', 'C'),
+		TokenDef('A', 'A'),
+		TokenDef('B', 'B'),
+		TokenDef('C', 'C'),
 		new Rule('a', [
 			many(
 				consume('A'),
@@ -95,9 +100,9 @@ describe('basic gathering in render_grammar', () => it('works', () => {
 
 describe('many_separated case', () => it('works', () => {
 	const { rendered_decidables, rendered_rules, rendered_macros } = render_grammar([
-		new TokenDef('num', 'num'),
-		new TokenDef('bar', 'bar'),
-		new TokenDef('space', 'space'),
+		TokenDef('num', 'num'),
+		TokenDef('bar', 'bar'),
+		TokenDef('space', 'space'),
 		new Macro('many_separated', [new Arg('body'), new Arg('separator')], [
 			_var('body'),
 			maybe_many(
@@ -156,7 +161,7 @@ describe('many_separated case', () => it('works', () => {
 
 describe('macro in macro', () => it('works', () => {
 	const { rendered_decidables, rendered_rules, rendered_macros } = render_grammar([
-		new TokenDef('space', 'space'),
+		TokenDef('space', 'space'),
 
 		new Macro('many_separated', [new Arg('body'), new Arg('separator')], [
 			_var('body'),
@@ -187,9 +192,9 @@ describe('macro in macro', () => it('works', () => {
 
 describe('macros deeply nested', () => it('works', () => {
 	const { rendered_macros } = render_grammar([
-		// new TokenDef('A', 'A'),
-		// new TokenDef('A', 'A'),
-		// new TokenDef('A', 'A'),
+		// TokenDef('A', 'A'),
+		// TokenDef('A', 'A'),
+		// TokenDef('A', 'A'),
 
 		new Macro('one', [new Arg('one_body')], [
 			_var('one_body'),
@@ -226,9 +231,9 @@ describe('macros deeply nested', () => it('works', () => {
 
 describe('macros deeply nested with decidables', () => it('works', () => {
 	const { rendered_macros } = render_grammar([
-		// new TokenDef('A', 'A'),
-		// new TokenDef('A', 'A'),
-		// new TokenDef('A', 'A'),
+		// TokenDef('A', 'A'),
+		// TokenDef('A', 'A'),
+		// TokenDef('A', 'A'),
 
 		new Macro('one', [new Arg('one_body')], [
 			many_var('one_body'),

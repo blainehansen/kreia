@@ -376,7 +376,6 @@ export class Lexer<V extends VirtualLexerOutputs> {
 		if (this.state === undefined)
 			throw new Error()
 
-		// console.log(this.state.source_state.source)
 		if (this.state.source_state.source.length !== 0)
 			throw new Error(`the source wasn't entirely consumed:\n\n${this.get_next_source()}`)
 	}
@@ -415,7 +414,7 @@ export function match_and_trim(tokens: Token[], token_definitions: TokenDefiniti
 }
 
 
-export type TokenSpec = RegExp | { regex: RegExp, ignore: true }
+export type TokenSpec = RegExp | string | { regex: RegExp | string, ignore: true }
 
 export function Tokens<D extends Dict<TokenSpec>>(
 	tokens: D,
@@ -430,16 +429,25 @@ type TokensForSpecs<D extends Dict<TokenSpec>> =
 	{ [K in keyof D]: UserRawTokenDefinition }
 
 
-// export function validate_regex(regex: RegExp): Result<RegExp> {
-export function validate_regex(regex: RegExp) {
-	if (regex.test(''))
-		throw new Error(`attempted to create a token that matches the empty string:\n${debug(regex)}`)
-	return regex
+export function escape_string(def: string) {
+	return def.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // $& means the whole matched string
 }
+
+export function finalize_regex(entry: RegExp | string) {
+	const final_regex = typeof entry === 'string'
+		? new RegExp(`^(?:${escape_string(entry)})`)
+		// ? new RegExp(`^(?:${escape_string(entry)})`, 'u')
+		: new RegExp(`^(?:${entry.source})`)
+		// : new RegExp(`^(?:${entry.source})`, 'u')
+	if (final_regex.test(''))
+		throw new Error(`attempted to create a token that matches the empty string:\n${debug(final_regex)}`)
+	return final_regex
+}
+
 export function UserToken(name: string, spec: TokenSpec): UserRawTokenDefinition {
-	return 'ignore' in spec
-		? { name, is_virtual: false, regex: validate_regex(spec.regex), ignore: true }
-		: { name, is_virtual: false, regex: validate_regex(spec) }
+	return typeof spec === 'object' && 'ignore' in spec
+		? { name, is_virtual: false, regex: finalize_regex(spec.regex), ignore: true }
+		: { name, is_virtual: false, regex: finalize_regex(spec) }
 }
 
 
@@ -454,7 +462,7 @@ export function VirtualToken(name: string, virtual_lexer_name: string, regex: Re
 export function VirtualToken(name: string, virtual_lexer_name: string, regex?: RegExp): any {
 	const token_definition = { type: 'Token', name, virtual_lexer_name, is_virtual: true }
 	if (regex !== undefined)
-		(token_definition as any).regex = validate_regex(regex)
+		(token_definition as any).regex = finalize_regex(regex)
 
 	return token_definition
 }
@@ -462,6 +470,6 @@ export function VirtualToken(name: string, virtual_lexer_name: string, regex?: R
 export function HiddenToken(name: string, regex: RegExp): HiddenTokenDefinition {
 	return {
 		name, ignore: true, is_virtual: false,
-		regex: validate_regex(regex),
+		regex: finalize_regex(regex),
 	}
 }

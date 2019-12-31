@@ -1,6 +1,4 @@
 import { basename } from 'path'
-import * as d from '@ts-std/codec'
-import { Maybe } from '@ts-std/monads'
 import { tuple as t } from '@ts-std/types'
 import { RawToken, ContentVirtualToken } from '../runtime/lexer'
 import { Parser, ParseArg, Decidable, path, branch, c } from "../index"
@@ -13,38 +11,45 @@ import {
 	Node, Consume, Or, Subrule, MacroCall, Var, LockingVar, Paren,
 	Modifier, BaseModifier, mut_cluster_consumes,
 } from './ast'
-import { RegexComponent, Concat, Union, TokenString, TokenReference, CharacterClass, builtins } from './ast_tokens'
+import {
+	RegexComponent, Concat, Union, TokenString,
+	TokenReference, CharacterClass, CharacterClassReference, builtins,
+} from './ast_tokens'
+
+import { Console } from 'console'
+const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 3 } })
 
 export const { tok, reset, lock, consume, maybe, or, maybe_or, many_or, maybe_many_or, many, maybe_many, exit } = Parser({
-	var_name: /^\$\w+/,
-	token_name: /^\:\w+/,
-	locked_name: /^\!\w+/,
-	rule_name: /^\w+/,
-	macro_name: /^\@\w+/,
+	var_name: /\$\w+/,
+	token_name: /\:\w+/,
+	locked_name: /\!\w+/,
+	rule_name: /\w+/,
+	macro_name: /\@\w+/,
 	// modifier_token: ["*", "+", "?"],
-	modifier_token: /^\*|\+|\?/,
-	repetitions_modifier: /^{\d+(,\d*)?}/,
-	space: { regex: /^ +/, ignore: true },
-	comment: { regex: /^\s*\/\/[^\n]*\n+/, ignore: true },
-	character_class: /^\^?\[(?:\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[ftnrv]|\\]|\\\\|[\x20-\x5B\x5E-\x7E])+\]/,
-	character_class_name: /^\^?\#\w+/,
+	modifier_token: /\*|\+|\?/,
+	repetitions_modifier: /{\d+(,\d*)?}/,
+	space: { regex: / +/, ignore: true },
+	comment: { regex: /\s*\/\/[^\n]*\n+/, ignore: true },
+	// character_class: /(?:\^?\[(?:\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[ftnrv]|\\]|\\\\|[\x20-\x5B\x5E-\x7E])+\])/,
+	character_class: /\^?\[(?:\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[ftnrv]|\\]|\\\\|[\x20-\x5B\x5E-\x7E])+\]/,
+	character_class_name: /\^?\#\w+/,
 	// str: [/"(?:\\["\\]|[^\n"\\])*"/, /'(?:\\['\\]|[^\n'\\])*'/],
-	str: /^(?:"(?:\\["\\]|[^\n"\\])*")|(?:'(?:\\['\\]|[^\n'\\])*')/,
-	use_keyword: /^use/,
-	eq: /^\=/,
-	bar: /^\|/,
-	comma: /^\,/,
-	dash: /^\-/,
-	caret: /^\^/,
-	underscore: /^\_/,
-	open_angle: /^\</,
-	close_angle: /^\>/,
-	open_paren: /^\(/,
-	close_paren: /^\)/,
-	open_brace: /^\{/,
-	close_brace: /^\}/,
-	open_bracket: /^\[/,
-	close_bracket: /^\]/,
+	str: /(?:"(?:\\["\\]|[^\n"\\])*")|(?:'(?:\\['\\]|[^\n'\\])*')/,
+	use_keyword: 'use',
+	eq: '=',
+	bar: '|',
+	comma: ',',
+	dash: '-',
+	caret: '^',
+	underscore: '_',
+	open_angle: '<',
+	close_angle: '>',
+	open_paren: '(',
+	close_paren: ')',
+	open_brace: '{',
+	close_brace: '}',
+	open_bracket: '[',
+	close_bracket: ']',
 }, { IndentationLexer: IndentationLexer() })
 
 const { _7jjmO, _MM3H4, _Z1Bz2H0, _Z2t6uuV, _1EWJ7s, _17Yeup, _7U1Cw, _NFQGh, _6PPJc, _Z1owlnn, _Z1F9dGs, _MHu6X, _Z1tSeaR, _Nf9Ed, _2dw1N, _1cWbFl, _2eTKEs, _fw7Qu } = {
@@ -70,6 +75,13 @@ const { _7jjmO, _MM3H4, _Z1Bz2H0, _Z2t6uuV, _1EWJ7s, _17Yeup, _7U1Cw, _NFQGh, _6
 
 function trim_sigil(token: RawToken | ContentVirtualToken) {
 	return token.content.slice(1)
+}
+
+function parse_number(content: string): number {
+	const parsed_int = parseInt(content)
+	if (isNaN(parsed_int))
+		throw new Error("how did this bad parsed_int happen?" + content)
+	return parsed_int
 }
 
 export function kreia_grammar(): KreiaGrammar {
@@ -135,11 +147,11 @@ export function token_atom() {
 		case 'repetitions_modifier':
 			const unwrapped_modifier = modifier_token.content.slice(1, -1)
 			if (!unwrapped_modifier.includes(','))
-				return d.number.decode(unwrapped_modifier).unwrap()
+				return parse_number(unwrapped_modifier)
 			const [begin, end] = unwrapped_modifier.split(',')
 			return t(
-				d.number.decode(begin).unwrap(),
-				d.optional(d.number).decode(end).unwrap(),
+				parse_number(begin),
+				end !== undefined && end !== '' ? parse_number(end) : undefined,
 			)
 		default: return impossible()
 		}
@@ -160,7 +172,7 @@ export function token_atom() {
 		const [negated, class_name] = spec_token.content.startsWith('^')
 			? t(true, spec_token.content.slice(2))
 			: t(false, trim_sigil(spec_token))
-		return Maybe.from_nillable(builtins[class_name]).unwrap().change(negated, parsed_modifier)
+		return new CharacterClassReference(class_name, negated, parsed_modifier)
 	}
 	case 'token_name':
 		return new TokenReference(trim_sigil(spec_token), parsed_modifier)
@@ -218,7 +230,7 @@ export function rule_definition() {
 	const locking_args = maybe(locking_definitions, _MHu6X)
 	const definition = rule_block()
 
-	const rule_name = trim_sigil(rule_name_token)
+	const rule_name = rule_name_token.content
 	return new Rule(rule_name, definition, locking_args)
 }
 
@@ -260,6 +272,10 @@ function mut_cluster_prefixed_items(items: NonEmpty<PrefixedItem>): Definition {
 			give.push_all(nodes)
 			break
 		}
+
+		if (final_choices.length < 2)
+			throw new Error("only one choice in an Or")
+		give.push(new Or(undefined, final_choices as NonLone<Definition>))
 	}
 
 	return mut_cluster_consumes(give as NonEmpty<Node>)
@@ -305,7 +321,7 @@ export function rule_item(): NonEmpty<PrefixedItem> {
 				)]
 			}
 
-			return sub_rule_items.choices
+			return sub_rule_items.choices.map(c => t('|', c[1]))
 
 		}, _Nf9Ed),
 

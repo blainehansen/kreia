@@ -22,12 +22,12 @@ json_entity =
 
 array =
 	:LeftBracket
-	@separated_by_commas[json_entity]
+	@separated_by_commas[json_entity]?
 	:RightBracket
 
 object =
 	:LeftBrace
-	@separated_by_commas[json_key json_entity]
+	@separated_by_commas[json_key json_entity]?
 	:RightBrace
 
 atomic_entity =

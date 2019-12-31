@@ -4,13 +4,13 @@ import { Dict, tuple as t } from '@ts-std/types'
 import { UniqueDict, DefaultDict } from '@ts-std/collections'
 import { MaxDict, NonEmpty, exhaustive, array_of, exec } from '../utils'
 
-import { make_regex, RegexComponent } from './ast_tokens'
+import { RegexComponent } from './ast_tokens'
 import { validate_references, check_left_recursive } from './ast_validate'
 import {
 	BaseModifier, Modifier, Scope as AstScope, ScopeStack as AstScopeStack, Node, Definition, Registry,
 	TokenDef, VirtualLexerUsage, Rule, Macro, Grammar, LockingArg,
 } from './ast'
-import { TokenSpec, BaseTokenSpec } from '../runtime/lexer'
+import { finalize_regex, TokenSpec } from '../runtime/lexer'
 import { AstDecidable, compute_decidable } from './decision_compute'
 
 import { Console } from 'console'
@@ -568,6 +568,7 @@ function render_virtual_lexer_usage(virtual_lexer: VirtualLexerUsage) {
 function render_token_def(token_def: TokenDef) {
 	const regex_literal = render_regex_component(token_def.def)
 	return ts.createPropertyAssignment(
+		token_def.name,
 		token_def.ignore
 			? ts.createObjectLiteral([
 				ts.createPropertyAssignment('regex', regex_literal),
@@ -578,5 +579,5 @@ function render_token_def(token_def: TokenDef) {
 }
 
 function render_regex_component(regex_component: RegexComponent) {
-	return ts.createRegularExpressionLiteral(`/${make_regex(regex_component).source}/`)
+	return ts.createRegularExpressionLiteral(`/${regex_component.into_regex_source()}/`)
 }

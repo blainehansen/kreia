@@ -244,19 +244,6 @@ export class LockingArg {
 }
 
 
-// export class TokenDef {
-// 	readonly type: 'TokenDef' = 'TokenDef'
-// 	constructor(readonly name: string, readonly def: TokenSpec) {}
-// }
-
-
-// so it sounds like we're bootstrapping
-// what that means is these steps:
-// - X get fully happy with the grammar_ast as it is
-// - X use it to generate a parser file *which you commit at `grammar.ts` in this current form*
-// - X then, change the ast and render to use the new token specification system
-// - then fill in the logic for `grammar.ts` with the completed new system
-
 export class TokenDef {
 	readonly type: 'TokenDef' = 'TokenDef'
 	constructor(readonly name: string, readonly def: RegexComponent, readonly ignore: boolean) {}

@@ -1,10 +1,9 @@
 import '@ts-std/extensions/dist/array'
 import { Dict, tuple as t } from '@ts-std/types'
 import {
-	Lexer, SourceState, VirtualLexerCreator,
+	Lexer, SourceState, VirtualLexerCreator, finalize_regex,
 	UserToken, HiddenToken, VirtualTokenDefinition, VirtualToken, ExposedToken,
 } from '../runtime/lexer'
-import { make_regex } from '../compiler/ast_tokens'
 
 import { Console } from 'console'
 const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
@@ -12,7 +11,7 @@ const console = new Console({ stdout: process.stdout, stderr: process.stderr, in
 export const newline = HiddenToken('newline', /[\t ]*\n+/)
 export const tab = HiddenToken('tab', /\t+/)
 
-export const any_non_whitespace = make_regex(/\S/)
+export const any_non_whitespace = finalize_regex(/\S/)
 export const indent = VirtualToken('indent', 'IndentationLexer')
 export const deindent = VirtualToken('deindent', 'IndentationLexer')
 export const indent_continue = VirtualToken('indent_continue', 'IndentationLexer')

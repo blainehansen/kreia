@@ -1,12 +1,9 @@
 import { Dict } from '@ts-std/types'
-import { debug, NonLone } from '../utils'
-import { validate_regex } from '../runtime/lexer'
+import { Maybe } from '@ts-std/monads'
+
 import { Registry } from './ast'
-
-function escape_string(def: string) {
-	return def.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // $& means the whole matched string
-}
-
+import { debug, NonLone } from '../utils'
+import { escape_string } from '../runtime/lexer'
 
 type Modifier =
 	| undefined
@@ -40,6 +37,7 @@ export type RegexComponent =
 	| TokenString
 	| TokenReference
 	| CharacterClass
+	| CharacterClassReference
 	// | SpecialCharacter
 
 
@@ -117,11 +115,19 @@ export class CharacterClass extends _RegexComponent {
 	}
 }
 
-export function make_regex(entry: RegExp | _RegexComponent) {
-	const final_regex = 'modifier' in entry
-		? new RegExp(`^${entry.into_regex_source()}`, 'u')
-		: new RegExp(`^${entry.source}`)
-	return validate_regex(final_regex)
+export class CharacterClassReference extends _RegexComponent {
+	constructor(readonly class_name: string, readonly negated: boolean, protected modifier: Modifier) { super() }
+
+	_source() {
+		const class_source = Maybe.from_nillable(builtins[this.class_name]).unwrap()
+		return `[${this.negated ? '^' : ''}${class_source.replace(/\^/g, '\\^')}]`
+	}
+	change(negated: boolean, modifier: Modifier) {
+		return new CharacterClassReference(this.class_name, negated, modifier)
+	}
+	modify(modifier: Modifier) {
+		return new CharacterClassReference(this.class_name, this.negated, modifier)
+	}
 }
 
 
@@ -131,49 +137,46 @@ export const builtins = {
 	// end: new SpecialCharacter('$'),
 	// boundary: new SpecialCharacter('\\b'),
 
-	alphanumeric: new CharacterClass('0-9a-zA-Z', false, undefined),
-	alnum: new CharacterClass('0-9A-Za-z', false, undefined),
+	alphanumeric: '0-9a-zA-Z',
+	alnum: '0-9A-Za-z',
 
-	alphabetic: new CharacterClass('a-zA-Z', false, undefined),
-	alpha: new CharacterClass('A-Za-z', false, undefined),
+	alphabetic: 'a-zA-Z',
+	alpha: 'A-Za-z',
 
-	numeric: new CharacterClass('0-9', false, undefined),
-	digit: new CharacterClass('0-9', false, undefined),
+	numeric: '0-9',
+	digit: '0-9',
 
-	lower: new CharacterClass('a-z', false, undefined),
-	lowercase: new CharacterClass('a-z', false, undefined),
+	lower: 'a-z',
+	lowercase: 'a-z',
 
-	uppercase: new CharacterClass('A-Z', false, undefined),
-	upper: new CharacterClass('A-Z', false, undefined),
+	uppercase: 'A-Z',
+	upper: 'A-Z',
 
-	whitespace: new CharacterClass('\\t\\n\\v\\f\\r ', false, undefined),
-	space: new CharacterClass('\\t\\n\\v\\f\\r ', false, undefined),
+	whitespace: '\\t\\n\\v\\f\\r ',
+	space: '\\t\\n\\v\\f\\r ',
 
-	ascii: new CharacterClass('\\x00-\\x7F', false, undefined),
-	blank: new CharacterClass('\\t ', false, undefined),
-	cntrl: new CharacterClass('\\x00-\\x1F\\x7F', false, undefined),
-	graph: new CharacterClass('!-~', false, undefined),
-	print: new CharacterClass(' -~', false, undefined),
-	punct: new CharacterClass('!-/:-@[-`{-~', false, undefined),
-	word: new CharacterClass('0-9A-Za-z_', false, undefined),
-	xdigit: new CharacterClass('0-9A-Fa-f', false, undefined),
+	ascii: '\\x00-\\x7F',
+	blank: '\\t ',
+	cntrl: '\\x00-\\x1F\\x7F',
+	graph: '!-~',
+	print: ' -~',
+	punct: '!-/:-@[-`{-~',
+	word: '0-9A-Za-z_',
+	xdigit: '0-9A-Fa-f',
 
 	// https://www.compart.com/en/unicode/category
 	// https://2ality.com/2017/07/regexp-unicode-property-escapes.html
 	// https://mathiasbynens.be/notes/es-unicode-property-escapes
-	unicode_digit: new CharacterClass('\\p{Decimal_Number}', false, undefined),
-	unicode_numeric: new CharacterClass('\\p{Number}', false, undefined),
-	unicode_word: new CharacterClass(
-		'\\p{Alphabetic}\\p{Mark}\\p{Decimal_Number}\\p{Connector_Punctuation}\\p{Join_Control}',
-		false, undefined,
-	),
-	// unicode_whitespace: new CharacterClass('\\s', false, undefined),
-	unicode_whitespace: new CharacterClass('\\p{White_Space}', false, undefined),
+	unicode_digit: '\\p{Decimal_Number}',
+	unicode_numeric: '\\p{Number}',
+	unicode_word: '\\p{Alphabetic}\\p{Mark}\\p{Decimal_Number}\\p{Connector_Punctuation}\\p{Join_Control}',
+	// unicode_whitespace: '\\s',
+	unicode_whitespace: '\\p{White_Space}',
 
 	// \d digit (\p{Nd})
 	// \s whitespace (\p{White_Space})
 	// \w word character (\p{Alphabetic} + \p{M} + \d + \p{Pc} + \p{Join_Control})
-} as Readonly<Dict<CharacterClass>>
+} as Readonly<Dict<string>>
 
 
 // eventually add property escapes

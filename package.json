@@ -41,7 +41,6 @@
     "typescript": "^3.7.4"
   },
   "dependencies": {
-    "@ts-std/codec": "^0.1.1",
     "@ts-std/collections": "^1.1.1",
     "@ts-std/extensions": "^1.1.0",
     "@ts-std/monads": "^1.0.4",

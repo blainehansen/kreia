@@ -18,7 +18,7 @@
 
 
 yml_file =
-	@many_separated[entity, :indent_continue? :EntitySeparator]?
+	@many_separated[entity, :indent_continue? :EntitySeparator]
 
 entity =
 	| complex_entity

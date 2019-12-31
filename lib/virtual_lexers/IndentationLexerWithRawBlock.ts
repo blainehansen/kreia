@@ -1,20 +1,19 @@
 import '@ts-std/extensions/dist/array'
 import { Dict, tuple as t } from '@ts-std/types'
 import {
-	Lexer, SourceState, VirtualLexerCreator, ContentVirtualToken,
+	Lexer, SourceState, VirtualLexerCreator, ContentVirtualToken, finalize_regex,
 	UserToken, HiddenToken, VirtualToken, ExposedToken, VirtualTokenDefinition, ExposedRawTokenDefinition,
 } from '../runtime/lexer'
 import {
 	IndentationLexer as IndentationLexerCreator, IndentationState, make_indents,
 	any_non_whitespace, indent, deindent, indent_continue, tab,
 } from './IndentationLexer'
-import { make_regex } from '../compiler/ast_tokens'
 
-const need_tab_tester = make_regex(/\t/)
+const need_tab_tester = finalize_regex(/\t/)
 
 const block_tab = HiddenToken('block_tab', /\t/)
 const raw_block_begin = ExposedToken('raw_block_begin', 'IndentationLexer', /\|\"\n/)
-const raw_block_content = VirtualToken('raw_block_content', 'IndentationLexer', [/[^\n]*\n+/, /[^\n]+\n*/])
+const raw_block_content = VirtualToken('raw_block_content', 'IndentationLexer', /(?:[^\n]*\n+)|(?:[^\n]+\n*)/)
 const raw_block_end = VirtualToken('raw_block_end', 'IndentationLexer')
 
 const [, IndentationLexer] = IndentationLexerCreator()
