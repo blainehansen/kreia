@@ -430,7 +430,7 @@ type TokensForSpecs<D extends Dict<TokenSpec>> =
 
 
 export function escape_string(def: string) {
-	return def.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // $& means the whole matched string
+	return def.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&') // $& means the whole matched string
 }
 
 export function finalize_regex(entry: RegExp | string) {

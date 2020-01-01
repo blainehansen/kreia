@@ -343,8 +343,10 @@ function render_node(
 		return create_call(function_name, render_token_tuple(node.token_names))
 	}
 	case 'LockingVar': {
-		const function_name = wrap_function_name('lock', node.modifier)
-		return create_call(function_name, [ts.createIdentifier(node.locking_arg_name)])
+		// const function_name = wrap_function_name('lock', node.modifier)
+		// return create_call(function_name, [render_token_reference(node.locking_arg_name)])
+		const function_name = wrapping_name(node.modifier) || node.locking_arg_name
+		return create_call(function_name, [])
 	}}
 }
 
@@ -453,8 +455,7 @@ export function render_grammar(grammar: Grammar) {
 					ts.createImportSpecifier(undefined, ts.createIdentifier(i)),
 				)
 			),
-		), ts.createStringLiteral('../index'),
-		// ), ts.createStringLiteral('kreia'),
+		), ts.createStringLiteral('kreia'),
 	)
 
 	const virtual_lexer_imports = virtual_lexers.values().map(virtual_lexer => {
@@ -507,7 +508,7 @@ function render_locking_arg(arg: LockingArg) {
 		ts.createVariableDeclarationList([
 			ts.createVariableDeclaration(
 				ts.createIdentifier(arg.name), undefined,
-				create_call('lock', [ts.createIdentifier(arg.token_name)]),
+				create_call('lock', [render_token_reference(arg.token_name)]),
 			),
 		], ts.NodeFlags.Const),
 	)

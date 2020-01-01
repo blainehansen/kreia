@@ -74,18 +74,6 @@ function is_decidable_func<F extends Func>(
 	return typeof fl[0] === 'function'
 }
 
-// export function f<F extends Func>(
-// 	fn: F, d: Decidable,
-// 	...args: Parameters<F>
-// ): DecidableFunc<F> {
-// 	return [fn, d, ...args] as DecidableFunc<F>
-// }
-
-export function c<C extends ParseEntity>(...choice: C): C {
-	return choice
-}
-
-
 // type ArgFunc<F extends Func> =
 // 	((fn: F, ...args: Parameters<F>) => any) extends ((...args: infer R) => any)
 // 	? R
@@ -95,13 +83,9 @@ export function c<C extends ParseEntity>(...choice: C): C {
 // 	return [fn, ...args] as ArgFunc<F>
 // }
 
+export type TokenLike = Locker | TokenDefinition
 export type ParseEntity = DecidableFunc<Func> | TokenDefinition[]
-// export type ParseArg = ArgFunc<Func> | TokenDefinition[]
-// type ArgReturn<A extends ParseArg> =
-// 	A extends TokenDefinition[] ? TokensForDefinitions<A>
-// 	:
 export type ParseArg = () => any
-// export type ParseArg = Func | TokenDefinition[]
 
 
 type EntityReturn<E extends ParseEntity> =
@@ -142,12 +126,10 @@ function consume<L extends TokenDefinition[]>(
 	return lexer.require(token_definitions) as EntityReturn<L>
 }
 
-// function lock<E extends ParseEntity>(lexer: Lexer, ...entity: E) {
-// this would be renamed create_lock or locker
-function lock(lexer: Lexer, token_definition: RawTokenDefinition) {
-	// const locked = new LockedValue<EntityReturn<E>>(deep_equal)
+type Locker = (() => RawToken) & { test: (lexer: Lexer) => boolean }
+function lock(lexer: Lexer, token_definition: RawTokenDefinition): Locker {
 	let locked = undefined as RawToken | undefined
-	return function() {
+	const locker: Locker = () => {
 		const [token] = perform_entity(lexer, [token_definition] as [RawTokenDefinition]) as [RawToken]
 
 		if (locked !== undefined) {
@@ -158,13 +140,18 @@ function lock(lexer: Lexer, token_definition: RawTokenDefinition) {
 		locked = token
 		return token
 	}
+	locker.test = () => {
+		const should_proceed = test_entity(lexer, [token_definition] as [RawTokenDefinition])
+		if (!should_proceed)
+			return false
+		if (locked === undefined)
+			return true
+
+		const [token] = perform_entity(lexer, [token_definition] as [RawTokenDefinition]) as [RawToken]
+		return !(locked.type.name !== token.type.name || locked.content !== token.content)
+	}
+	return locker
 }
-// function lock(lexer: Lexer, locker: Locker) {
-// 	return locker.perform(lexer).match({
-// 		ok: token => token,
-// 		err: token => { throw new Error(`unexpected locked Token, expected ${locked} got ${token}`) }
-// 	})
-// }
 
 
 type Optional<T, B extends boolean> = B extends true ? T | undefined : T
@@ -218,6 +205,10 @@ function _many<E extends ParseEntity, B extends boolean>(
 export type ChoicesReturn<C extends ParseEntity[]> = {
 	[K in keyof C]: EntityReturn<C[K] extends ParseEntity ? C[K] : never>
 }[number]
+
+export function c<C extends ParseEntity>(...choice: C): C {
+	return choice
+}
 
 function or<C extends ParseEntity[]>(
 	lexer: Lexer,

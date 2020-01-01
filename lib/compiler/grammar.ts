@@ -365,7 +365,7 @@ export function rule_atom(): NonEmpty<Node> {
 	const [atom_token] = atoms
 	switch (atom_token.type.name) {
 	case 'rule_name':
-		return [new Subrule(parsed_modifier, trim_sigil(atom_token))]
+		return [new Subrule(parsed_modifier, atom_token.content)]
 	case 'token_name':
 		return [new Consume(parsed_modifier, [trim_sigil(atom_token)])]
 	case 'var_name':

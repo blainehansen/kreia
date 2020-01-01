@@ -10,11 +10,19 @@ import {
 	virtual_lexer_usage, macro_call,
 	locking_definitions, simple_rule_line, rule_atom,
 } from './grammar'
+import { print_grammar } from './render_codegen'
+import { boil_string } from './render.spec'
 
 function parse(fn: () => any, input: string) {
 	reset(input)
 	fn()
 	exit()
+}
+function parse_give<R>(fn: () => R, input: string): R {
+	reset(input)
+	const result = fn()
+	exit()
+	return result
 }
 
 function bad(fn: () => any, input: string) {
@@ -397,8 +405,65 @@ describe('macro_definition', () => it('works', () => {
 
 import * as fs from 'fs'
 
-describe('kreia_grammar', () => it('works', () => {
-	parse(kreia_grammar, fs.readFileSync('./examples/html.peg', 'utf-8'))
-	parse(kreia_grammar, fs.readFileSync('./examples/json.peg', 'utf-8'))
-	parse(kreia_grammar, fs.readFileSync('./examples/yml.peg', 'utf-8'))
+describe('./examples/html.peg', () => it('works', () => {
+	const html_grammar = parse_give(kreia_grammar, fs.readFileSync('./examples/html.peg', 'utf-8'))
+	expect(boil_string(print_grammar(html_grammar))).eql(boil_string(`
+		import { Parser, ParseArg, Decidable, path, branch, c } from "kreia"
+
+		export const { tok, reset, lock, consume, maybe, or, maybe_or, many_or, maybe_many_or, many, maybe_many, exit } = Parser({
+			html_tag_ident: /h[1-6]|a|p|div|span/,
+			ident: /(?:[0-9a-zA-Z]|-)+/,
+			open_angle: /</,
+			close_angle: />/,
+			slash: /\\//,
+			eq: /=/,
+			str: /"(?:\\\\\\\\["\\\\]|[^\\n"\\\\])*"/,
+			not_open_angle: /(?:[^<]|\\\\\\\\<)+/,
+			whitespace: { regex: /(?:[\\t\\n\\v\\f\\r ])+/, ignore: true }
+		}, {})
+
+		const {_MHu6X, _A1THl, _Z1oSnTW, _Z1oj86y} = {
+			_MHu6X: path([tok.open_angle]),
+			_A1THl: path([tok.close_angle]),
+			_Z1oSnTW: branch(path([tok.whitespace]), path([tok.not_open_angle])),
+			_Z1oj86y: path([tok.open_angle, tok.html_tag_ident])
+		}
+
+		export function html_file() {
+			many(html_tag, _MHu6X)
+		}
+
+		export function html_tag() {
+			const tag_name = lock(tok.html_tag_ident)
+
+			consume(tok.open_angle)
+			tag_name()
+			maybe_many(tok.ident, tok.eq, tok.str)
+			or(
+				c(tok.slash, tok.close_angle),
+				c(() => {
+					consume(tok.close_angle)
+
+					maybe_many_or(
+						c(text, _Z1oSnTW),
+						c(html_tag, _Z1oj86y)
+					)
+
+					consume(tok.open_angle)
+					tag_name()
+					consume(tok.slash, tok.close_angle)
+				}, _A1THl)
+			)
+		}
+
+		export function text() {
+			many_or(
+				c(tok.whitespace),
+				c(tok.not_open_angle)
+			)
+		}
+	`))
 }))
+
+	// parse_give(kreia_grammar, fs.readFileSync('./examples/json.peg', 'utf-8'))
+	// parse_give(kreia_grammar, fs.readFileSync('./examples/yml.peg', 'utf-8'))

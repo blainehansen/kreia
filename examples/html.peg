@@ -1,4 +1,4 @@
-:html_tag_ident = ('h' [1-6]) | "a" | "p" | "div" | "span"
+:html_tag_ident = ('h' [1-6]) | 'a' | 'p' | 'div' | 'span'
 :ident = (#alphanumeric | '-')+
 :open_angle = '<'
 :close_angle = '>'
