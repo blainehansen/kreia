@@ -404,9 +404,12 @@ describe('macro_definition', () => it('works', () => {
 
 
 import * as fs from 'fs'
+import { Console } from 'console'
+const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
 
 describe('./examples/html.peg', () => it('works', () => {
 	const html_grammar = parse_give(kreia_grammar, fs.readFileSync('./examples/html.peg', 'utf-8'))
+	console.log(html_grammar)
 	expect(boil_string(print_grammar(html_grammar))).eql(boil_string(`
 		import { Parser, ParseArg, Decidable, path, branch, c } from "kreia"
 

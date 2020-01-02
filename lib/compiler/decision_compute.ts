@@ -280,7 +280,7 @@ function* iterate_definition(
 
 		case 'LockingVar':
 			// yield Scope.for_locking_var(scope, node)
-			console.log(node)
+			// console.log(node)
 			yield NotEnough(Scope.for_locking_var(scope, node))
 			continue
 
