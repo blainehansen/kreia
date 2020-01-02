@@ -152,10 +152,22 @@ const MainAgainst = Data((main: [Definition, ScopeStack], against: [Definition, 
 })
 type MainAgainst = ReturnType<typeof MainAgainst>
 
+const NotEnough = Data((token_name: string) => {
+	return { type: 'NotEnough' as const, token_name }
+})
+type NotEnough = ReturnType<typeof NotEnough>
+
+function flatten_not_enough(value: string | NotEnough): string {
+	return typeof value === 'string'
+		? value
+		: value.token_name
+}
+
 type ComplexItems = {
 	Simultaneous: Simultaneous,
 	MainAgainst: MainAgainst,
 	Continue: Continue,
+	NotEnough: NotEnough,
 }
 type ComplexItem = ComplexItems[keyof ComplexItems]
 
@@ -212,6 +224,9 @@ function* iterate_definition(
 		// this is redundant, we would already do that
 		// a case (A B)+ (B& C)
 		// this is also redundant
+		// however:
+		// a case (A& B)+ (A, C)
+		// with the inclusion of a NotEnough system, we should get A, B instead of simply A
 
 
 		// now we move forward assuming that there's no modifier
@@ -264,7 +279,9 @@ function* iterate_definition(
 			continue
 
 		case 'LockingVar':
-			yield Scope.for_locking_var(scope, node)
+			// yield Scope.for_locking_var(scope, node)
+			console.log(node)
+			yield NotEnough(Scope.for_locking_var(scope, node))
 			continue
 
 		default: return exhaustive(node)
@@ -323,6 +340,7 @@ function _compute_decidable(
 	let against = input_against.slice()
 
 	let item
+	let push_regardless = false
 	while (item = main.next()) {
 		// console.log('beginning iteration')
 		// console.log('item', item)
@@ -331,6 +349,7 @@ function _compute_decidable(
 		// this next call will already mutate the underlying definition in gather_branches
 		// so we could have entered this iteration of the loop with many things ahead
 		// but the next will have none left
+		push_regardless = false
 
 		if (item_is(item, 'Simultaneous')) {
 			// console.log('recursing Simultaneous')
@@ -377,10 +396,8 @@ function _compute_decidable(
 			// since we've placed an against.length check before this,
 			// hitting here means this thing is undecidable, at least for now
 			throw new Error('undecidable')
-		// if (item_is(item, 'NotEnough')) {
-		// 	builder.push(item)
-		// 	continue
-		// }
+		push_regardless = item_is(item, 'NotEnough')
+		item = flatten_not_enough(item)
 
 
 		const new_against = [] as AstIter[]
@@ -412,13 +429,12 @@ function _compute_decidable(
 				against_iters.push(EternalAstIter(against_item.definition_tuple))
 				continue
 			}
-			// if (item_is(against_item, 'NotEnough')) {
-			// 	new_against.push(against_iter)
-			// 	continue
-			// }
+			// in this situation we do nothing differently
+			// we don't care about an against having NotEnough
+			const final_against_item = flatten_not_enough(against_item)
 
-			// console.log('item !== against_item', item !== against_item)
-			if (item !== against_item)
+			// console.log('item !== final_against_item', item !== final_against_item)
+			if (!push_regardless && item !== final_against_item)
 				continue
 
 			new_against.push(against_iter)

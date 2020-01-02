@@ -4,8 +4,8 @@ import { tuple as t } from '@ts-std/types'
 
 import { compute_decidable, AstDecisionPath as path, AstDecisionBranch as branch } from './decision_compute'
 import {
-	Definition, Scope, ScopeStack, Node,
-	consume, maybe, maybe_many, maybe_consume, maybe_many_consume, many_consume, or, many,
+	Definition, Scope, ScopeStack, Node, LockingArg,
+	consume, maybe, maybe_many, maybe_consume, maybe_many_consume, many_consume, or, many, locking_var, maybe_locking_var,
 } from './ast'
 
 const empty_scope = { current: Scope(undefined, undefined), previous: [] }
@@ -159,7 +159,7 @@ describe('compute_decidable', () => {
 			d(maybe_consume(B), consume(C)),
 			[
 			d(consume(A)),
-		], [], true)).eql(
+		], [], false)).eql(
 			branch(path([B]), path([C])),
 		)
 
@@ -168,7 +168,7 @@ describe('compute_decidable', () => {
 			[
 			d(consume(B)),
 			d(consume(C)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A]),
 		)
 
@@ -176,7 +176,7 @@ describe('compute_decidable', () => {
 			d(consume(A, B, C)),
 			[
 			d(consume(A, B, C, D, E)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B, C]),
 		)
 
@@ -184,7 +184,7 @@ describe('compute_decidable', () => {
 			d(consume(A, B, A)),
 			[
 			d(consume(A, C, A)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B]),
 		)
 
@@ -193,7 +193,7 @@ describe('compute_decidable', () => {
 			[
 			d(consume(A, C, D, A)),
 			d(consume(A, C, B, A, E, A)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, C, B, A, C]),
 		)
 
@@ -202,7 +202,7 @@ describe('compute_decidable', () => {
 			[
 			d(consume(A, C, D, A)),
 			d(consume(A, C, B, A, E, A)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, C, B, A, C]),
 		)
 	})
@@ -212,7 +212,7 @@ describe('compute_decidable', () => {
 			d(consume(A, B, C)),
 			[
 			d(consume(A), maybe_consume(D, F)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B]),
 		)
 
@@ -220,7 +220,7 @@ describe('compute_decidable', () => {
 			d(consume(A, B, C)),
 			[
 			d(consume(A), maybe_consume(B, F)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B, C]),
 		)
 
@@ -228,7 +228,7 @@ describe('compute_decidable', () => {
 			d(consume(A, B, C)),
 			[
 			d(consume(A), maybe_consume(E), consume(B)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B, C]),
 		)
 
@@ -236,7 +236,7 @@ describe('compute_decidable', () => {
 			d(consume(A, B), maybe_consume(F, G)),
 			[
 			d(consume(A, B, E)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B]),
 		)
 
@@ -244,7 +244,7 @@ describe('compute_decidable', () => {
 			d(consume(A, B), maybe_consume(F, G), consume(C, E)),
 			[
 			d(consume(A, B, C, D)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B], branch(path([F]), path([C, E]))),
 		)
 
@@ -253,7 +253,7 @@ describe('compute_decidable', () => {
 			[
 			d(consume(A, B, E, G)),
 			d(consume(A, B, C, D, E, H)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B], branch(path([C, D]), path([E, F])))
 		)
 	})
@@ -263,7 +263,7 @@ describe('compute_decidable', () => {
 			d(many_consume(A, B, C)),
 			[
 			d(consume(A, B, D)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B, C]),
 		)
 
@@ -271,7 +271,7 @@ describe('compute_decidable', () => {
 			d(consume(A, B, D)),
 			[
 			d(many_consume(A, B, C)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B, D]),
 		)
 
@@ -279,7 +279,7 @@ describe('compute_decidable', () => {
 			d(consume(A, B, A, B, A, B, C)),
 			[
 			d(many_consume(A, B), consume(C)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B, A, B, A, B, C]),
 		)
 
@@ -287,7 +287,7 @@ describe('compute_decidable', () => {
 			d(consume(A, B, A, B, C)),
 			[
 			d(many_consume(A, B), consume(C)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B, A, B, C]),
 		)
 	})
@@ -297,7 +297,7 @@ describe('compute_decidable', () => {
 			d(many_consume(A)),
 			[
 			d(many_consume(B)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A]),
 		)
 
@@ -305,7 +305,7 @@ describe('compute_decidable', () => {
 			d(many_consume(A, B)),
 			[
 			d(many_consume(A, C)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B]),
 		)
 
@@ -313,7 +313,7 @@ describe('compute_decidable', () => {
 			d(many_consume(A, B, C)),
 			[
 			d(consume(A, B), many_consume(D, A, B, C)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B, C]),
 		)
 
@@ -321,7 +321,7 @@ describe('compute_decidable', () => {
 			d(many_consume(A, B, D, E)),
 			[
 			d(consume(A, B), many_consume(D, A, B, C)),
-		], [], true)).eql(
+		], [], false)).eql(
 			path([A, B, D, E]),
 		)
 	})
@@ -334,13 +334,13 @@ describe('compute_decidable', () => {
 			// and prevent it from ever happening
 			// they need to restructure their grammar
 			d(consume(A, B, C, D)),
-		], [], true)).throw('undecidable')
+		], [], false)).throw('undecidable')
 
 		expect(() => compute_decidable(
 			d(many_consume(A, B, C)),
 			[
 			d(consume(A, B), many_consume(C, A, B)),
-		], [], true)).throw('undecidable')
+		], [], false)).throw('undecidable')
 	})
 
 	it('complex branches', () => {
@@ -361,7 +361,7 @@ describe('compute_decidable', () => {
 					[consume(B, C)],
 				),
 			),
-		], [], true)).eql(
+		], [], false)).eql(
 			path(
 				[A, B],
 				branch(
@@ -391,7 +391,7 @@ describe('compute_decidable', () => {
 					[consume(A, B, E), maybe_consume(A, C, A)],
 				),
 			),
-		], [], true)).eql(
+		], [], false)).eql(
 			path(
 				[A, B],
 				branch(
@@ -406,7 +406,7 @@ describe('compute_decidable', () => {
 			d(many(maybe_consume(D), consume(B, C, E))),
 			[
 			d(many(consume(B), maybe_consume(C), consume(A))),
-		], [], true)).eql(
+		], [], false)).eql(
 			branch(
 				path([D]),
 				path([B, C, E]),
@@ -414,3 +414,40 @@ describe('compute_decidable', () => {
 		)
 	})
 })
+
+
+// a case (A& B)+ (A, C)
+const lock_a_scope = {
+	current: Scope({ lock_a: new LockingArg('lock_a', A) }, undefined), previous: []
+}
+describe('locking_var not enough', () => it('works', () => {
+	expect(compute_decidable(
+		t([locking_var('lock_a'), consume(B)], lock_a_scope),
+		[
+		d(consume(C, D))
+	], [], false)).eql(
+		path([A, B]),
+	)
+
+	expect(compute_decidable(
+		d(maybe_consume(A, B), consume(C)),
+		[
+		d(maybe_consume(E, F), consume(C)),
+	], [], false)).eql(
+		branch(
+			path([A]),
+			path([C]),
+		)
+	)
+
+	expect(compute_decidable(
+		t([maybe(locking_var('lock_a'), consume(B)), consume(C)], lock_a_scope),
+		[
+		d(maybe_consume(E, F), consume(C)),
+	], [], false)).eql(
+		branch(
+			path([A, B]),
+			path([C]),
+		)
+	)
+}))

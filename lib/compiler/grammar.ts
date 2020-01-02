@@ -371,6 +371,7 @@ export function rule_atom(): NonEmpty<Node> {
 	case 'var_name':
 		return [new Var(parsed_modifier, trim_sigil(atom_token))]
 	case 'locked_name':
+		console.log("locked_name", atom_token.content)
 		return [new LockingVar(parsed_modifier, trim_sigil(atom_token))]
 	default: return impossible()
 	}

@@ -426,7 +426,7 @@ describe('./examples/html.peg', () => it('works', () => {
 			_MHu6X: path([tok.open_angle]),
 			_A1THl: path([tok.close_angle]),
 			_Z1oSnTW: branch(path([tok.whitespace]), path([tok.not_open_angle])),
-			_Z1oj86y: path([tok.open_angle, tok.html_tag_ident])
+			_Z1oj86y: path([tok.open_angle, tok.html_tag_ident, branch(path([tok.ident]), path([tok.slash]), path([tok.close_angle]))])
 		}
 
 		export function html_file() {
