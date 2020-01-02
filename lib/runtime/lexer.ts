@@ -90,13 +90,6 @@ export type Token =
 	| RawToken
 	| VirtualToken
 
-export type TokensForDefinitions<L extends TokenDefinition[]> = {
-	[K in keyof L]:
-		L[K] extends ContentVirtualTokenDefinition ? ContentVirtualToken
-		: L[K] extends EmptyVirtualTokenDefinition ? EmptyVirtualToken
-		: RawToken
-}
-
 
 export type VirtualLexerCreator<S, T extends Dict<ExposedRawTokenDefinition | VirtualTokenDefinition>, A extends any[]> =
 	(...args: A) => [T, VirtualLexer<S>]

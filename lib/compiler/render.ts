@@ -313,6 +313,7 @@ function render_node(
 			// console.log('arg_scope', arg_scope)
 			// we always have to call this for the side effects produced with the above maximizing_var
 			const rendered_arrow = render_definition_arrow(arg_definition, arg_scope, next, parent_other_choices)
+			// const used_rendered_arrow = arg_definition.length === 1 && arg_definition[0].type === 'Var' && arg_definition[0].modifier === undefined
 			const used_rendered_arrow = arg_definition.length === 1 && arg_definition[0].type === 'Var' && arg_definition[0].modifier === undefined
 				? ts.createIdentifier(arg_definition[0].arg_name)
 				: rendered_arrow
@@ -343,10 +344,10 @@ function render_node(
 		return create_call(function_name, render_token_tuple(node.token_names))
 	}
 	case 'LockingVar': {
-		// const function_name = wrap_function_name('lock', node.modifier)
-		// return create_call(function_name, [render_token_reference(node.locking_arg_name)])
-		const function_name = wrapping_name(node.modifier) || node.locking_arg_name
-		return create_call(function_name, [])
+		const maybe_function_name = wrapping_name(node.modifier)
+		return maybe_function_name === undefined
+			? create_call(node.locking_arg_name, [])
+			: create_call(maybe_function_name, [ts.createIdentifier(node.locking_arg_name)])
 	}}
 }
 
@@ -422,7 +423,7 @@ export function render_grammar(grammar: Grammar) {
 			)),
 			undefined,
 			ts.createObjectLiteral(decidable_entries.map(([name, decidable]) =>
-				ts.createPropertyAssignment(ts.createIdentifier(name), decidable),
+				ts.createPropertyAssignment(name, decidable),
 			), true),
 		)],
 		ts.NodeFlags.Const,

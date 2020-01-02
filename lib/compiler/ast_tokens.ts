@@ -45,7 +45,6 @@ export class Concat extends _RegexComponent {
 	constructor(readonly segments: NonLone<_RegexComponent>, protected modifier: Modifier) { super() }
 
 	_source() {
-		// return '(?:' + this.segments.map(p => p.into_regex_source()).join('') + ')'
 		return this.segments.map(p => p.into_regex_source()).join('')
 	}
 	modify(modifier: Modifier) {
@@ -58,7 +57,6 @@ export class Union extends _RegexComponent {
 	constructor(readonly segments: NonLone<_RegexComponent>, protected modifier: Modifier) { super() }
 
 	_source() {
-		// return `(?:${this.segments.map(p => p.into_regex_source()).join('|')})`
 		return this.segments.map(p => p.into_regex_source()).join('|')
 	}
 	modify(modifier: Modifier) {
@@ -71,7 +69,6 @@ export class TokenString extends _RegexComponent {
 	constructor(readonly value: string, protected modifier: Modifier) { super() }
 
 	_source() {
-		// return `(?:${escape_string(this.value)})`
 		return escape_string(this.value)
 	}
 	modify(modifier: Modifier) {
@@ -189,9 +186,9 @@ export const builtins = {
 
 
 // here's a list of all the base token macros (allow people to define their own?)
-// #exact(a: Regex) // wraps it in word boundaries \b
-// #enclosed(a: Character) // creates a regex that matches anything enclosed in a, allowing escape with /
-// #enclosed_except(a: Character, d: CharacterClass) // same as #enclosed, but disallows anything matching d within the enclosure
-// #enclosed_non_empty(a: Regex) // same as enclosed but uses + instead of * for the enclosure content
-// #open_close(begin: Character, end: Character) // creates a regex that matches anything enclosed by begin then end
-// #open_close_except(begin: Character, end: Character, d: CharacterClass)
+// &exact(a: Regex) // wraps it in word boundaries \b
+// &enclosed(a: Character) // creates a regex that matches anything enclosed in a, allowing escape with /
+// &enclosed_except(a: Character, d: CharacterClass) // same as #enclosed, but disallows anything matching d within the enclosure
+// &enclosed_non_empty(a: Regex) // same as enclosed but uses + instead of * for the enclosure content
+// &open_close(begin: Character, end: Character) // creates a regex that matches anything enclosed by begin then end
+// &open_close_except(begin: Character, end: Character, d: CharacterClass)

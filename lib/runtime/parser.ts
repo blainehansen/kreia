@@ -5,8 +5,10 @@ import { debug, NonEmpty } from '../utils'
 import { Decidable } from './decision'
 import {
 	Lexer as _Lexer,
-	TokenDefinition, RawTokenDefinition, TokensForDefinitions, RawToken, TokenSpec,
-	VirtualLexerOutputs,
+	TokenDefinition, RawTokenDefinition, RawToken,
+	ContentVirtualTokenDefinition, ContentVirtualToken,
+	EmptyVirtualTokenDefinition, EmptyVirtualToken,
+	TokenSpec, VirtualLexerOutputs,
 } from './lexer'
 
 type Lexer = _Lexer<VirtualLexerOutputs>
@@ -69,9 +71,9 @@ type DecidableFunc<F extends Func> =
 	: never
 
 function is_decidable_func<F extends Func>(
-	fl: DecidableFunc<F> | TokenDefinition[],
+	fl: DecidableFunc<F> | TokenDefinition[] | [Locker],
 ): fl is DecidableFunc<F> {
-	return typeof fl[0] === 'function'
+	return fl.length > 1 && typeof fl[0] === 'function'
 }
 
 // type ArgFunc<F extends Func> =
@@ -83,21 +85,31 @@ function is_decidable_func<F extends Func>(
 // 	return [fn, ...args] as ArgFunc<F>
 // }
 
-export type TokenLike = Locker | TokenDefinition
-export type ParseEntity = DecidableFunc<Func> | TokenDefinition[]
+export type ParseEntity = DecidableFunc<Func> | TokenDefinition[] | ([Locker])
 export type ParseArg = () => any
+
+export type TokensForDefinitions<L extends TokenDefinition[]> = {
+	[K in keyof L]:
+		L[K] extends ContentVirtualTokenDefinition ? ContentVirtualToken
+		: L[K] extends EmptyVirtualTokenDefinition ? EmptyVirtualToken
+		: RawToken
+}
 
 
 type EntityReturn<E extends ParseEntity> =
-	E extends TokenDefinition[] ? TokensForDefinitions<E>
+	E extends [Locker] ? [RawToken]
+	: E extends TokenDefinition[] ? TokensForDefinitions<E>
 	: ((...args: E) => any) extends ((fn: infer F, d: Decidable, ...args: infer A) => any)
 	? F extends Func
 	? A extends Parameters<F>
 	? ReturnType<F>
 	: never : never : never
 
+function is_locker_tuple(entity: TokenDefinition[] | [Locker]): entity is [Locker] {
+	return entity.length === 1 && 'attempt_locker' in entity[0]
+}
 
-function perform_entity<F extends Func, E extends DecidableFunc<F> | TokenDefinition[]>(
+function perform_entity<E extends ParseEntity>(
 	lexer: Lexer,
 	entity: E,
 ): EntityReturn<E> {
@@ -105,16 +117,22 @@ function perform_entity<F extends Func, E extends DecidableFunc<F> | TokenDefini
 		const [fn, _, ...args] = entity
 		return fn(...args)
 	}
+	if (is_locker_tuple(entity)) {
+		return entity[0]()
+	}
 	return lexer.require(entity as TokenDefinition[]) as EntityReturn<E>
 }
 
-function test_entity<F extends Func, E extends DecidableFunc<F> | TokenDefinition[]>(
+function test_entity<E extends ParseEntity>(
 	lexer: Lexer,
 	entity: E,
 ): boolean {
 	if (is_decidable_func(entity)) {
 		const [, tester, ] = entity
 		return tester.test(lexer) !== undefined
+	}
+	if (is_locker_tuple(entity)) {
+		return entity[0].attempt_locker()
 	}
 	return lexer.test(entity as TokenDefinition[]) !== undefined
 }
@@ -123,10 +141,10 @@ function consume<L extends TokenDefinition[]>(
 	lexer: Lexer,
 	token_definitions: L
 ): TokensForDefinitions<L> {
-	return lexer.require(token_definitions) as EntityReturn<L>
+	return lexer.require(token_definitions) as TokensForDefinitions<L>
 }
 
-type Locker = (() => RawToken) & { test: (lexer: Lexer) => boolean }
+type Locker = (() => RawToken) & { attempt_locker: () => boolean }
 function lock(lexer: Lexer, token_definition: RawTokenDefinition): Locker {
 	let locked = undefined as RawToken | undefined
 	const locker: Locker = () => {
@@ -140,7 +158,7 @@ function lock(lexer: Lexer, token_definition: RawTokenDefinition): Locker {
 		locked = token
 		return token
 	}
-	locker.test = () => {
+	locker.attempt_locker = () => {
 		const should_proceed = test_entity(lexer, [token_definition] as [RawTokenDefinition])
 		if (!should_proceed)
 			return false
