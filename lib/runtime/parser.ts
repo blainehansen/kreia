@@ -51,12 +51,6 @@ export function Parser<D extends Dict<TokenSpec>, V extends VirtualLexerOutputs 
 		maybe_many<E extends ParseEntity>(...entity: E) {
 			return maybe_many(lexer, entity)
 		},
-		// many_separated<B extends ParseEntity, S extends ParseEntity>(body_rule: B, separator_rule: S) {
-		// 	return many_separated(lexer, body_rule, separator_rule)
-		// },
-		// maybe_many_separated<B extends ParseEntity, S extends ParseEntity>(body_rule: B, separator_rule: S) {
-		// 	return maybe_many_separated(lexer, body_rule, separator_rule)
-		// },
 		exit() {
 			lexer.exit()
 		},
@@ -184,6 +178,22 @@ function maybe<E extends ParseEntity>(
 	return undefined
 }
 
+function test_next_matches(lexer: Lexer, next_decidable?: Decidable) {
+	return next_decidable && next_decidable.test(lexer) !== undefined
+}
+
+// function many_unless<E extends ParseEntity>(
+// 	lexer: Lexer,
+// 	next_decidable: Decidable, entity: E,
+// ): NonEmpty<EntityReturn<E>> {
+// 	return _many(lexer, false, entity, next_decidable)
+// }
+// function maybe_many_unless<E extends ParseEntity>(
+// 	lexer: Lexer,
+// 	next_decidable: Decidable, entity: E,
+// ): NonEmpty<EntityReturn<E>> | undefined {
+// 	return _many(lexer, true, entity, next_decidable)
+// }
 
 function many<E extends ParseEntity>(
 	lexer: Lexer,
@@ -203,7 +213,10 @@ function _many<E extends ParseEntity, B extends boolean>(
 	lexer: Lexer,
 	is_optional: B,
 	entity: E,
+	// next_decidable?: Decidable,
 ): Optional<NonEmpty<EntityReturn<E>>, B> {
+	// const next_matches = test_next_matches(lexer, next_decidable)
+	// let should_proceed = !is_optional || (test_entity(lexer, entity) && !next_matches)
 	let should_proceed = !is_optional || test_entity(lexer, entity)
 	if (is_optional && !should_proceed)
 		return undefined as Optional<NonEmpty<EntityReturn<E>>, B>
@@ -212,6 +225,8 @@ function _many<E extends ParseEntity, B extends boolean>(
 
 	while (should_proceed) {
 		results.push(perform_entity(lexer, entity))
+		// const next_matches = test_next_matches(lexer, next_decidable)
+		// should_proceed = test_entity(lexer, entity) && !next_matches
 		should_proceed = test_entity(lexer, entity)
 	}
 
@@ -283,44 +298,3 @@ function _or<C extends ParseEntity[], B extends boolean>(
 	const next_source = lexer.get_next_source()
 	throw new Error(`expected one of these choices:\n${debug(choices)}\n\nbut got this:\n${next_source}\n`)
 }
-
-
-// function many_separated<B extends ParseEntity, S extends ParseEntity>(
-// 	lexer: Lexer,
-// 	body_rule: B,
-// 	separator_rule: S,
-// ): EntityReturn<B>[] {
-// 	return _many_separated(lexer, false, body_rule, separator_rule)
-// }
-
-// function maybe_many_separated<B extends ParseEntity, S extends ParseEntity>(
-// 	lexer: Lexer,
-// 	body_rule: B,
-// 	separator_rule: S,
-// ): EntityReturn<B>[] | undefined {
-// 	return _many_separated(lexer, true, body_rule, separator_rule)
-// }
-
-// function _many_separated<B extends ParseEntity, S extends ParseEntity, O extends boolean>(
-// 	lexer: Lexer,
-// 	is_optional: O,
-// 	body_rule: B,
-// 	separator_rule: S,
-// ): Optional<EntityReturn<B>[], O> {
-// 	const results = [] as EntityReturn<B>[]
-
-// 	if (is_optional && !test_entity(lexer, body_rule))
-// 		return undefined as Optional<EntityReturn<B>[], O>
-
-// 	results.push(perform_entity(lexer, body_rule))
-
-// 	let should_proceed = test_entity(lexer, separator_rule)
-// 	while (should_proceed) {
-// 		perform_entity(lexer, separator_rule)
-
-// 		results.push(perform_entity(lexer, body_rule))
-// 		should_proceed = test_entity(lexer, separator_rule)
-// 	}
-
-// 	return results as Optional<EntityReturn<B>[], O>
-// }

@@ -1,0 +1,34 @@
+// first we define our tokens,
+// the "terminals" of the grammar
+// tokens can be defined using
+// strings, character classes, references to other tokens
+
+:open_paren = '('
+:close_paren = ')'
+
+:operator = '+' | '-' | '*' | '/'
+// also could be done with a character class:
+// :operator = [+\-*/]
+
+:number = [0-9]+ ('.' [0-9]+)?
+
+// the underscore says to ignore these tokens
+// and the # means that this is a built-in character class
+// equivalent to this: [\t\n\v\f\r ]+
+:whitespace _= #whitespace+
+
+// now our actual grammar rules
+// kreia is whitespace sensitive
+
+expression =
+  expression_atom
+  (:operator expression_atom)+
+  // this could also be done with the modifying +
+  // at the beginning of the entire line
+  // + :operator expression_atom
+
+// | makes these branches of an "Or"
+// an expression_atom can be either of these two possibilities
+expression_atom =
+  | :number
+  | :open_paren expression :close_paren

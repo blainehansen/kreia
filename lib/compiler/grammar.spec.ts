@@ -470,3 +470,7 @@ describe('./examples/html.peg', () => it('works', () => {
 
 	// parse_give(kreia_grammar, fs.readFileSync('./examples/json.peg', 'utf-8'))
 	// parse_give(kreia_grammar, fs.readFileSync('./examples/yml.peg', 'utf-8'))
+
+describe('./examples/arithmetic.peg', () => it('works', () => {
+	//
+}))

@@ -34,13 +34,20 @@ function render_token_tuple(token_names: NonEmpty<string>) {
 	return token_names.map(render_token_reference)
 }
 
-function wrapping_name(modifier: Modifier) {
+function certain_wrapping_name(modifier: BaseModifier) {
 	switch (modifier) {
 		case BaseModifier.Many: return 'many' as const
 		case BaseModifier.Maybe: return 'maybe' as const
 		case BaseModifier.MaybeMany: return 'maybe_many' as const
-		default: return undefined
+		// case BaseModifier.ManyUnless: return 'many_unless' as const
+		// case BaseModifier.MaybeManyUnless: return 'maybe_many_unless' as const
 	}
+}
+
+function wrapping_name(modifier: Modifier) {
+	return modifier === undefined
+		? undefined
+		: certain_wrapping_name(modifier)
 }
 
 function wrap_function_name(function_name: string, modifier: Modifier) {
@@ -48,6 +55,12 @@ function wrap_function_name(function_name: string, modifier: Modifier) {
 		case BaseModifier.Many: return `many_${function_name}`
 		case BaseModifier.Maybe: return `maybe_${function_name}`
 		case BaseModifier.MaybeMany: return `maybe_many_${function_name}`
+		// TODO in all the cases where these unless variants are used,
+		// we need to compute an extra decidable *but flipping the normal order of the main and against*
+		// we compute the decidable for the *gathered next* against the thing with the unless
+		// that means we need to expose gather_branches :(
+		// case BaseModifier.ManyUnless: return `$many_{function_name}_unless` as const
+		// case BaseModifier.MaybeManyUnless: return 'maybe_many_${function_name}_unless' as const
 		default: return function_name
 	}
 }
@@ -187,13 +200,7 @@ function render_node(
 	switch (node.type) {
 
 	case 'Paren': {
-		const function_name = exec(() => {
-			switch (node.modifier) {
-				case BaseModifier.Many: return 'many' as const
-				case BaseModifier.Maybe: return 'maybe' as const
-				case BaseModifier.MaybeMany: return 'maybe_many' as const
-			}
-		})
+		const function_name = certain_wrapping_name(node.modifier)
 		// we assume that since Paren is defined as containing NonLone<Node>,
 		// and since we also assume that we fold all adjacent token references into a single consume
 		// that Paren can never have a simple token tuple as its decidable
