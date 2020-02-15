@@ -25,12 +25,12 @@ a
 
 describe('IndentationLexerWithRawBlock', () => {
 	it('basically works', () => {
+		const name = UserToken('name', /[a-z]+/)
 		const [{
 			indent, deindent, indent_continue, raw_block_begin, raw_block_content, raw_block_end,
-		}, ] = IndentationLexerWithRawBlock()
+		}] = IndentationLexerWithRawBlock(/\|\"\n/)
 
-		const name = UserToken('name', /[a-z]+/)
-		const [, lexer] = Lexer.create({}, { IndentationLexer: IndentationLexerWithRawBlock() })
+		const [, lexer] = Lexer.create({}, { IndentationLexer: IndentationLexerWithRawBlock(/\|\"\n/) })
 		lexer.reset(source)
 
 		expect(lexer.test([name, indent_continue])).eql(undefined)

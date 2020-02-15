@@ -12,7 +12,7 @@ import {
 const need_tab_tester = finalize_regex(/\t/)
 
 const block_tab = HiddenToken('block_tab', /\t/)
-const raw_block_begin = ExposedToken('raw_block_begin', 'IndentationLexer', /\|\"\n/)
+// const raw_block_begin = ExposedToken('raw_block_begin', 'IndentationLexer', /\|\"\n/)
 const raw_block_content = VirtualToken('raw_block_content', 'IndentationLexer', /(?:[^\n]*\n+)|(?:[^\n]+\n*)/)
 const raw_block_end = VirtualToken('raw_block_end', 'IndentationLexer')
 
@@ -27,8 +27,14 @@ type Toks = {
 	indent: VirtualTokenDefinition, deindent: VirtualTokenDefinition, indent_continue: VirtualTokenDefinition,
 	raw_block_begin: ExposedRawTokenDefinition, raw_block_content: VirtualTokenDefinition, raw_block_end: VirtualTokenDefinition,
 }
-export const IndentationLexerWithRawBlock: VirtualLexerCreator<IndentationStateWithRawBlock, Toks, []> = () => t(
-	{ indent, deindent, indent_continue, raw_block_begin, raw_block_content, raw_block_end }, {
+export const IndentationLexerWithRawBlock: VirtualLexerCreator<IndentationStateWithRawBlock, Toks, []> = (
+	raw_block_begin_regex: RegExp,
+) => t(
+	{
+		indent, deindent, indent_continue,
+		raw_block_begin: ExposedToken('raw_block_begin', 'IndentationLexer', raw_block_begin_regex),
+		raw_block_content, raw_block_end,
+	}, {
 	initialize() {
 		return { in_block: false, indentation_state: { type: 'unbuffered', indentation: 0 } }
 	},
