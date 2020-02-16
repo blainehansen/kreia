@@ -1,12 +1,12 @@
 import '@ts-std/extensions/dist/array'
-import { Dict, tuple as t } from '@ts-std/types'
+import { tuple as t } from '@ts-std/types'
 import {
 	Lexer, SourceState, VirtualLexerCreator, finalize_regex,
-	UserToken, HiddenToken, VirtualTokenDefinition, VirtualToken, ExposedToken,
+	HiddenToken, VirtualTokenDefinition, VirtualToken,
 } from '../runtime/lexer'
 
-import { Console } from 'console'
-const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
+// import { Console } from 'console'
+// const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
 
 export const newline = HiddenToken('newline', /[\t ]*\n+/)
 export const tab = HiddenToken('tab', /\t+/)

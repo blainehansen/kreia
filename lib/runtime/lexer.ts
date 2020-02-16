@@ -3,8 +3,8 @@ import { Dict, tuple as t, UnionToIntersection } from '@ts-std/types'
 
 import { debug } from '../utils'
 
-import { Console } from 'console'
-const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
+// import { Console } from 'console'
+// const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
 
 export type UserRawTokenDefinition = {
 	name: string,
@@ -260,7 +260,7 @@ export class Lexer<V extends VirtualLexerOutputs> {
 				const virtual_attempt = virtual_lexer.request(token_definition, virtual_lexer_state, state.source_state, file)
 				if (virtual_attempt === undefined)
 					return undefined
-				const [_ignored_tokens, virtual_token, new_virtual_lexer_state, new_source_state] = virtual_attempt
+				const [, virtual_token, new_virtual_lexer_state, new_source_state] = virtual_attempt
 				state = {
 					source_state: new_source_state,
 					virtual_lexers: {
@@ -281,7 +281,7 @@ export class Lexer<V extends VirtualLexerOutputs> {
 				const attempt = Lexer.attempt_token(ignored_token_definition, state.source_state, file)
 				if (attempt === undefined)
 					continue
-				const [_ignored_token, new_source_state] = attempt
+				const [, new_source_state] = attempt
 				state = { source_state: new_source_state, virtual_lexers: state.virtual_lexers }
 			}
 

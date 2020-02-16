@@ -2,7 +2,7 @@ import { Dict } from '@ts-std/types'
 import { Maybe } from '@ts-std/monads'
 
 import { Registry } from './ast'
-import { debug, NonLone } from '../utils'
+import { NonLone } from '../utils'
 import { escape_string } from '../runtime/lexer'
 
 type Modifier =

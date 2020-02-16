@@ -1,7 +1,7 @@
 import * as util from 'util'
 import { Dict } from '@ts-std/types'
 import { OrderedDict } from '@ts-std/collections'
-import { Result, Ok, Err, Maybe, Some, None } from '@ts-std/monads'
+import { Maybe, Some, None } from '@ts-std/monads'
 
 export function debug(obj: any, depth = null as number | null) {
 	return util.inspect(obj, { depth, colors: true })
@@ -48,7 +48,7 @@ export function flatten<T>(arr: T[][]): T[] {
 	return give
 }
 
-export const empty_ordered_dict = OrderedDict.create<any>(t => '', [])
+export const empty_ordered_dict = OrderedDict.create<any>(() => '', [])
 
 
 export type NonEmpty<T> = [T, ...T[]]
@@ -159,6 +159,6 @@ export function Data<F extends (...args: any) => any>(
 export type Data<F extends (...args: any) => any> = ReturnType<F>
 
 
-export function exhaustive(v: never): never {
+export function exhaustive(_: never): never {
 	throw new Error()
 }

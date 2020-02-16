@@ -1,6 +1,6 @@
 import '@ts-std/extensions/dist/array'
 
-import { Lexer, LexerState, VirtualLexerOutputs, TokenDefinition, Token, match_and_trim } from './lexer'
+import { Lexer, LexerState, VirtualLexerOutputs, TokenDefinition, Token } from './lexer'
 
 export interface HasTestLength {
 	readonly test_length: number

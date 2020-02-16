@@ -1,14 +1,20 @@
 {
 	"compilerOptions": {
+		"strict": true,
+		"incremental": true,
 		"declaration": true,
 		"sourceMap": true,
 		"target": "esnext",
 		"module": "commonjs",
-		"strict": true,
 		"outDir": "dist",
 		"preserveConstEnums": true
 	},
 	"include": [
-		"src/**/*"
+		"lib/**/*"
+	],
+	"exclude": [
+		"lib/compiler/_generate_*.ts",
+		"lib/compiler/grammar.staging.ts",
+		"node_modules"
 	]
 }

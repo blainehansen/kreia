@@ -1,5 +1,4 @@
-import { HashSet } from '@ts-std/collections'
-import { Dict, tuple as t } from '@ts-std/types'
+import { Dict } from '@ts-std/types'
 
 import { exhaustive, log_error_message } from '../utils'
 
@@ -8,8 +7,8 @@ import {
 	zip_args,
 } from './ast'
 
-import { Console } from 'console'
-const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
+// import { Console } from 'console'
+// const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
 
 export function check_left_recursive(thing: Rule | Macro) {
 	// console.log('thing.name', thing.name)

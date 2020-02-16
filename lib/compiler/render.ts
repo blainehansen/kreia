@@ -2,19 +2,18 @@ import ts = require('typescript')
 import { Maybe } from '@ts-std/monads'
 import { Dict, tuple as t } from '@ts-std/types'
 import { UniqueDict, DefaultDict } from '@ts-std/collections'
-import { MaxDict, NonEmpty, exhaustive, array_of, exec } from '../utils'
+import { MaxDict, NonEmpty, array_of } from '../utils'
 
 import { RegexComponent } from './ast_tokens'
 import { validate_references, check_left_recursive } from './ast_validate'
 import {
-	BaseModifier, Modifier, Scope as AstScope, ScopeStack as AstScopeStack, Node, Definition, Registry,
+	BaseModifier, Modifier, Scope as AstScope, Node, Definition, Registry,
 	TokenDef, VirtualLexerUsage, Rule, Macro, Grammar, LockingArg,
 } from './ast'
-import { finalize_regex, TokenSpec } from '../runtime/lexer'
 import { AstDecidable, compute_decidable } from './decision_compute'
 
-import { Console } from 'console'
-const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 3 } })
+// import { Console } from 'console'
+// const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 3 } })
 
 function create_call(function_name: string, args: ts.Expression[]) {
 	return ts.createCall(ts.createIdentifier(function_name), undefined, args)
@@ -214,7 +213,6 @@ function render_node(
 	case 'Or': {
 		const choices = []
 		for (const [choice_index, choice] of node.choices.entries()) {
-			const choice = node.choices[choice_index]
 			const other_choices = [
 				...AstScope.zip_definitions(node.choices.slice(choice_index + 1), scope),
 				...parent_other_choices,

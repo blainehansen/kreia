@@ -1,12 +1,12 @@
 import shorthash from './_shorthash'
 import { tuple as t } from '@ts-std/types'
-import { Data, exec, NonEmpty, IterWrapper, exhaustive } from '../utils'
+import { Data, NonEmpty, IterWrapper, exhaustive } from '../utils'
 
 import { compute_path_test_length } from '../runtime/decision'
 import { Node, Definition, ScopeStack, Scope, Registry } from './ast'
 
-import { Console } from 'console'
-const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
+// import { Console } from 'console'
+// const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
 
 
 class _AstDecisionPath {
@@ -312,7 +312,7 @@ export function compute_decidable(
 	// console.log('main[0]', main[0])
 	// console.log('against.map(tuple => tuple[0])', against.map(tuple => tuple[0]))
 
-	const [path, _] = _compute_decidable(
+	const [path, ] = _compute_decidable(
 		AstIter(main),
 		against.map(AstIter),
 		new PathBuilder(),

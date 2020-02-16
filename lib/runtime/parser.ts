@@ -1,5 +1,4 @@
-import { Maybe } from '@ts-std/monads'
-import { Dict, Cast, tuple as t } from '@ts-std/types'
+import { Dict } from '@ts-std/types'
 
 import { debug, NonEmpty } from '../utils'
 import { Decidable } from './decision'
@@ -108,7 +107,7 @@ function perform_entity<E extends ParseEntity>(
 	entity: E,
 ): EntityReturn<E> {
 	if (is_decidable_func(entity)) {
-		const [fn, _, ...args] = entity
+		const [fn, , ...args] = entity
 		return fn(...args)
 	}
 	if (is_locker_tuple(entity)) {
@@ -178,9 +177,9 @@ function maybe<E extends ParseEntity>(
 	return undefined
 }
 
-function test_next_matches(lexer: Lexer, next_decidable?: Decidable) {
-	return next_decidable && next_decidable.test(lexer) !== undefined
-}
+// function test_next_matches(lexer: Lexer, next_decidable?: Decidable) {
+// 	return next_decidable && next_decidable.test(lexer) !== undefined
+// }
 
 // function many_unless<E extends ParseEntity>(
 // 	lexer: Lexer,

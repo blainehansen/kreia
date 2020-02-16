@@ -13,7 +13,7 @@ import {
 } from './ast'
 import {
 	RegexComponent, Concat, Union, TokenString,
-	TokenReference, CharacterClass, CharacterClassReference, builtins,
+	TokenReference, CharacterClass, CharacterClassReference,
 } from './ast_tokens'
 
 import { Console } from 'console'
@@ -444,9 +444,9 @@ function diff_block<NOT_IN_INDENT extends ParseArg, IN_INDENT extends ParseArg>(
 	)
 }
 
-function block<BLOCK_LINE extends ParseArg>(block_line: BLOCK_LINE, _d1: Decidable, _d2: Decidable, _d3: Decidable) {
-	return diff_block(block_line, block_line, _d1, _d2, _d3)
-}
+// function block<BLOCK_LINE extends ParseArg>(block_line: BLOCK_LINE, _d1: Decidable, _d2: Decidable, _d3: Decidable) {
+// 	return diff_block(block_line, block_line, _d1, _d2, _d3)
+// }
 
 function enclosed_diff_block<LINE_ITEM extends ParseArg>(
 	line_item: LINE_ITEM, _d1: Decidable, _d2: Decidable, _d3: Decidable,

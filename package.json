@@ -2,17 +2,20 @@
   "name": "kreia",
   "version": "0.3.2",
   "description": "A flexible and easy to use parser library. Look into chaos, and see order.",
-  "main": "./kreia.js",
-  "types": "./kreia.d.ts",
+  "bin": "./dist/bin.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "generate:grammar": "ts-node lib/compiler/grammar.compile.ts",
-    "parse": "ts-node lib/compiler/grammar_out.ts",
-    "preversion": "npm test",
-    "finalize-version": "git push origin master && git push origin master --tags && npm publish",
+    "generate:grammar": "npm run bin -- ./lib/compiler/grammar.peg ./lib/compiler/grammar.staging.ts",
+    "bin": "ts-node lib/bin.ts",
+    "test:bin": "npm run bin -- ./examples/arithmetic.peg",
     "test": "mocha -r ts-node/register lib/**/*.spec.ts lib/*.spec.ts",
     "test:grammar": "npm run generate:grammar && mocha -r ts-node/register lib/compiler/grammar.spec.ts",
     "test:dev": "mocha -r ts-node/register lib/compiler/grammar.spec.ts",
-    "ts:ast": "ts-creator lib/compiler/_generate_from.ts --use-tabs true --trailing-comma 'all' -o lib/compiler/_generate_to.ts"
+    "ts:ast": "ts-creator lib/compiler/_generate_from.ts --use-tabs true --trailing-comma 'all' -o lib/compiler/_generate_to.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "preversion": "npm test && npm run build",
+    "finalize-version": "git push origin master && git push origin master --tags && npm publish"
   },
   "keywords": [
     "parser",
@@ -31,19 +34,19 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@types/chai": "^4.2.7",
+    "@types/chai": "^4.2.9",
     "@types/mocha": "^5.2.7",
-    "@types/node": "^12.12.22",
+    "@types/node": "^12.12.27",
     "chai": "^4.2.0",
     "mocha": "^5.2.0",
     "ts-creator": "^1.2.5",
-    "ts-node": "^8.5.4",
-    "typescript": "^3.7.4"
+    "ts-node": "^8.6.2",
+    "typescript": "^3.7.5"
   },
   "dependencies": {
     "@ts-std/collections": "^1.1.1",
-    "@ts-std/extensions": "^1.1.0",
-    "@ts-std/monads": "^1.0.4",
+    "@ts-std/extensions": "^1.3.0",
+    "@ts-std/monads": "^1.1.0",
     "@ts-std/types": "^1.0.1"
   }
 }

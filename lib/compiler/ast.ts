@@ -2,7 +2,6 @@ import { Dict, tuple as t } from '@ts-std/types'
 import { Result, Ok, Err, Maybe, Some, None } from '@ts-std/monads'
 
 import { debug, NonEmpty, NonLone } from '../utils'
-import { TokenSpec } from '../runtime/lexer'
 import { RegexComponent } from './ast_tokens'
 
 export enum BaseModifier {
