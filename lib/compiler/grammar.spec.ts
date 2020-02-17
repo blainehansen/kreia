@@ -404,12 +404,15 @@ describe('macro_definition', () => it('works', () => {
 
 
 import * as fs from 'fs'
-import { Console } from 'console'
-const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
+// import { Console } from 'console'
+// const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 5 } })
 
 describe('./examples/html.peg', () => it('works', () => {
 	const html_grammar = parse_give(kreia_grammar, fs.readFileSync('./examples/html.peg', 'utf-8'))
-	console.log(html_grammar)
+	// we want this to be the tail of
+	// _Z1oj86y: path([tok.open_angle, tok.html_tag_ident])
+	// branch(path([tok.ident]), path([tok.slash]), path([tok.close_angle]))
+	// console.log(html_grammar)
 	expect(boil_string(print_grammar(html_grammar))).eql(boil_string(`
 		import { Parser, ParseArg, Decidable, path, branch, c } from "kreia"
 
@@ -429,7 +432,7 @@ describe('./examples/html.peg', () => it('works', () => {
 			_MHu6X: path([tok.open_angle]),
 			_A1THl: path([tok.close_angle]),
 			_Z1oSnTW: branch(path([tok.whitespace]), path([tok.not_open_angle])),
-			_Z1oj86y: path([tok.open_angle, tok.html_tag_ident, branch(path([tok.ident]), path([tok.slash]), path([tok.close_angle]))])
+			_Z1oj86y: path([tok.open_angle, tok.html_tag_ident])
 		}
 
 		export function html_file() {
@@ -471,6 +474,38 @@ describe('./examples/html.peg', () => it('works', () => {
 	// parse_give(kreia_grammar, fs.readFileSync('./examples/json.peg', 'utf-8'))
 	// parse_give(kreia_grammar, fs.readFileSync('./examples/yml.peg', 'utf-8'))
 
-// describe('./examples/arithmetic.peg', () => it('works', () => {
-// 	//
-// }))
+describe('./examples/arithmetic.peg', () => it('works', () => {
+	const arithmetic_grammar = parse_give(kreia_grammar, fs.readFileSync('./examples/arithmetic.peg', 'utf-8'))
+	expect(boil_string(print_grammar(arithmetic_grammar))).eql(boil_string(`
+		import { Parser, ParseArg, Decidable, path, branch, c } from "kreia"
+
+		export const { tok, reset, lock, consume, maybe, or, maybe_or, many_or, maybe_many_or, many, maybe_many, exit } = Parser({
+			open_paren: /\\(/,
+			close_paren: /\\)/,
+			operator: /\\+|-|\\*|\\//,
+			number: /(?:[0-9])+(?:\\.(?:[0-9])+)?/,
+			whitespace: { regex: /(?:[\\t\\n\\v\\f\\r ])+/, ignore: true }
+		}, {})
+
+		const { _ZA9gf8, _NFQGh } = {
+			_ZA9gf8: path([tok.operator]),
+			_NFQGh: path([tok.open_paren])
+		}
+
+		export function expression() {
+			expression_atom()
+			many(() => {
+				consume(tok.operator)
+				expression_atom()
+			}, _ZA9gf8)
+		}
+
+		export function expression_atom() {
+			or(c(tok.number), c(() => {
+				consume(tok.open_paren)
+				expression()
+				consume(tok.close_paren)
+			}, _NFQGh))
+		}
+	`))
+}))

@@ -21,14 +21,14 @@
 // kreia is whitespace sensitive
 
 expression =
-  expression_atom
-  (:operator expression_atom)+
-  // this could also be done with the modifying +
-  // at the beginning of the entire line
-  // + :operator expression_atom
+	expression_atom
+	(:operator expression_atom)+
+// this could also be done with the modifying +
+// at the beginning of the entire line
+// + :operator expression_atom
 
 // | makes these branches of an "Or"
 // an expression_atom can be either of these two possibilities
 expression_atom =
-  | :number
-  | :open_paren expression :close_paren
+	| :number
+	| :open_paren expression :close_paren

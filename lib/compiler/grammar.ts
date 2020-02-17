@@ -16,8 +16,8 @@ import {
 	TokenReference, CharacterClass, CharacterClassReference,
 } from './ast_tokens'
 
-import { Console } from 'console'
-const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 3 } })
+// import { Console } from 'console'
+// const console = new Console({ stdout: process.stdout, stderr: process.stderr, inspectOptions: { depth: 3 } })
 
 export const { tok, reset, lock, consume, maybe, or, maybe_or, many_or, maybe_many_or, many, maybe_many, exit } = Parser({
 	var_name: /\$\w+/,
@@ -29,7 +29,8 @@ export const { tok, reset, lock, consume, maybe, or, maybe_or, many_or, maybe_ma
 	modifier_token: /\*|\+|\?/,
 	repetitions_modifier: /{\d+(,\d*)?}/,
 	space: { regex: / +/, ignore: true },
-	comment: { regex: /\s*\/\/[^\n]*\n+/, ignore: true },
+	// comment: { regex: /\s*\/\/[^\n]*\n+/, ignore: true },
+	comment: { regex: /(?:\s*\/\/[^\n]*)+\n*/, ignore: true },
 	// character_class: /(?:\^?\[(?:\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[ftnrv]|\\]|\\\\|[\x20-\x5B\x5E-\x7E])+\])/,
 	character_class: /\^?\[(?:\\x[0-9a-fA-F]{2}|\\u\{[0-9a-fA-F]+\}|\\[ftnrv]|\\]|\\\\|[\x20-\x5B\x5E-\x7E])+\]/,
 	character_class_name: /\^?\#\w+/,
@@ -371,7 +372,7 @@ export function rule_atom(): NonEmpty<Node> {
 	case 'var_name':
 		return [new Var(parsed_modifier, trim_sigil(atom_token))]
 	case 'locked_name':
-		console.log("locked_name", atom_token.content)
+		// console.log("locked_name", atom_token.content)
 		return [new LockingVar(parsed_modifier, trim_sigil(atom_token))]
 	default: return impossible()
 	}
