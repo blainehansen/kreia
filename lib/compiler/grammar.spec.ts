@@ -46,7 +46,7 @@ describe('character_class regex', () => it('works', () => {
 	expect(tok.character_class.regex.test(`[\\\\]`)).eql(true)
 	expect(tok.character_class.regex.test(`^[\\\\]`)).eql(true)
 
-	for (const mod of `ftnrv`) {
+	for (const mod of `ftnrvwds`) {
 		expect(tok.character_class.regex.test(`[\\${mod}]`)).eql(true)
 		expect(tok.character_class.regex.test(`^[\\${mod}]`)).eql(true)
 	}
@@ -56,6 +56,9 @@ describe('character_class regex', () => it('works', () => {
 	expect(tok.character_class.regex.test(`[\n]`)).eql(false)
 	expect(tok.character_class.regex.test(`[\r]`)).eql(false)
 	expect(tok.character_class.regex.test(`[\v]`)).eql(false)
+	// expect(tok.character_class.regex.test(`[\w]`)).eql(false)
+	// expect(tok.character_class.regex.test(`[\d]`)).eql(false)
+	// expect(tok.character_class.regex.test(`[\s]`)).eql(false)
 
 	expect(tok.character_class.regex.test(`[we]`)).eql(true)
 
