@@ -5,6 +5,10 @@
 		"noUnusedParameters": true
 	},
 	"exclude": [
-		"**/*.spec.ts"
+		"**/*.spec.ts",
+		"lib/compiler/_generate_*.ts",
+		"lib/compiler/grammar.staging.ts",
+		"lib/compiler/grammar_ast.ts",
+		"node_modules"
 	]
 }

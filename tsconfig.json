@@ -11,10 +11,5 @@
 	},
 	"include": [
 		"lib/**/*"
-	],
-	"exclude": [
-		"lib/compiler/_generate_*.ts",
-		"lib/compiler/grammar.staging.ts",
-		"node_modules"
 	]
 }

@@ -1,8 +1,8 @@
 import '@ts-std/extensions/dist/array'
-import { Dict, tuple as t } from '@ts-std/types'
+import { tuple as t } from '@ts-std/types'
 import {
-	Lexer, SourceState, VirtualLexerCreator, ContentVirtualToken, finalize_regex,
-	UserToken, HiddenToken, VirtualToken, ExposedToken, VirtualTokenDefinition, ExposedRawTokenDefinition,
+	Lexer, VirtualLexerCreator, finalize_regex,
+	HiddenToken, VirtualToken, ExposedToken, VirtualTokenDefinition, ExposedRawTokenDefinition,
 } from '../runtime/lexer'
 import {
 	IndentationLexer as IndentationLexerCreator, IndentationState, make_indents,
