@@ -18,7 +18,7 @@
 		"build": "npm run clean && tsc -p tsconfig.build.json",
 		"clean": "rm -rf dist",
 		"preversion": "npm test && npm run build",
-		"postversion": "git push origin master && git push origin master --tags && npm publish && npm run clean"
+		"postversion": "git push origin master && git push origin master --tags && npm publish"
 	},
 	"keywords": [
 		"parser",

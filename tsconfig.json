@@ -1,8 +1,6 @@
 {
 	"compilerOptions": {
 		"strict": true,
-		"incremental": true,
-		"tsBuildInfoFile": "./.tsbuildinfo",
 		"declaration": true,
 		"sourceMap": true,
 		"target": "esnext",
