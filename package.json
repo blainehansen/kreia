@@ -2,7 +2,7 @@
 	"name": "kreia",
 	"version": "0.4.0",
 	"description": "A flexible and easy to use parser library. Look into chaos, and see order.",
-	"bin": "./dist/bin.js",
+	"bin": "./dist/cli.js",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"files": [

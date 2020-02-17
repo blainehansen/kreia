@@ -63,4 +63,5 @@ lib/compiler/_generate_from.ts
 lib/compiler/_generate_to.ts
 lib/compiler/grammar.staging.ts
 
+*.tsbuildinfo
 .local*
