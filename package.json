@@ -1,6 +1,6 @@
 {
 	"name": "kreia",
-	"version": "0.4.2",
+	"version": "0.4.3",
 	"description": "A flexible and easy to use parser library. Look into chaos, and see order.",
 	"bin": "./dist/cli.js",
 	"main": "./dist/index.js",
