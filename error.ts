@@ -1,3 +1,5 @@
+// https://github.com/chalk/chalk
+
 const source = `span something stufff
 if (def)
 	whatevs
