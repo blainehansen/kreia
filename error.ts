@@ -16,7 +16,6 @@ export type Span = Readonly<{
 }>
 
 const chalk = require('chalk')
-// const s = chalk.blue('Hello world!')
 const err = chalk.red.bold
 const bold = chalk.white.bold
 const info = chalk.blue.bold
@@ -41,8 +40,7 @@ function makeErrorSpan(
 
 	let sourceLineStart = start
 	for (; sourceLineStart >= 0; sourceLineStart--)
-		if (source[sourceLineStart] === '\n')
-			break
+		if (source[sourceLineStart] === '\n') break
 
 	const sourceLineEnd = source.indexOf('\n', start)
 	const sourceLine = source.slice(sourceLineStart + 1, sourceLineEnd)

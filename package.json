@@ -10,6 +10,8 @@
 	],
 	"scripts": {
 		"ts:ast": "ts-creator lib/compiler/_generate_from.ts --use-tabs true --trailing-comma 'all' -o lib/compiler/_generate_to.ts",
+		"dev": "ts-node error.ts",
+
 		"bin": "ts-node lib/cli.ts",
 		"test": "npm run test:code && npm run test:bin",
 		"test:bin": "npm run bin -- ./examples/arithmetic.peg > /dev/null",
