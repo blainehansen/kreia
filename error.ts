@@ -15,6 +15,8 @@ export type Span = Readonly<{
 	line: number, column: number,
 }>
 
+export type ParseError = Readonly<{ span: Span, title: string, message: string }>
+
 const chalk = require('chalk')
 const err = chalk.red.bold
 const bold = chalk.white.bold
