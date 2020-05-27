@@ -14,4 +14,3 @@ export function parse(source: string) {
 	exit()
 	return grammar
 }
-

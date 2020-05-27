@@ -68,7 +68,7 @@ export const IndentationLexerWithRawBlock: VirtualLexerCreator<IndentationStateW
 				return undefined
 
 			const { line, column, index } = source_state
-			const span = { line, column, index }
+			const span = { file, line, column, index }
 			const created_raw_block_end = { is_virtual: true, type: raw_block_end, span } as VirtualToken
 
 			if (new_indentation === state.block_indentation - 1) {
@@ -77,7 +77,7 @@ export const IndentationLexerWithRawBlock: VirtualLexerCreator<IndentationStateW
 			}
 
 			const indentation_state: IndentationState =
-				{ type: 'buffered', buffer: make_indents(new_indentation, state.block_indentation - 1, source_state) }
+				{ type: 'buffered', buffer: make_indents(new_indentation, state.block_indentation - 1, source_state, file) }
 			return t(hidden_tokens, created_raw_block_end, { in_block: false as const, indentation_state }, source_state)
 		}
 

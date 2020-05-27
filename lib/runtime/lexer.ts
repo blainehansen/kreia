@@ -71,10 +71,11 @@ export type HiddenToken = {
 	is_virtual: false,
 	span: Span,
 }
+export type VirtualSpan = Readonly<Pick<Span, 'file' | 'line' | 'column'> & { index: number }>
 export type EmptyVirtualToken = {
 	type: EmptyVirtualTokenDefinition,
 	is_virtual: true,
-	span: Pick<Span, 'line' | 'column'> & { index: number },
+	span: VirtualSpan,
 }
 export type ContentVirtualToken = {
 	type: ContentVirtualTokenDefinition,

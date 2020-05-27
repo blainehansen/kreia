@@ -1,8 +1,10 @@
 // https://github.com/chalk/chalk
+console.log('Terminal size: ' + process.stdout.columns + 'x' + process.stdout.rows)
+// https://stackoverflow.com/questions/30335637/get-width-of-terminal-in-node-js
 
 const source = `span something stufff
 if (def)
-	whatevs
+	whatevs() then sdf
 sdfd
 `
 

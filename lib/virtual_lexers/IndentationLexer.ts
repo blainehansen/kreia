@@ -1,7 +1,7 @@
 import '@ts-std/extensions/dist/array'
 import { tuple as t } from '@ts-std/types'
 import {
-	Lexer, SourceState, VirtualLexerCreator, finalize_regex,
+	Lexer, SourceState, SourceFile, VirtualLexerCreator, finalize_regex,
 	HiddenToken, VirtualTokenDefinition, VirtualToken,
 } from '../runtime/lexer'
 
@@ -50,7 +50,7 @@ export const IndentationLexer: VirtualLexerCreator<IndentationState, Toks, []> =
 			if (state.indentation === 0 || virtual_requested.name !== 'deindent')
 				return undefined
 
-			const [[new_indentation, virtual_token], ...remaining_buffer] = make_indents(0, state.indentation, source_state)
+			const [[new_indentation, virtual_token], ...remaining_buffer] = make_indents(0, state.indentation, source_state, file)
 			if (virtual_token.type.name !== virtual_requested.name)
 				return undefined
 
@@ -82,7 +82,7 @@ export const IndentationLexer: VirtualLexerCreator<IndentationState, Toks, []> =
 			return undefined
 
 		const indentation = tab_attempt !== undefined ? tab_attempt[0].content.length : 0
-		const [[new_indentation, virtual_token], ...remaining_buffer] = make_indents(indentation, current_indentation, source_state)
+		const [[new_indentation, virtual_token], ...remaining_buffer] = make_indents(indentation, current_indentation, source_state, file)
 		if (virtual_token.type.name !== virtual_requested.name)
 			return undefined
 
@@ -102,12 +102,13 @@ export function make_indents(
 	new_indentation: number,
 	current_indentation: number,
 	source_state: SourceState,
+	file: SourceFile,
 ): NonEmpty<[number, VirtualToken]> {
 	if (new_indentation > current_indentation + 1)
 		throw new Error("indentation can only increase by one")
 
 	const { line, column, index } = source_state
-	const span = { line, column, index }
+	const span = { file, line, column, index }
 
 	if (new_indentation === current_indentation + 1)
 		return [t(new_indentation, { is_virtual: true, type: indent, span })]
