@@ -59,6 +59,51 @@ export type Span = Readonly<{
 	line: number, column: number,
 }>
 
+export namespace Span {
+	export function range({ span }: Token) {
+		return 'index' in span
+			? { start: span.index, end: span.index }
+			: { start: span.start, end: span.end }
+	}
+
+	export function assertTokenRangeSound({ span: a }: Token, { span: b }: Token) {
+		if (a.file.filename === b.file.filename && a.file.source === b.file.source) return
+		// TODO improve
+		console.warn('expected spans to be from same source file')
+		const { start: startA, end: endA } = range(a)
+		const { start: startB, end: endB } = range(b)
+		if (startA > endA || endA > startB || startB > endB)
+			throw new Panic("spans overlapped or weren't properly ordered:", startA, startB, endA, endB)
+	}
+	export function around(from: Token, to: Token): Token {
+		assertTokenRangeSound(from, to)
+		const { file, start, line, column } = from
+		const { end } = to
+		return { file, start, end, line, column }
+	}
+	// export function between(from: Token, to: Token): Token {
+	// 	assertTokenRangeSound(from, to)
+	// 	// const { file, end: start, line, column } = from
+	// 	const { start: end } = to
+	// 	return { file, start, end, line, column }
+	// }
+	// export function excludeStart(from: Token, to: Token): Token {
+	// 	assertTokenRangeSound(from, to)
+	// 	// const { file, start, line, column } = from
+	// 	// const { end } = to
+	// 	return { file, start, end, line, column }
+	// }
+	export function excludeEnd(from: Token, to: Token): Token {
+		assertTokenRangeSound(from, to)
+		const { file, start, line, column } = from
+		const { start: end } = to
+		return { file, start, end, line, column }
+	}
+}
+
+
+
+
 export type RawToken = {
 	type: UserRawTokenDefinition | ExposedRawTokenDefinition,
 	content: string,
