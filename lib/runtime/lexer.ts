@@ -58,49 +58,60 @@ export type Span = Readonly<{
 	file: SourceFile, start: number, end: number,
 	line: number, column: number,
 }>
-
 export namespace Span {
-	export function range({ span }: Token) {
+	function normalize(span: Span | VirtualSpan): Span {
+		const { file, line, column } = span
 		return 'index' in span
-			? { start: span.index, end: span.index }
-			: { start: span.start, end: span.end }
+			? { start: span.index, end: span.index, file, line, column }
+			: { start: span.start, end: span.end, file, line, column }
 	}
 
-	export function assertTokenRangeSound({ span: a }: Token, { span: b }: Token) {
-		if (a.file.filename === b.file.filename && a.file.source === b.file.source) return
-		// TODO improve
-		console.warn('expected spans to be from same source file')
-		const { start: startA, end: endA } = range(a)
-		const { start: startB, end: endB } = range(b)
+	export function assert_token_range_sound({ span: a }: Token, { span: b }: Token) {
+		if (a.file.filename !== b.file.filename || a.file.source !== b.file.source)
+			throw new Error('expected spans to be from same source file')
+		const { start: startA, end: endA } = normalize(a)
+		const { start: startB, end: endB } = normalize(b)
 		if (startA > endA || endA > startB || startB > endB)
-			throw new Panic("spans overlapped or weren't properly ordered:", startA, startB, endA, endB)
+			throw new Error(`spans overlapped or weren't properly ordered: ${startA}, ${startB}, ${endA}, ${endB}`)
 	}
-	export function around(from: Token, to: Token): Token {
-		assertTokenRangeSound(from, to)
-		const { file, start, line, column } = from
-		const { end } = to
+
+	export function around(from: Token, to: Token): Span {
+		assert_token_range_sound(from, to)
+		const { file, start, line, column } = normalize(from.span)
+		const { end } = normalize(to.span)
 		return { file, start, end, line, column }
 	}
-	// export function between(from: Token, to: Token): Token {
-	// 	assertTokenRangeSound(from, to)
-	// 	// const { file, end: start, line, column } = from
-	// 	const { start: end } = to
-	// 	return { file, start, end, line, column }
-	// }
-	// export function excludeStart(from: Token, to: Token): Token {
-	// 	assertTokenRangeSound(from, to)
-	// 	// const { file, start, line, column } = from
-	// 	// const { end } = to
-	// 	return { file, start, end, line, column }
-	// }
-	export function excludeEnd(from: Token, to: Token): Token {
-		assertTokenRangeSound(from, to)
-		const { file, start, line, column } = from
-		const { start: end } = to
+
+	export function between(from: Token, to: Token): Span {
+		assert_token_range_sound(from, to)
+		const { file, end: start, line: fromLine, column: fromColumn } = normalize(from.span)
+		const { start: end } = normalize(to.span)
+		const [, line, column] = 'content' in from
+			? Lexer.advance_span_indices(from.content, 0, fromLine, fromColumn)
+			: [, fromLine, fromColumn]
+		return { file, start, end, line, column }
+	}
+
+	export function exclude_start(from: Token, to: Token): Span {
+		assert_token_range_sound(from, to)
+		const { file, end: start, line: fromLine, column: fromColumn } = normalize(from.span)
+		const { end } = normalize(to.span)
+
+		const [, line, column] = 'content' in from
+			? Lexer.advance_span_indices(from.content, 0, fromLine, fromColumn)
+			: [, fromLine, fromColumn]
+		return { file, start, end, line, column }
+	}
+
+	export function exclude_end(from: Token, to: Token): Span {
+		assert_token_range_sound(from, to)
+		const { file, start, line, column } = normalize(from.span)
+		const { start: end } = normalize(to.span)
 		return { file, start, end, line, column }
 	}
 }
 
+export type Spanned<T> = Readonly<{ span: Span, item: T }>
 
 
 
@@ -243,6 +254,20 @@ export class Lexer<V extends VirtualLexerOutputs> {
 		}
 	}
 
+	static advance_span_indices(content: string, old_index: number, old_line: number, old_column: number) {
+		const split_newlines = content.split('\n')
+		const newlines_number = split_newlines.length - 1
+		const last_line_length = split_newlines[newlines_number].length
+
+		const characters_consumed = content.length
+		const new_index = old_index + characters_consumed
+		const new_line = old_line + newlines_number
+		const new_column = newlines_number === 0
+			? old_column + characters_consumed
+			: last_line_length
+		return [new_index, new_line, new_column]
+	}
+
 	static attempt_regex(
 		regex: RegExp,
 		{ source, index, line, column }: SourceState,
@@ -253,21 +278,12 @@ export class Lexer<V extends VirtualLexerOutputs> {
 			return undefined
 
 		const content = match[0]
-		const characters_consumed = content.length
-		const new_index = index + characters_consumed
-		const split_newlines = content.split('\n')
-		const count_newlines = split_newlines.length - 1
-		const new_line = line + count_newlines
-		const new_column = count_newlines === 0
-			? column + characters_consumed
-			: split_newlines[count_newlines].length
+		const [new_index, new_line, new_column] = Lexer.advance_span_indices(content, index, line, column)
 
 		const span = { file, start: index, end: new_index, line, column }
 		const source_state = {
-			source: source.slice(characters_consumed),
-			index: new_index,
-			line: new_line,
-			column: new_column,
+			source: source.slice(content.length),
+			index: new_index, line: new_line, column: new_column,
 		}
 		return t(content, span, source_state)
 	}

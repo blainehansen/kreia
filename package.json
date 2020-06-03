@@ -16,7 +16,7 @@
 		"test": "npm run test:code && npm run test:bin",
 		"test:bin": "npm run bin -- ./examples/arithmetic.peg > /dev/null",
 		"test:code": "mocha -r ts-node/register lib/**/*.spec.ts lib/*.spec.ts",
-		"test:dev": "mocha -r ts-node/register lib/compiler/grammar.spec.ts",
+		"test:dev": "mocha -r ts-node/register lib/runtime/lexer.spec.ts",
 		"build": "npm run clean && tsc -p tsconfig.build.json",
 		"clean": "rm -rf dist",
 		"preversion": "npm test && npm run build",
