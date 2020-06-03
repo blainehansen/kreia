@@ -111,8 +111,13 @@ export namespace Span {
 	}
 }
 
-export type Spanned<T> = Readonly<{ span: Span, item: T }>
-
+export type Spanned<T> = Readonly<{ item: T, span: Span }>
+export function Spanned<T>(item: T, span: Span): Spanned<T> {
+	return { item, span }
+}
+export function TokenSpanned({ span, content }: RawToken | ContentVirtualToken): Spanned<string> {
+	return { item: content, span }
+}
 
 
 export type RawToken = {
