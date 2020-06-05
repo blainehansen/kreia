@@ -59,43 +59,45 @@ export type Span = Readonly<{
 	line: number, column: number,
 }>
 export namespace Span {
-	function normalize(span: Span | VirtualSpan): Span {
+	type SpanLike = Token | Span | VirtualSpan
+	function normalize(item: SpanLike): Span {
+		const span = 'span' in item ? item.span : item
 		const { file, line, column } = span
 		return 'index' in span
 			? { start: span.index, end: span.index, file, line, column }
 			: { start: span.start, end: span.end, file, line, column }
 	}
 
-	export function assert_token_range_sound({ span: a }: Token, { span: b }: Token) {
-		if (a.file.filename !== b.file.filename || a.file.source !== b.file.source)
+	export function assert_span_range_sound(a: SpanLike, b: SpanLike) {
+		const { file: fileA, start: startA, end: endA } = normalize(a)
+		const { file: fileB, start: startB, end: endB } = normalize(b)
+		if (fileA.filename !== fileB.filename || fileA.source !== fileB.source)
 			throw new Error('expected spans to be from same source file')
-		const { start: startA, end: endA } = normalize(a)
-		const { start: startB, end: endB } = normalize(b)
 		if (startA > endA || endA > startB || startB > endB)
 			throw new Error(`spans overlapped or weren't properly ordered: ${startA}, ${startB}, ${endA}, ${endB}`)
 	}
 
-	export function around(from: Token, to: Token): Span {
-		assert_token_range_sound(from, to)
-		const { file, start, line, column } = normalize(from.span)
-		const { end } = normalize(to.span)
+	export function around(from: SpanLike, to: SpanLike): Span {
+		assert_span_range_sound(from, to)
+		const { file, start, line, column } = normalize(from)
+		const { end } = normalize(to)
 		return { file, start, end, line, column }
 	}
 
-	export function between(from: Token, to: Token): Span {
-		assert_token_range_sound(from, to)
-		const { file, end: start, line: fromLine, column: fromColumn } = normalize(from.span)
-		const { start: end } = normalize(to.span)
+	export function between(from: SpanLike, to: SpanLike): Span {
+		assert_span_range_sound(from, to)
+		const { file, end: start, line: fromLine, column: fromColumn } = normalize(from)
+		const { start: end } = normalize(to)
 		const [, line, column] = 'content' in from
 			? Lexer.advance_span_indices(from.content, 0, fromLine, fromColumn)
 			: [, fromLine, fromColumn]
 		return { file, start, end, line, column }
 	}
 
-	export function exclude_start(from: Token, to: Token): Span {
-		assert_token_range_sound(from, to)
-		const { file, end: start, line: fromLine, column: fromColumn } = normalize(from.span)
-		const { end } = normalize(to.span)
+	export function exclude_start(from: SpanLike, to: SpanLike): Span {
+		assert_span_range_sound(from, to)
+		const { file, end: start, line: fromLine, column: fromColumn } = normalize(from)
+		const { end } = normalize(to)
 
 		const [, line, column] = 'content' in from
 			? Lexer.advance_span_indices(from.content, 0, fromLine, fromColumn)
@@ -103,10 +105,10 @@ export namespace Span {
 		return { file, start, end, line, column }
 	}
 
-	export function exclude_end(from: Token, to: Token): Span {
-		assert_token_range_sound(from, to)
-		const { file, start, line, column } = normalize(from.span)
-		const { start: end } = normalize(to.span)
+	export function exclude_end(from: SpanLike, to: SpanLike): Span {
+		assert_span_range_sound(from, to)
+		const { file, start, line, column } = normalize(from)
+		const { start: end } = normalize(to)
 		return { file, start, end, line, column }
 	}
 }
