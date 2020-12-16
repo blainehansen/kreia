@@ -87,7 +87,7 @@ export namespace Definition {
 }
 
 export class Paren extends BaseNode {
-	readonly type: 'Paren' = 'Paren'
+	readonly type = 'Paren' as const
 	constructor(
 		readonly modifier: BaseModifier,
 		readonly nodes: NonLone<Node>,
@@ -105,7 +105,7 @@ export function maybe(...nodes: NonLone<Node>) { return new Paren(BaseModifier.M
 export function maybe_many(...nodes: NonLone<Node>) { return new Paren(BaseModifier.MaybeMany, nodes) }
 
 export class Consume extends BaseNode {
-	readonly type: 'Consume' = 'Consume'
+	readonly type = 'Consume' as const
 	constructor(
 		readonly modifier: Modifier,
 		readonly token_names: NonEmpty<string>,
@@ -124,7 +124,7 @@ export function maybe_consume(...token_names: NonEmpty<string>) { return new Con
 export function maybe_many_consume(...token_names: NonEmpty<string>) { return new Consume(BaseModifier.MaybeMany, token_names) }
 
 export class Or extends BaseNode {
-	readonly type: 'Or' = 'Or'
+	readonly type = 'Or' as const
 	readonly choices: NonLone<Definition>
 	constructor(
 		readonly modifier: Modifier,
@@ -147,7 +147,7 @@ export function maybe_or(...choices: NonLone<Definition>) { return new Or(BaseMo
 export function maybe_many_or(...choices: NonLone<Definition>) { return new Or(BaseModifier.MaybeMany, choices) }
 
 export class Subrule extends BaseNode {
-	readonly type: 'Subrule' = 'Subrule'
+	readonly type = 'Subrule' as const
 	constructor(
 		readonly modifier: Modifier,
 		readonly rule_name: string,
@@ -166,7 +166,7 @@ export function maybe_subrule(rule_name: string) { return new Subrule(BaseModifi
 export function maybe_many_subrule(rule_name: string) { return new Subrule(BaseModifier.MaybeMany, rule_name) }
 
 export class MacroCall extends BaseNode {
-	readonly type: 'MacroCall' = 'MacroCall'
+	readonly type = 'MacroCall' as const
 	readonly args: NonEmpty<Definition>
 	constructor(
 		readonly modifier: Modifier,
@@ -196,7 +196,7 @@ export function maybe_many_separated(body: Definition, separator: Definition) {
 }
 
 export class Var extends BaseNode {
-	readonly type: 'Var' = 'Var'
+	readonly type = 'Var' as const
 	constructor(
 		readonly modifier: Modifier,
 		readonly arg_name: string,
@@ -215,7 +215,7 @@ export function maybe_var(arg_name: string) { return new Var(BaseModifier.Maybe,
 export function maybe_many_var(arg_name: string) { return new Var(BaseModifier.MaybeMany, arg_name) }
 
 export class LockingVar extends BaseNode {
-	readonly type: 'LockingVar' = 'LockingVar'
+	readonly type = 'LockingVar' as const
 	constructor(
 		readonly modifier: Modifier,
 		readonly locking_arg_name: string,
@@ -244,13 +244,13 @@ export class LockingArg {
 
 
 export class TokenDef {
-	readonly type: 'TokenDef' = 'TokenDef'
+	readonly type = 'TokenDef' as const
 	constructor(readonly name: string, readonly def: RegexComponent, readonly ignore: boolean) {}
 }
 
 
 export class Rule {
-	readonly type: 'Rule' = 'Rule'
+	readonly type = 'Rule' as const
 	// readonly always_optional: boolean
 	readonly definition: Definition
 	readonly locking_args: Dict<LockingArg>
@@ -268,7 +268,7 @@ export class Rule {
 }
 
 export class Macro {
-	readonly type: 'Macro' = 'Macro'
+	readonly type = 'Macro' as const
 	// readonly always_optional: boolean
 	readonly definition: Definition
 	readonly args_by_name: Dict<Arg>
@@ -289,7 +289,7 @@ export class Macro {
 }
 
 export class VirtualLexerUsage {
-	readonly type: 'VirtualLexerUsage' = 'VirtualLexerUsage'
+	readonly type = 'VirtualLexerUsage' as const
 	constructor(
 		readonly virtual_lexer_name: string,
 		readonly path: string,
