@@ -1,3 +1,13 @@
+# :warning: this repo is dormant for now :warning:
+
+This project is one of many on a long and painful quest to close soundness gaps in the software ecosystems I work in, and make all the tools I use completely typesafe. [Read about the journey in this blog post.](https://blainehansen.me/post/my-path-to-magma/)
+
+This project is dormant for now as I build the [Magma proof checker](https://github.com/blainehansen/magma), but I might return to it and use Magma to take it to the next level.
+
+Feel free to check out the rough unfinished documentation below.
+
+---
+
 # Kreia
 
 An powerful, flexible, and type safe parser generator.
