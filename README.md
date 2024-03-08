@@ -1,6 +1,6 @@
 # :warning: this repo is dormant for now :warning:
 
-This project is dormant for now. I might return to it some day, but don't hold your breath!
+I might return to it some day, but don't hold your breath!
 
 Feel free to check out the rough unfinished documentation below.
 
